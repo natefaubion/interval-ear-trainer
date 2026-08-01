@@ -244,11 +244,7 @@ component =
       [ HH.div
           [ HP.class_ (H.ClassName "practice-toolbar") ]
           [ HH.div_
-              [ HH.p
-                  [ HP.class_ (H.ClassName "step-label") ]
-                  [ HH.text "Listen, then sing" ]
-              , HH.h2_ [ HH.text (playbackModeName state.prompt.mode) ]
-              ]
+              [ HH.h2_ [ HH.text (playbackModeName state.prompt.mode) ] ]
           , HH.button
               [ HP.type_ HP.ButtonButton
               , HP.class_ (H.ClassName "text-button")
