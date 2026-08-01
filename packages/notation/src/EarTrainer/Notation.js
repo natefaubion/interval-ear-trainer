@@ -33,6 +33,7 @@ export const renderScoreImpl = (element) => (clef) => (width) => (events) => () 
       note.setStyle({ fillStyle: "#aeb4b0", strokeStyle: "#aeb4b0" });
     } else if (event.appearance === "hidden") {
       note.setStyle({ fillStyle: "transparent", strokeStyle: "transparent" });
+      note.setLedgerLineStyle({ fillStyle: "transparent", strokeStyle: "transparent" });
     }
     return note;
   });
