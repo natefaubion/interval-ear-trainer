@@ -160,6 +160,36 @@ h1 {
   text-transform: uppercase;
 }
 
+.tuner-track {
+  position: relative;
+  width: min(100%, 22rem);
+  height: 0.55rem;
+  margin: 1rem auto 0;
+  border-radius: 99rem;
+  background: var(--line);
+}
+
+.tuner-center {
+  position: absolute;
+  top: -0.25rem;
+  left: 50%;
+  width: 2px;
+  height: 1.05rem;
+  background: #918778;
+}
+
+.tuner-dot {
+  position: absolute;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 75%);
+  transform: translate(-50%, -50%);
+  transition: left 80ms linear;
+}
+
 .practice-actions {
   border-top: 1px solid var(--line);
 }

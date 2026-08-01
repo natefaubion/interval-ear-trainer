@@ -91,13 +91,18 @@ midiFrequency midi = 440.0 * Math.pow 2.0 (Int.toNumber (midi - 69) / 12.0)
 nearestMidi :: Number -> Int
 nearestMidi frequency = Int.round (69.0 + 12.0 * Math.log (frequency / 440.0) / Math.log 2.0)
 
-feedbackFor :: PitchSample -> Maybe Feedback
-feedbackFor sample
+feedbackFor :: OctavePolicy -> Pitch -> PitchSample -> Maybe Feedback
+feedbackFor octavePolicy expectedPitch sample
   | sample.frequency <= 0.0 = Nothing
   | otherwise =
       let
-        midi = nearestMidi sample.frequency
-        cents = 1200.0 * Math.log (sample.frequency / midiFrequency midi) / Math.log 2.0
+        detectedMidi = 69.0 + 12.0 * Math.log (sample.frequency / 440.0) / Math.log 2.0
+        expectedMidi = midiNumber expectedPitch
+        comparisonMidi = case octavePolicy of
+          WrittenOctave -> expectedMidi
+          AnyOctave -> expectedMidi + 12 * Int.round ((detectedMidi - Int.toNumber expectedMidi) / 12.0)
+        cents = 100.0 * (detectedMidi - Int.toNumber comparisonMidi)
+        midi = Int.round detectedMidi
       in
         Just { cents, clarity: sample.clarity, midi }
 
@@ -137,7 +142,12 @@ stepRecognition
   -> Recognition
 stepRecognition settings octavePolicy firstPitch secondPitch sample recognition =
   let
-    feedback = feedbackFor sample
+    expectedPitch = case recognition.phase of
+      WaitingForFirst -> firstPitch
+      WaitingForRelease -> firstPitch
+      WaitingForSecond -> secondPitch
+      RecognitionComplete -> secondPitch
+    feedback = feedbackFor octavePolicy expectedPitch sample
     clear = sample.clarity >= settings.clarityThreshold
     matches pitch = case feedback of
       Nothing -> false

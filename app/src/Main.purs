@@ -54,6 +54,7 @@ data CaptureStatus
   | PlayingAudio
   | Listening
   | CaptureFailed String
+  | PlaybackFailed String
 
 derive instance Eq CaptureStatus
 
@@ -82,6 +83,8 @@ data Action
   | SelectOctavePolicy OctavePolicy
   | BeginPractice
   | PlayPrompt
+  | PlaybackStarted
+  | AudioFailed String
   | StartListening
   | PitchDetected Detection.PitchSample
   | MicrophoneFailed String
@@ -222,6 +225,18 @@ component =
               , HH.span_
                   [ HH.text (feedbackName state.recognition.feedback) ]
               ]
+          , HH.div
+              [ HP.class_ (H.ClassName "tuner-track") ]
+              [ HH.div [ HP.class_ (H.ClassName "tuner-center") ] []
+              , case state.recognition.feedback of
+                  Nothing -> HH.text ""
+                  Just feedback ->
+                    HH.div
+                      [ HP.class_ (H.ClassName "tuner-dot")
+                      , HP.style ("left: " <> show (feedbackPosition feedback.cents) <> "%")
+                      ]
+                      []
+              ]
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "practice-actions") ]
@@ -299,12 +314,14 @@ component =
     PlayingAudio -> "Listen carefully. Microphone capture remains off during playback."
     Listening -> Detection.phaseInstruction state.recognition.phase
     CaptureFailed message -> "Microphone unavailable: " <> message
+    PlaybackFailed message -> "Audio playback failed: " <> message
 
   captureStatusName = case _ of
     ReadyToPlay -> "Ready"
     PlayingAudio -> "Playing"
     Listening -> "Listening"
     CaptureFailed _ -> "Microphone unavailable"
+    PlaybackFailed _ -> "Playback unavailable"
 
   feedbackName = case _ of
     Nothing -> "No stable pitch yet"
@@ -315,9 +332,11 @@ component =
         if cents >= -3 && cents <= 3 then
           "In tune"
         else if cents > 0 then
-          show cents <> " cents sharp"
+          show cents <> " cents sharp — sing lower"
         else
-          show (-cents) <> " cents flat"
+          show (-cents) <> " cents flat — sing higher"
+
+  feedbackPosition cents = 50.0 + max (-50.0) (min 50.0 cents)
 
   handleAction :: Action -> H.HalogenM State Action () output m Unit
   handleAction = case _ of
@@ -357,10 +376,19 @@ component =
             , recognition = Detection.initialRecognition
             }
           renderNotation [ state.prompt.root ]
-          H.liftEffect (Audio.playInterval sampler state.prompt.mode state.prompt.root state.prompt.target)
-          void $ H.fork do
-            H.liftAff (delay (Milliseconds (Audio.playbackDurationMilliseconds state.prompt.mode + 350.0)))
-            handleAction StartListening
+          { emitter, listener } <- H.liftEffect HS.create
+          void (H.subscribe emitter)
+          H.liftEffect $ Audio.playInterval sampler state.prompt.mode state.prompt.root state.prompt.target
+            (HS.notify listener PlaybackStarted)
+            (HS.notify listener <<< AudioFailed)
+    PlaybackStarted -> do
+      state <- H.get
+      when (state.screen == Practice && state.captureStatus == PlayingAudio) do
+        void $ H.fork do
+          H.liftAff (delay (Milliseconds (Audio.playbackDurationMilliseconds state.prompt.mode + 350.0)))
+          handleAction StartListening
+    AudioFailed message ->
+      H.modify_ _ { captureStatus = PlaybackFailed message }
     StartListening -> do
       state <- H.get
       when (state.screen == Practice && state.captureStatus == PlayingAudio) do
