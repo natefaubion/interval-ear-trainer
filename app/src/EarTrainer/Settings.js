@@ -21,7 +21,13 @@ const isStoredSettings = (value) =>
 export const loadImpl = (just) => (nothing) => () => {
   try {
     const value = JSON.parse(localStorage.getItem(storageKey));
-    return isStoredSettings(value) ? just(value) : nothing;
+    return isStoredSettings(value)
+      ? just({
+          ...value,
+          answerDisplay: typeof value.answerDisplay === "string" ? value.answerDisplay : "notation",
+          ghostMode: typeof value.ghostMode === "string" ? value.ghostMode : "on",
+        })
+      : nothing;
   } catch {
     return nothing;
   }

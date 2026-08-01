@@ -247,7 +247,7 @@ h1 {
   font-weight: 700;
 }
 
-.interval-answer:not(.correct, .incorrect) .choice-label {
+.interval-answer:not(.names-visible, .correct, .incorrect) .choice-label {
   visibility: hidden;
 }
 

@@ -1,5 +1,7 @@
 module EarTrainer.Config
-  ( ExerciseConfig
+  ( AnswerDisplay(..)
+  , ExerciseConfig
+  , GhostMode(..)
   , defaultConfig
   , isValid
   , toggleInterval
@@ -21,8 +23,18 @@ import EarTrainer.Music
   , defaultRootPitchClasses
   )
 
+data GhostMode = GhostOff | GhostOn | GhostPersist
+
+derive instance Eq GhostMode
+
+data AnswerDisplay = AnswerNotation | AnswerName | AnswerBoth
+
+derive instance Eq AnswerDisplay
+
 type ExerciseConfig =
-  { intervals :: Array Interval
+  { answerDisplay :: AnswerDisplay
+  , ghostMode :: GhostMode
+  , intervals :: Array Interval
   , octavePolicy :: OctavePolicy
   , playbackModes :: Array PlaybackMode
   , rootPitchClasses :: Array PitchClass
@@ -31,7 +43,9 @@ type ExerciseConfig =
 
 defaultConfig :: ExerciseConfig
 defaultConfig =
-  { intervals: defaultIntervals
+  { answerDisplay: AnswerNotation
+  , ghostMode: GhostOn
+  , intervals: defaultIntervals
   , octavePolicy: AnyOctave
   , playbackModes: allPlaybackModes
   , rootPitchClasses: defaultRootPitchClasses

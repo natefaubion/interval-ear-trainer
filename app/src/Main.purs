@@ -8,7 +8,16 @@ import Data.Int as Int
 import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
-import EarTrainer.Config (ExerciseConfig, defaultConfig, isValid, toggleInterval, togglePlaybackMode, toggleRootPitchClass)
+import EarTrainer.Config
+  ( AnswerDisplay(..)
+  , ExerciseConfig
+  , GhostMode(..)
+  , defaultConfig
+  , isValid
+  , toggleInterval
+  , togglePlaybackMode
+  , toggleRootPitchClass
+  )
 import EarTrainer.Music
   ( Accidental(..)
   , Interval
@@ -83,6 +92,8 @@ data Action
   | ToggleRoot PitchClass
   | SelectRange VocalRangePreset
   | SelectOctavePolicy OctavePolicy
+  | SelectGhostMode GhostMode
+  | SelectAnswerDisplay AnswerDisplay
   | BeginPractice
   | PlayPrompt
   | PlaybackStarted
@@ -183,6 +194,29 @@ component =
               (state.config.octavePolicy == WrittenOctave)
               (SelectOctavePolicy WrittenOctave)
               "Written octave only"
+          ]
+      , settingGroup
+          "Ghost note"
+          "Control whether detected pitches appear temporarily, remain visible, or stay hidden."
+          [ choiceButton (state.config.ghostMode == GhostOff) (SelectGhostMode GhostOff) "Off"
+          , choiceButton (state.config.ghostMode == GhostOn) (SelectGhostMode GhostOn) "On"
+          , choiceButton (state.config.ghostMode == GhostPersist) (SelectGhostMode GhostPersist) "Persist"
+          ]
+      , settingGroup
+          "Answer display"
+          "Choose how interval answers are presented."
+          [ choiceButton
+              (state.config.answerDisplay == AnswerNotation)
+              (SelectAnswerDisplay AnswerNotation)
+              "Notation"
+          , choiceButton
+              (state.config.answerDisplay == AnswerName)
+              (SelectAnswerDisplay AnswerName)
+              "Interval name"
+          , choiceButton
+              (state.config.answerDisplay == AnswerBoth)
+              (SelectAnswerDisplay AnswerBoth)
+              "Both"
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "setup-footer") ]
@@ -292,7 +326,7 @@ component =
                 ]
                 [ HH.text "Next interval" ]
             else if Array.null state.revealedChoices then
-              HH.p_ [ HH.text "Select the matching notation. Labels remain hidden until selected." ]
+              HH.p_ [ HH.text (answerInstruction state.config.answerDisplay) ]
             else
               HH.p
                 [ HP.class_ (H.ClassName "incorrect-message") ]
@@ -304,28 +338,40 @@ component =
       revealed = Array.elem choice.interval state.revealedChoices
       correct = revealed && choice.interval == state.prompt.interval
       incorrect = revealed && not correct
+      showNotation = state.config.answerDisplay /= AnswerName
+      showName = state.config.answerDisplay /= AnswerNotation || revealed
     in
       HH.button
         [ HP.type_ HP.ButtonButton
         , HP.classes
             ( [ H.ClassName "interval-answer" ]
                 <>
-                  if correct then [ H.ClassName "correct" ]
-                  else if incorrect then [ H.ClassName "incorrect" ]
+                  if state.config.answerDisplay /= AnswerNotation then [ H.ClassName "names-visible" ]
                   else []
+                    <>
+                      if correct then [ H.ClassName "correct" ]
+                      else if incorrect then [ H.ClassName "incorrect" ]
+                      else []
             )
         , HP.disabled state.answerCorrect
         , HE.onClick \_ -> ChooseInterval choice.interval
         ]
-        [ HH.div
-            [ HP.ref (choiceNotationRef index)
-            , HP.class_ (H.ClassName "choice-notation")
-            ]
-            []
+        [ if showNotation then
+            HH.div
+              [ HP.ref (choiceNotationRef index)
+              , HP.class_ (H.ClassName "choice-notation")
+              ]
+              []
+          else
+            HH.text ""
         , HH.span
             [ HP.class_ (H.ClassName "choice-label") ]
-            [ HH.text if revealed then intervalName choice.interval else "Interval hidden" ]
+            [ HH.text if showName then intervalName choice.interval else "Interval hidden" ]
         ]
+
+  answerInstruction AnswerNotation = "Select the matching notation. Labels remain hidden until selected."
+  answerInstruction AnswerName = "Select the matching interval name."
+  answerInstruction AnswerBoth = "Select the matching notation and interval name."
 
   settingGroup title description controls =
     HH.fieldset
@@ -419,6 +465,10 @@ component =
       updateConfig (_ { vocalRange = preset })
     SelectOctavePolicy policy ->
       updateConfig (_ { octavePolicy = policy })
+    SelectGhostMode mode ->
+      updateConfig (_ { ghostMode = mode })
+    SelectAnswerDisplay display ->
+      updateConfig (_ { answerDisplay = display })
     BeginPractice -> do
       state <- H.get
       seed <- H.liftEffect (randomInt 0 2147483647)
@@ -490,7 +540,9 @@ component =
             state.prompt.target
             sample
             state.recognition
-          detectedGhost = map (Detection.relativeMidi state.config.octavePolicy state.prompt.root next) detectedMidi
+          detectedGhost =
+            if state.config.ghostMode == GhostOff then Nothing
+            else map (Detection.relativeMidi state.config.octavePolicy state.prompt.root next) detectedMidi
           nextGhost = case detectedGhost of
             Nothing -> state.ghostMidi
             Just midi -> Just midi
@@ -512,15 +564,23 @@ component =
               in
                 renderGhostNotation state.prompt (pitchFromMidiLike spellingReference midi)
             Nothing -> pure unit
-        when (detectedGhost == Nothing && state.ghostMidi /= Nothing) do
-          void $ H.fork do
-            H.liftAff (delay (Milliseconds 700.0))
-            handleAction (ClearGhost revision)
+        when
+          ( state.config.ghostMode == GhostOn
+              && detectedGhost == Nothing
+              && state.ghostMidi /= Nothing
+          )
+          do
+            void $ H.fork do
+              H.liftAff (delay (Milliseconds 700.0))
+              handleAction (ClearGhost revision)
         when completed do
           stopMonitor state.monitor
           H.modify_ _ { monitor = Nothing }
-          void $ H.fork do
-            H.liftAff (delay (Milliseconds 700.0))
+          if state.config.ghostMode == GhostOn then
+            void $ H.fork do
+              H.liftAff (delay (Milliseconds 700.0))
+              handleAction (FinishSinging revision)
+          else
             handleAction (FinishSinging revision)
     ClearGhost revision -> do
       state <- H.get
@@ -530,8 +590,9 @@ component =
             && state.ghostMidi /= Nothing
         )
         do
-          H.modify_ _ { ghostMidi = Nothing }
-          renderPromptNotation state.prompt
+          when (state.config.ghostMode == GhostOn) do
+            H.modify_ _ { ghostMidi = Nothing }
+            renderPromptNotation state.prompt
     FinishSinging revision -> do
       state <- H.get
       when
@@ -540,8 +601,12 @@ component =
             && state.ghostRevision == revision
         )
         do
-          H.modify_ _ { captureStatus = ChoosingAnswer, ghostMidi = Nothing }
-          renderPromptNotation state.prompt
+          let persistGhost = state.config.ghostMode == GhostPersist
+          H.modify_ _
+            { captureStatus = ChoosingAnswer
+            , ghostMidi = if persistGhost then state.ghostMidi else Nothing
+            }
+          unless persistGhost (renderPromptNotation state.prompt)
           renderChoiceNotation state.prompt.root state.choices
     MicrophoneFailed message ->
       H.modify_ _ { captureStatus = CaptureFailed message, monitor = Nothing }

@@ -7,7 +7,7 @@ import Prelude
 
 import Data.Array as Array
 import Data.Maybe (Maybe(..))
-import EarTrainer.Config (ExerciseConfig, defaultConfig)
+import EarTrainer.Config (AnswerDisplay(..), ExerciseConfig, GhostMode(..), defaultConfig)
 import EarTrainer.Music
   ( Accidental(..)
   , Interval(..)
@@ -25,7 +25,9 @@ type StoredPitchClass =
   }
 
 type StoredSettings =
-  { intervals :: Array String
+  { answerDisplay :: String
+  , ghostMode :: String
+  , intervals :: Array String
   , octavePolicy :: String
   , playbackModes :: Array String
   , rootPitchClasses :: Array StoredPitchClass
@@ -46,7 +48,9 @@ load = do
     Nothing -> defaultConfig
     Just value ->
       defaultConfig
-        { intervals = Array.mapMaybe decodeInterval value.intervals
+        { answerDisplay = decodeAnswerDisplay value.answerDisplay
+        , ghostMode = decodeGhostMode value.ghostMode
+        , intervals = Array.mapMaybe decodeInterval value.intervals
         , octavePolicy = decodeOctavePolicy value.octavePolicy
         , playbackModes = Array.mapMaybe decodePlaybackMode value.playbackModes
         , rootPitchClasses = map decodePitchClass value.rootPitchClasses
@@ -55,12 +59,34 @@ load = do
 
 save :: ExerciseConfig -> Effect Unit
 save config = saveImpl
-  { intervals: map encodeInterval config.intervals
+  { answerDisplay: encodeAnswerDisplay config.answerDisplay
+  , ghostMode: encodeGhostMode config.ghostMode
+  , intervals: map encodeInterval config.intervals
   , octavePolicy: encodeOctavePolicy config.octavePolicy
   , playbackModes: map encodePlaybackMode config.playbackModes
   , rootPitchClasses: map encodePitchClass config.rootPitchClasses
   , vocalRange: encodeVocalRange config.vocalRange
   }
+
+encodeGhostMode :: GhostMode -> String
+encodeGhostMode GhostOff = "off"
+encodeGhostMode GhostOn = "on"
+encodeGhostMode GhostPersist = "persist"
+
+decodeGhostMode :: String -> GhostMode
+decodeGhostMode "off" = GhostOff
+decodeGhostMode "persist" = GhostPersist
+decodeGhostMode _ = GhostOn
+
+encodeAnswerDisplay :: AnswerDisplay -> String
+encodeAnswerDisplay AnswerNotation = "notation"
+encodeAnswerDisplay AnswerName = "name"
+encodeAnswerDisplay AnswerBoth = "both"
+
+decodeAnswerDisplay :: String -> AnswerDisplay
+decodeAnswerDisplay "name" = AnswerName
+decodeAnswerDisplay "both" = AnswerBoth
+decodeAnswerDisplay _ = AnswerNotation
 
 encodeInterval :: Interval -> String
 encodeInterval PerfectUnison = "perfect-unison"
