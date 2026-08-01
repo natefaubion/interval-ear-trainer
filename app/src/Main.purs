@@ -321,18 +321,20 @@ component =
       incorrect = revealed && not correct
       showNotation = state.config.answerDisplay /= AnswerName
       showName = state.config.answerDisplay /= AnswerNotation || revealed
+      resultClasses =
+        if correct then [ H.ClassName "answer-correct" ]
+        else if incorrect then [ H.ClassName "answer-incorrect" ]
+        else []
     in
       HH.button
         [ HP.type_ HP.ButtonButton
         , HP.classes
             ( [ H.ClassName "interval-answer" ]
                 <>
-                  if state.config.answerDisplay /= AnswerNotation then [ H.ClassName "names-visible" ]
-                  else []
-                    <>
-                      if correct then [ H.ClassName "correct" ]
-                      else if incorrect then [ H.ClassName "incorrect" ]
-                      else []
+                  ( if state.config.answerDisplay /= AnswerNotation then [ H.ClassName "names-visible" ]
+                    else []
+                  )
+                <> resultClasses
             )
         , HP.disabled state.answerCorrect
         , HE.onClick \_ -> ChooseInterval choice.interval
@@ -341,7 +343,7 @@ component =
             HH.span
               [ HP.classes
                   [ H.ClassName "choice-result-icon"
-                  , H.ClassName if correct then "correct" else "incorrect"
+                  , H.ClassName if correct then "result-correct" else "result-incorrect"
                   ]
               ]
               []
