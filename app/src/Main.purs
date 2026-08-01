@@ -232,9 +232,6 @@ component =
           , HH.div
               [ HP.class_ (H.ClassName "pitch-feedback") ]
               [ HH.span
-                  [ HP.class_ (H.ClassName "feedback-status") ]
-                  [ HH.text (captureStatusName state.captureStatus) ]
-              , HH.span
                   [ HP.class_ (H.ClassName "tuner-readout") ]
                   [ HH.text (feedbackName state.recognition.feedback) ]
               ]
@@ -389,15 +386,6 @@ component =
     PlaybackFailed message -> "Audio playback failed: " <> message
     ChoosingAnswer -> "Both notes accepted. Choose the matching written interval."
     AnswerComplete -> "Correct — the interval is " <> intervalName state.prompt.interval <> "."
-
-  captureStatusName = case _ of
-    ReadyToPlay -> "Ready"
-    PlayingAudio -> "Playing"
-    Listening -> "Listening"
-    CaptureFailed _ -> "Microphone unavailable"
-    PlaybackFailed _ -> "Playback unavailable"
-    ChoosingAnswer -> "Choose notation"
-    AnswerComplete -> "Correct"
 
   feedbackName = case _ of
     Nothing -> "—"
