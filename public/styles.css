@@ -257,10 +257,6 @@ h1 {
   font-weight: 650;
 }
 
-.next-button {
-  margin-top: 1rem;
-}
-
 .practice-actions {
   border-top: 1px solid var(--line);
 }

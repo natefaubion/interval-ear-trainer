@@ -263,8 +263,6 @@ component =
               , HP.class_ (H.ClassName "notation-canvas")
               ]
               []
-          , HH.p_
-              [ HH.text (practiceInstruction state) ]
           , HH.div
               [ HP.class_ (H.ClassName "pitch-feedback") ]
               [ HH.span
@@ -288,21 +286,17 @@ component =
       , HH.footer
           [ HP.class_ (H.ClassName "practice-actions") ]
           [ HH.p_
-              [ HH.text "Playback stops before microphone input begins." ]
+              [ HH.text (practiceInstruction state) ]
           , HH.button
               [ HP.type_ HP.ButtonButton
               , HP.class_ (H.ClassName "primary-button play-button")
-              , HP.disabled
-                  ( state.captureStatus == PlayingAudio
-                      || state.captureStatus == ChoosingAnswer
-                      || state.captureStatus == AnswerComplete
-                  )
-              , HE.onClick \_ -> PlayPrompt
+              , HP.disabled (footerButtonDisabled state)
+              , HE.onClick \_ -> footerButtonAction state
               ]
               [ HH.span
                   [ HP.class_ (H.ClassName "play-icon") ]
-                  [ HH.text "▶" ]
-              , HH.text if state.captureStatus == PlayingAudio then "Playing…" else "Play interval"
+                  [ HH.text (footerButtonIcon state) ]
+              , HH.text (footerButtonLabel state)
               ]
           ]
       ]
@@ -319,12 +313,7 @@ component =
               [ HP.class_ (H.ClassName "answer-grid") ]
               (Array.mapWithIndex (renderIntervalChoice state) state.choices)
           , if state.answerCorrect then
-              HH.button
-                [ HP.type_ HP.ButtonButton
-                , HP.class_ (H.ClassName "primary-button next-button")
-                , HE.onClick \_ -> NextPrompt
-                ]
-                [ HH.text "Next interval" ]
+              HH.text ""
             else if Array.null state.revealedChoices then
               HH.p_ [ HH.text (answerInstruction state.config.answerDisplay) ]
             else
@@ -372,6 +361,26 @@ component =
   answerInstruction AnswerNotation = "Select the matching notation. Labels remain hidden until selected."
   answerInstruction AnswerName = "Select the matching interval name."
   answerInstruction AnswerBoth = "Select the matching notation and interval name."
+
+  footerButtonAction state =
+    if state.captureStatus == AnswerComplete then NextPrompt else PlayPrompt
+
+  footerButtonDisabled state =
+    state.captureStatus == PlayingAudio
+      || state.captureStatus == ChoosingAnswer
+      || (state.captureStatus == Listening && state.recognition.phase == Detection.RecognitionComplete)
+
+  footerButtonLabel state
+    | state.captureStatus == PlayingAudio = "Playing…"
+    | state.captureStatus == ChoosingAnswer = "Next interval"
+    | state.captureStatus == AnswerComplete = "Next interval"
+    | state.captureStatus == Listening && state.recognition.phase == Detection.RecognitionComplete = "Next interval"
+    | otherwise = "Play interval"
+
+  footerButtonIcon state
+    | state.captureStatus == PlayingAudio = ""
+    | footerButtonLabel state == "Next interval" = "→"
+    | otherwise = "▶"
 
   settingGroup title description controls =
     HH.fieldset
