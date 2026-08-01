@@ -1,6 +1,7 @@
 package:
   name: ear-trainer-app
   dependencies:
+    - arrays
     - effect
     - ear-trainer-music-core
     - ear-trainer-quiz-engine

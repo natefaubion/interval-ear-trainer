@@ -64,43 +64,115 @@ h1 {
   line-height: 1.6;
 }
 
-.practice-card {
+.setup-card {
   margin-top: clamp(2.5rem, 8vw, 5rem);
-  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 1.25rem;
   background: rgb(255 255 255 / 72%);
   box-shadow: 0 1.5rem 4rem rgb(45 37 27 / 9%);
 }
 
-.staff-placeholder {
+.setup-heading {
   display: grid;
-  min-height: clamp(12rem, 30vw, 18rem);
-  place-items: center;
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 1.45rem,
-    rgb(29 41 37 / 16%) 1.5rem,
-    transparent 1.55rem
-  );
-  color: #68736e;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 25rem);
+  gap: 2rem;
+  align-items: end;
+  padding: clamp(1.25rem, 4vw, 2.25rem);
+  border-bottom: 1px solid var(--line);
 }
 
-.staff-placeholder span {
-  padding: 0.45rem 0.75rem;
-  border-radius: 99rem;
+.setup-heading h2 {
+  margin: 0;
+  font-family: Georgia, serif;
+  font-size: clamp(1.75rem, 5vw, 2.6rem);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+.setup-heading > p {
+  margin: 0;
+  color: #64716b;
+  line-height: 1.55;
+}
+
+.step-label {
+  margin: 0 0 0.4rem;
+  color: var(--accent-dark);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.setting-group {
+  margin: 0;
+  padding: clamp(1.25rem, 4vw, 2.25rem);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.setting-group legend {
+  padding: 0;
+  font-size: 1.05rem;
+  font-weight: 720;
+}
+
+.setting-description {
+  margin: 0.35rem 0 1rem;
+  color: #64716b;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.choice-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.choice-chip {
+  min-height: 2.55rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  color: #46524d;
   background: var(--paper);
-  font-size: 0.85rem;
+  cursor: pointer;
 }
 
-.status-row {
+.choice-chip:hover {
+  border-color: #9b8f80;
+  color: var(--ink);
+}
+
+.choice-chip.selected {
+  border-color: var(--ink);
+  color: var(--paper);
+  background: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.choice-chip:focus-visible {
+  outline: 3px solid rgb(188 75 44 / 30%);
+  outline-offset: 2px;
+}
+
+.setup-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1.25rem;
-  border-top: 1px solid var(--line);
+  padding: clamp(1.25rem, 4vw, 2.25rem);
+}
+
+.setup-message {
+  margin: 0;
+  color: #65716c;
+}
+
+.setup-message.success {
+  color: #276041;
+  font-weight: 650;
 }
 
 .primary-button {
@@ -117,13 +189,24 @@ h1 {
   background: var(--accent-dark);
 }
 
+.primary-button:disabled {
+  color: #827b72;
+  background: #ddd7cd;
+  cursor: not-allowed;
+}
+
 .primary-button:focus-visible {
   outline: 3px solid rgb(188 75 44 / 35%);
   outline-offset: 3px;
 }
 
 @media (max-width: 36rem) {
-  .status-row {
+  .setup-heading {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .setup-footer {
     align-items: stretch;
     flex-direction: column;
   }

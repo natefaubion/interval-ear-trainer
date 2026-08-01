@@ -1,4 +1,6 @@
 package:
   name: ear-trainer-music-core
   dependencies:
+    - arrays
     - prelude
+    - strings
