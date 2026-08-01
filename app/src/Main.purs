@@ -421,7 +421,7 @@ component =
 
   practiceInstruction state = case state.captureStatus of
     ReadyToPlay ->
-      "Play the interval, then sing " <> pitchName state.prompt.root <> " followed by the second note."
+      "Listen to the interval, then sing."
     PlayingAudio -> "Listen carefully. Microphone capture remains off during playback."
     Listening -> Detection.phaseInstruction state.recognition.phase
     CaptureFailed message -> "Microphone unavailable: " <> message
