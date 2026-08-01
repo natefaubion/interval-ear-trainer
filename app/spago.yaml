@@ -1,9 +1,14 @@
 package:
   name: ear-trainer-app
   dependencies:
+    - aff
     - arrays
     - effect
+    - ear-trainer-audio-playback
     - ear-trainer-music-core
+    - ear-trainer-notation
     - ear-trainer-quiz-engine
     - halogen
+    - maybe
     - prelude
+    - web-html

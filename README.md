@@ -30,3 +30,7 @@ Vite prints the development URL when it starts (normally <http://localhost:5173>
 ## Workspace
 
 The Spago monorepo contains the Halogen application and separate packages for music theory, quiz state, notation, audio playback, and pitch detection.
+
+## Audio samples
+
+Piano playback uses the locally hosted Salamander Grand Piano V3 samples by Alexander Holm. The vendored velocity-8 OGG set and its CC BY 3.0 attribution are in `public/audio/salamander/`.

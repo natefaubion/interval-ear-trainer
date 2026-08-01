@@ -5,12 +5,17 @@
         "path": "app",
         "core": {
           "dependencies": [
+            "aff",
             "arrays",
+            "ear-trainer-audio-playback",
             "ear-trainer-music-core",
+            "ear-trainer-notation",
             "ear-trainer-quiz-engine",
             "effect",
             "halogen",
-            "prelude"
+            "maybe",
+            "prelude",
+            "web-html"
           ]
         },
         "test": {
@@ -47,9 +52,11 @@
         "path": "packages/notation",
         "core": {
           "dependencies": [
+            "arrays",
             "ear-trainer-music-core",
             "effect",
-            "prelude"
+            "prelude",
+            "web-dom"
           ]
         },
         "test": {
