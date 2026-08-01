@@ -160,6 +160,18 @@ h1 {
   text-transform: uppercase;
 }
 
+.tuner-readout {
+  display: inline-flex;
+  width: 5.5rem;
+  justify-content: center;
+  color: var(--ink);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .tuner-track {
   position: relative;
   width: min(100%, 22rem);

@@ -222,7 +222,8 @@ component =
               [ HH.span
                   [ HP.class_ (H.ClassName "feedback-status") ]
                   [ HH.text (captureStatusName state.captureStatus) ]
-              , HH.span_
+              , HH.span
+                  [ HP.class_ (H.ClassName "tuner-readout") ]
                   [ HH.text (feedbackName state.recognition.feedback) ]
               ]
           , HH.div
@@ -324,17 +325,17 @@ component =
     PlaybackFailed _ -> "Playback unavailable"
 
   feedbackName = case _ of
-    Nothing -> "No stable pitch yet"
+    Nothing -> "—"
     Just feedback ->
       let
         cents = Int.round feedback.cents
       in
         if cents >= -3 && cents <= 3 then
-          "In tune"
+          "◆ 0¢"
         else if cents > 0 then
-          show cents <> " cents sharp — sing lower"
+          "↓ " <> show cents <> "¢"
         else
-          show (-cents) <> " cents flat — sing higher"
+          "↑ " <> show (-cents) <> "¢"
 
   feedbackPosition cents = 50.0 + max (-50.0) (min 50.0 cents)
 
