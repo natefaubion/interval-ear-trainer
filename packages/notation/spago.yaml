@@ -1,0 +1,6 @@
+package:
+  name: ear-trainer-notation
+  dependencies:
+    - effect
+    - ear-trainer-music-core
+    - prelude

@@ -1,0 +1,9 @@
+node_modules/
+.spago/
+output/
+output-es/
+dist/
+app.js
+app.js.map
+.cache/
+.DS_Store

@@ -1,0 +1,6 @@
+package:
+  name: ear-trainer-pitch-detection
+  dependencies:
+    - effect
+    - ear-trainer-music-core
+    - prelude

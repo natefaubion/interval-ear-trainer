@@ -1,0 +1,8 @@
+package:
+  name: ear-trainer-app
+  dependencies:
+    - effect
+    - ear-trainer-music-core
+    - ear-trainer-quiz-engine
+    - halogen
+    - prelude

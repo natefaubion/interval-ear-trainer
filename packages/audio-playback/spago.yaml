@@ -1,0 +1,6 @@
+package:
+  name: ear-trainer-audio-playback
+  dependencies:
+    - effect
+    - ear-trainer-music-core
+    - prelude

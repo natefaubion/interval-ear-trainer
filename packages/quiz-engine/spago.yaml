@@ -1,0 +1,11 @@
+package:
+  name: ear-trainer-quiz-engine
+  dependencies:
+    - ear-trainer-music-core
+    - maybe
+    - prelude
+  test:
+    main: Test.Main
+    dependencies:
+      - assert
+      - effect

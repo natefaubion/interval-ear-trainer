@@ -1,0 +1,4 @@
+package:
+  name: ear-trainer-music-core
+  dependencies:
+    - prelude
