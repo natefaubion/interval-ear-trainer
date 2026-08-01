@@ -259,24 +259,7 @@ component =
               , HP.class_ (H.ClassName "notation-canvas")
               ]
               []
-          , HH.div
-              [ HP.class_ (H.ClassName "pitch-feedback") ]
-              [ HH.span
-                  [ HP.class_ (H.ClassName "tuner-readout") ]
-                  [ HH.text (feedbackName state.recognition.feedback) ]
-              ]
-          , HH.div
-              [ HP.class_ (H.ClassName "tuner-track") ]
-              [ HH.div [ HP.class_ (H.ClassName "tuner-center") ] []
-              , case state.recognition.feedback of
-                  Nothing -> HH.text ""
-                  Just feedback ->
-                    HH.div
-                      [ HP.class_ (H.ClassName "tuner-dot")
-                      , HP.style ("left: " <> show (feedbackPosition feedback.cents) <> "%")
-                      ]
-                      []
-              ]
+          , renderPitchMeter state
           , renderIntervalChoices state
           ]
       , HH.footer
@@ -296,6 +279,30 @@ component =
               ]
           ]
       ]
+
+  renderPitchMeter state
+    | state.captureStatus == ChoosingAnswer || state.captureStatus == AnswerComplete = HH.text ""
+    | otherwise =
+        HH.div_
+          [ HH.div
+              [ HP.class_ (H.ClassName "pitch-feedback") ]
+              [ HH.span
+                  [ HP.class_ (H.ClassName "tuner-readout") ]
+                  [ HH.text (feedbackName state.recognition.feedback) ]
+              ]
+          , HH.div
+              [ HP.class_ (H.ClassName "tuner-track") ]
+              [ HH.div [ HP.class_ (H.ClassName "tuner-center") ] []
+              , case state.recognition.feedback of
+                  Nothing -> HH.text ""
+                  Just feedback ->
+                    HH.div
+                      [ HP.class_ (H.ClassName "tuner-dot")
+                      , HP.style ("left: " <> show (feedbackPosition feedback.cents) <> "%")
+                      ]
+                      []
+              ]
+          ]
 
   renderIntervalChoices state
     | state.captureStatus /= ChoosingAnswer && state.captureStatus /= AnswerComplete = HH.text ""
