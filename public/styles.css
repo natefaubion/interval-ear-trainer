@@ -66,7 +66,7 @@ h1 {
 
 .setup-card {
   margin-top: clamp(2.5rem, 8vw, 5rem);
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 1.25rem;
   background: rgb(255 255 255 / 72%);
   box-shadow: 0 1.5rem 4rem rgb(45 37 27 / 9%);
@@ -207,7 +207,7 @@ h1 {
   position: relative;
   overflow: visible;
   padding: 0.6rem;
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 0.85rem;
   color: var(--ink);
   background: rgb(255 255 255 / 82%);
@@ -254,6 +254,18 @@ h1 {
   min-height: 1.25rem;
   font-size: 0.85rem;
   font-weight: 700;
+}
+
+.interval-answer.name-only {
+  display: flex;
+  min-height: 3.75rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.interval-answer.name-only .choice-label {
+  min-height: 0;
+  font-size: 1.05rem;
 }
 
 .choice-result-icon {

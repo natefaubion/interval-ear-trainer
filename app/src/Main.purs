@@ -331,6 +331,10 @@ component =
         , HP.classes
             ( [ H.ClassName "interval-answer" ]
                 <>
+                  ( if state.config.answerDisplay == AnswerName then [ H.ClassName "name-only" ]
+                    else []
+                  )
+                <>
                   ( if state.config.answerDisplay /= AnswerNotation then [ H.ClassName "names-visible" ]
                     else []
                   )
