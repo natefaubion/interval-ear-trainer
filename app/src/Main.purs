@@ -306,20 +306,9 @@ component =
     | otherwise =
         HH.section
           [ HP.class_ (H.ClassName "answer-panel") ]
-          [ HH.p
-              [ HP.class_ (H.ClassName "step-label") ]
-              [ HH.text "Choose the interval you produced" ]
-          , HH.div
+          [ HH.div
               [ HP.class_ (H.ClassName "answer-grid") ]
               (Array.mapWithIndex (renderIntervalChoice state) state.choices)
-          , if state.answerCorrect then
-              HH.text ""
-            else if Array.null state.revealedChoices then
-              HH.p_ [ HH.text (answerInstruction state.config.answerDisplay) ]
-            else
-              HH.p
-                [ HP.class_ (H.ClassName "incorrect-message") ]
-                [ HH.text "Not quite. Compare the spellings and try again." ]
           ]
 
   renderIntervalChoice state index choice =
@@ -357,10 +346,6 @@ component =
             [ HP.class_ (H.ClassName "choice-label") ]
             [ HH.text if showName then intervalName choice.interval else "Interval hidden" ]
         ]
-
-  answerInstruction AnswerNotation = "Select the matching notation. Labels remain hidden until selected."
-  answerInstruction AnswerName = "Select the matching interval name."
-  answerInstruction AnswerBoth = "Select the matching notation and interval name."
 
   footerButtonAction state =
     if state.captureStatus == AnswerComplete then NextPrompt else PlayPrompt
@@ -441,7 +426,11 @@ component =
     Listening -> Detection.phaseInstruction state.recognition.phase
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
-    ChoosingAnswer -> "Both notes accepted. Choose the matching written interval."
+    ChoosingAnswer ->
+      if Array.null state.revealedChoices then
+        "Choose the matching interval."
+      else
+        "Not quite. Compare the choices and try again."
     AnswerComplete -> "Correct — the interval is " <> intervalName state.prompt.interval <> "."
 
   feedbackName = case _ of

@@ -251,12 +251,6 @@ h1 {
   visibility: hidden;
 }
 
-.incorrect-message {
-  margin-top: 1rem !important;
-  color: var(--accent-dark) !important;
-  font-weight: 650;
-}
-
 .practice-actions {
   border-top: 1px solid var(--line);
 }
