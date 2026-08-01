@@ -3,7 +3,9 @@ module Main where
 import Prelude
 
 import Data.Array as Array
+import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
 import EarTrainer.Config (ExerciseConfig, defaultConfig, isValid, toggleInterval, togglePlaybackMode, toggleRootPitchClass)
 import EarTrainer.Music
@@ -30,19 +32,30 @@ import EarTrainer.Music
   , transpose
   )
 import EarTrainer.Notation as Notation
+import EarTrainer.PitchDetection as Detection
 import Effect (Effect)
+import Effect.Aff (delay)
 import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import Halogen.Subscription as HS
 import Halogen.VDom.Driver (runUI)
 import Web.HTML.HTMLElement as HTMLElement
 
 data Screen = Setup | Practice
 
 derive instance Eq Screen
+
+data CaptureStatus
+  = ReadyToPlay
+  | PlayingAudio
+  | Listening
+  | CaptureFailed String
+
+derive instance Eq CaptureStatus
 
 type Prompt =
   { interval :: Interval
@@ -52,8 +65,11 @@ type Prompt =
   }
 
 type State =
-  { config :: ExerciseConfig
+  { captureStatus :: CaptureStatus
+  , config :: ExerciseConfig
+  , monitor :: Maybe Detection.Monitor
   , prompt :: Prompt
+  , recognition :: Detection.Recognition
   , sampler :: Maybe Audio.Sampler
   , screen :: Screen
   }
@@ -66,6 +82,9 @@ data Action
   | SelectOctavePolicy OctavePolicy
   | BeginPractice
   | PlayPrompt
+  | StartListening
+  | PitchDetected Detection.PitchSample
+  | MicrophoneFailed String
   | EditSetup
 
 notationRef :: H.RefLabel
@@ -80,8 +99,11 @@ component =
     }
   where
   initialState =
-    { config: defaultConfig
+    { captureStatus: ReadyToPlay
+    , config: defaultConfig
+    , monitor: Nothing
     , prompt: makePrompt defaultConfig
+    , recognition: Detection.initialRecognition
     , sampler: Nothing
     , screen: Setup
     }
@@ -191,7 +213,15 @@ component =
               ]
               []
           , HH.p_
-              [ HH.text ("Sing " <> pitchName state.prompt.root <> " first. The second note will appear when pitch detection accepts it.") ]
+              [ HH.text (practiceInstruction state) ]
+          , HH.div
+              [ HP.class_ (H.ClassName "pitch-feedback") ]
+              [ HH.span
+                  [ HP.class_ (H.ClassName "feedback-status") ]
+                  [ HH.text (captureStatusName state.captureStatus) ]
+              , HH.span_
+                  [ HH.text (feedbackName state.recognition.feedback) ]
+              ]
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "practice-actions") ]
@@ -200,12 +230,13 @@ component =
           , HH.button
               [ HP.type_ HP.ButtonButton
               , HP.class_ (H.ClassName "primary-button play-button")
+              , HP.disabled (state.captureStatus == PlayingAudio)
               , HE.onClick \_ -> PlayPrompt
               ]
               [ HH.span
                   [ HP.class_ (H.ClassName "play-icon") ]
                   [ HH.text "▶" ]
-              , HH.text "Play interval"
+              , HH.text if state.captureStatus == PlayingAudio then "Playing…" else "Play interval"
               ]
           ]
       ]
@@ -262,6 +293,32 @@ component =
         (SelectRange preset)
         label
 
+  practiceInstruction state = case state.captureStatus of
+    ReadyToPlay ->
+      "Play the interval, then sing " <> pitchName state.prompt.root <> " followed by the second note."
+    PlayingAudio -> "Listen carefully. Microphone capture remains off during playback."
+    Listening -> Detection.phaseInstruction state.recognition.phase
+    CaptureFailed message -> "Microphone unavailable: " <> message
+
+  captureStatusName = case _ of
+    ReadyToPlay -> "Ready"
+    PlayingAudio -> "Playing"
+    Listening -> "Listening"
+    CaptureFailed _ -> "Microphone unavailable"
+
+  feedbackName = case _ of
+    Nothing -> "No stable pitch yet"
+    Just feedback ->
+      let
+        cents = Int.round feedback.cents
+      in
+        if cents >= -3 && cents <= 3 then
+          "In tune"
+        else if cents > 0 then
+          show cents <> " cents sharp"
+        else
+          show (-cents) <> " cents flat"
+
   handleAction :: Action -> H.HalogenM State Action () output m Unit
   handleAction = case _ of
     ToggleInterval interval ->
@@ -280,25 +337,77 @@ component =
         Just existing -> pure existing
         Nothing -> H.liftEffect Audio.createSampler
       let prompt = makePrompt state.config
-      H.modify_ _ { prompt = prompt, sampler = Just sampler, screen = Practice }
-      renderPrompt prompt
+      H.modify_ _
+        { captureStatus = ReadyToPlay
+        , prompt = prompt
+        , recognition = Detection.initialRecognition
+        , sampler = Just sampler
+        , screen = Practice
+        }
+      renderNotation [ prompt.root ]
     PlayPrompt -> do
       state <- H.get
+      stopMonitor state.monitor
       case state.sampler of
         Nothing -> pure unit
-        Just sampler -> H.liftEffect (Audio.playInterval sampler state.prompt.mode state.prompt.root state.prompt.target)
+        Just sampler -> do
+          H.modify_ _
+            { captureStatus = PlayingAudio
+            , monitor = Nothing
+            , recognition = Detection.initialRecognition
+            }
+          renderNotation [ state.prompt.root ]
+          H.liftEffect (Audio.playInterval sampler state.prompt.mode state.prompt.root state.prompt.target)
+          void $ H.fork do
+            H.liftAff (delay (Milliseconds (Audio.playbackDurationMilliseconds state.prompt.mode + 350.0)))
+            handleAction StartListening
+    StartListening -> do
+      state <- H.get
+      when (state.screen == Practice && state.captureStatus == PlayingAudio) do
+        { emitter, listener } <- H.liftEffect HS.create
+        void (H.subscribe emitter)
+        monitor <- H.liftEffect $ Detection.start
+          (HS.notify listener <<< PitchDetected)
+          (HS.notify listener <<< MicrophoneFailed)
+        H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
+    PitchDetected sample -> do
+      state <- H.get
+      when (state.captureStatus == Listening) do
+        let
+          next = Detection.stepRecognition
+            Detection.defaultRecognitionSettings
+            state.config.octavePolicy
+            state.prompt.root
+            state.prompt.target
+            sample
+            state.recognition
+          completed =
+            state.recognition.phase /= Detection.RecognitionComplete
+              && next.phase == Detection.RecognitionComplete
+        H.modify_ _ { recognition = next }
+        when completed do
+          stopMonitor state.monitor
+          H.modify_ _ { monitor = Nothing }
+          renderNotation [ state.prompt.root, state.prompt.target ]
+    MicrophoneFailed message ->
+      H.modify_ _ { captureStatus = CaptureFailed message, monitor = Nothing }
     EditSetup -> do
       state <- H.get
+      stopMonitor state.monitor
       case state.sampler of
         Nothing -> pure unit
         Just sampler -> H.liftEffect (Audio.stop sampler)
-      H.modify_ _ { screen = Setup }
+      H.modify_ _ { captureStatus = ReadyToPlay, monitor = Nothing, screen = Setup }
 
-  renderPrompt prompt = do
+  stopMonitor = case _ of
+    Nothing -> pure unit
+    Just monitor -> H.liftEffect (Detection.stop monitor)
+
+  renderNotation notes = do
     maybeElement <- H.getHTMLElementRef notationRef
     case maybeElement of
       Nothing -> pure unit
-      Just htmlElement -> H.liftEffect (Notation.renderNotes (HTMLElement.toElement htmlElement) [ prompt.root ])
+      Just htmlElement -> H.liftEffect (Notation.renderNotes (HTMLElement.toElement htmlElement) notes)
 
 makePrompt :: ExerciseConfig -> Prompt
 makePrompt config =

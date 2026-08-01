@@ -2,6 +2,7 @@ module EarTrainer.Audio
   ( Sampler
   , createSampler
   , playInterval
+  , playbackDurationMilliseconds
   , stop
   ) where
 
@@ -24,3 +25,7 @@ modeCode :: PlaybackMode -> String
 modeCode MelodicAscending = "melodic"
 modeCode MelodicDescending = "melodic"
 modeCode Harmonic = "harmonic"
+
+playbackDurationMilliseconds :: PlaybackMode -> Number
+playbackDurationMilliseconds Harmonic = 900.0
+playbackDurationMilliseconds _ = 1450.0

@@ -138,6 +138,28 @@ h1 {
   line-height: 1.5;
 }
 
+.pitch-feedback {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1rem;
+  color: #64716b;
+  font-size: 0.9rem;
+}
+
+.feedback-status {
+  padding: 0.28rem 0.6rem;
+  border-radius: 99rem;
+  color: #276041;
+  background: #e4f1e8;
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .practice-actions {
   border-top: 1px solid var(--line);
 }

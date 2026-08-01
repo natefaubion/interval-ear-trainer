@@ -2,6 +2,8 @@ module Test.Main where
 
 import Prelude
 
+import Data.Array as Array
+import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..))
 import EarTrainer.Config (defaultConfig, isValid, toggleInterval)
 import EarTrainer.Music
@@ -9,9 +11,17 @@ import EarTrainer.Music
   , Direction(..)
   , Interval(..)
   , Letter(..)
+  , OctavePolicy(..)
   , midiNumber
   , pitch
   , transpose
+  )
+import EarTrainer.PitchDetection
+  ( RecognitionPhase(..)
+  , defaultRecognitionSettings
+  , initialRecognition
+  , nearestMidi
+  , stepRecognition
   )
 import EarTrainer.Quiz (Event(..), Phase(..), transition)
 import Effect (Effect)
@@ -19,6 +29,49 @@ import Test.Assert (assertEqual)
 
 main :: Effect Unit
 main = do
+  let
+    c4 = pitch C (Accidental 0) 4
+    e4 = pitch E (Accidental 0) 4
+    c4Sample = { frequency: 261.625565, clarity: 0.98 }
+    c5Sample = { frequency: 523.251131, clarity: 0.98 }
+    e4Sample = { frequency: 329.627557, clarity: 0.98 }
+    silence = { frequency: 0.0, clarity: 0.0 }
+    step sample recognition =
+      stepRecognition defaultRecognitionSettings AnyOctave c4 e4 sample recognition
+    afterFirst = foldl (\recognition _ -> step c4Sample recognition) initialRecognition (Array.replicate 12 unit)
+    afterRelease = foldl (\recognition _ -> step silence recognition) afterFirst (Array.replicate 5 unit)
+    afterSecond = foldl (\recognition _ -> step e4Sample recognition) afterRelease (Array.replicate 12 unit)
+    anyOctaveFirst = foldl (\recognition _ -> step c5Sample recognition) initialRecognition (Array.replicate 12 unit)
+    writtenOctaveFirst = foldl
+      ( \recognition _ ->
+          stepRecognition defaultRecognitionSettings WrittenOctave c4 e4 c5Sample recognition
+      )
+      initialRecognition
+      (Array.replicate 12 unit)
+  assertEqual
+    { actual: nearestMidi 440.0
+    , expected: 69
+    }
+  assertEqual
+    { actual: afterFirst.phase
+    , expected: WaitingForRelease
+    }
+  assertEqual
+    { actual: afterRelease.phase
+    , expected: WaitingForSecond
+    }
+  assertEqual
+    { actual: afterSecond.phase
+    , expected: RecognitionComplete
+    }
+  assertEqual
+    { actual: anyOctaveFirst.phase
+    , expected: WaitingForRelease
+    }
+  assertEqual
+    { actual: writtenOctaveFirst.phase
+    , expected: WaitingForFirst
+    }
   assertEqual
     { actual: midiNumber (pitch A (Accidental 0) 4)
     , expected: 69

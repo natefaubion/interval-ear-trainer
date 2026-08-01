@@ -7,12 +7,15 @@
           "dependencies": [
             "aff",
             "arrays",
+            "datetime",
             "ear-trainer-audio-playback",
             "ear-trainer-music-core",
             "ear-trainer-notation",
+            "ear-trainer-pitch-detection",
             "ear-trainer-quiz-engine",
             "effect",
             "halogen",
+            "integers",
             "maybe",
             "prelude",
             "web-html"
@@ -69,6 +72,9 @@
           "dependencies": [
             "ear-trainer-music-core",
             "effect",
+            "integers",
+            "maybe",
+            "numbers",
             "prelude"
           ]
         },
@@ -87,8 +93,11 @@
         },
         "test": {
           "dependencies": [
+            "arrays",
             "assert",
-            "effect"
+            "ear-trainer-pitch-detection",
+            "effect",
+            "foldable-traversable"
           ]
         }
       }

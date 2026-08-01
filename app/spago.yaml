@@ -7,8 +7,11 @@ package:
     - ear-trainer-audio-playback
     - ear-trainer-music-core
     - ear-trainer-notation
+    - ear-trainer-pitch-detection
     - ear-trainer-quiz-engine
     - halogen
+    - datetime
     - maybe
+    - integers
     - prelude
     - web-html

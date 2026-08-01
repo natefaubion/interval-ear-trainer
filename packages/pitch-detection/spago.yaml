@@ -3,4 +3,7 @@ package:
   dependencies:
     - effect
     - ear-trainer-music-core
+    - integers
+    - maybe
+    - numbers
     - prelude
