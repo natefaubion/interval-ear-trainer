@@ -434,7 +434,7 @@ component =
         "Choose the matching interval."
       else
         "Not quite. Compare the choices and try again."
-    AnswerComplete -> "Correct — the interval is " <> intervalName state.prompt.interval <> "."
+    AnswerComplete -> "Correct!"
 
   feedbackName = case _ of
     Nothing -> "—"
