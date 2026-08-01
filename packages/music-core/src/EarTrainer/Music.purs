@@ -22,6 +22,7 @@ module EarTrainer.Music
   , midiNumber
   , pitch
   , pitchFromMidi
+  , pitchFromMidiLike
   , pitchClassName
   , pitchName
   , playbackModeName
@@ -190,6 +191,27 @@ pitchFromMidi midi =
       9 -> pitch A (Accidental 0) octave
       10 -> pitch A (Accidental 1) octave
       _ -> pitch B (Accidental 0) octave
+
+pitchFromMidiLike :: Pitch -> Int -> Pitch
+pitchFromMidiLike (Pitch (PitchClass _ (Accidental referenceAccidental)) _) midi
+  | referenceAccidental < 0 =
+      let
+        octave = midi `div` 12 - 1
+      in
+        case midi `mod` 12 of
+          0 -> pitch C (Accidental 0) octave
+          1 -> pitch D (Accidental (-1)) octave
+          2 -> pitch D (Accidental 0) octave
+          3 -> pitch E (Accidental (-1)) octave
+          4 -> pitch E (Accidental 0) octave
+          5 -> pitch F (Accidental 0) octave
+          6 -> pitch G (Accidental (-1)) octave
+          7 -> pitch G (Accidental 0) octave
+          8 -> pitch A (Accidental (-1)) octave
+          9 -> pitch A (Accidental 0) octave
+          10 -> pitch B (Accidental (-1)) octave
+          _ -> pitch B (Accidental 0) octave
+  | otherwise = pitchFromMidi midi
 
 accidentalOffset :: Accidental -> Int
 accidentalOffset (Accidental offset) = offset

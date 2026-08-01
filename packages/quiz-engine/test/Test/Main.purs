@@ -17,6 +17,7 @@ import EarTrainer.Music
   , allRootPitchClasses
   , midiNumber
   , pitch
+  , pitchFromMidiLike
   , presetRange
   , transpose
   )
@@ -134,6 +135,14 @@ main = do
   assertEqual
     { actual: transpose Ascending MinorThird (pitch D (Accidental (-1)) 4)
     , expected: pitch F (Accidental (-1)) 4
+    }
+  assertEqual
+    { actual: pitchFromMidiLike (pitch D (Accidental (-1)) 4) 61
+    , expected: pitch D (Accidental (-1)) 4
+    }
+  assertEqual
+    { actual: pitchFromMidiLike (pitch C (Accidental 1) 4) 61
+    , expected: pitch C (Accidental 1) 4
     }
   assertEqual
     { actual: isValid (toggleInterval MinorThird defaultConfig)

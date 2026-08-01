@@ -10,9 +10,11 @@ import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
 import EarTrainer.Config (ExerciseConfig, defaultConfig, isValid, toggleInterval, togglePlaybackMode, toggleRootPitchClass)
 import EarTrainer.Music
-  ( Interval
+  ( Accidental(..)
+  , Interval
   , OctavePolicy(..)
-  , PitchClass
+  , Pitch(..)
+  , PitchClass(..)
   , PlaybackMode
   , VocalRangePreset
   , allIntervals
@@ -21,7 +23,7 @@ import EarTrainer.Music
   , allVocalRangePresets
   , intervalName
   , pitchClassName
-  , pitchFromMidi
+  , pitchFromMidiLike
   , pitchName
   , playbackModeName
   , presetName
@@ -506,7 +508,16 @@ component =
         H.modify_ _ { ghostMidi = nextGhost, ghostRevision = revision, recognition = next }
         when (detectedGhost /= Nothing && detectedGhost /= state.ghostMidi) do
           case detectedGhost of
-            Just midi -> renderGhostNotation state.prompt (pitchFromMidi midi)
+            Just midi ->
+              let
+                spellingReference = case state.prompt.root, state.prompt.target of
+                  Pitch (PitchClass _ (Accidental rootAccidental)) _,
+                  Pitch (PitchClass _ (Accidental targetAccidental)) _ ->
+                    if rootAccidental /= 0 then state.prompt.root
+                    else if targetAccidental /= 0 then state.prompt.target
+                    else state.prompt.root
+              in
+                renderGhostNotation state.prompt (pitchFromMidiLike spellingReference midi)
             Nothing -> pure unit
         when (detectedGhost == Nothing && state.ghostMidi /= Nothing) do
           void $ H.fork do
