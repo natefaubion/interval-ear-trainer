@@ -337,7 +337,17 @@ component =
         , HP.disabled state.answerCorrect
         , HE.onClick \_ -> ChooseInterval choice.interval
         ]
-        [ if showNotation then
+        [ if revealed then
+            HH.span
+              [ HP.classes
+                  [ H.ClassName "choice-result-icon"
+                  , H.ClassName if correct then "correct" else "incorrect"
+                  ]
+              ]
+              [ HH.text if correct then "✓" else "×" ]
+          else
+            HH.text ""
+        , if showNotation then
             HH.div
               [ HP.ref (choiceNotationRef index)
               , HP.class_ (H.ClassName "choice-notation")
