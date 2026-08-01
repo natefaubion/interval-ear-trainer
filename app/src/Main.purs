@@ -344,7 +344,7 @@ component =
                   , H.ClassName if correct then "correct" else "incorrect"
                   ]
               ]
-              [ HH.text if correct then "✓" else "×" ]
+              []
           else
             HH.text ""
         , if showNotation then
