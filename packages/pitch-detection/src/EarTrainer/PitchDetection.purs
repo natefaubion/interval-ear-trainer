@@ -10,6 +10,7 @@ module EarTrainer.PitchDetection
   , midiFrequency
   , nearestMidi
   , phaseInstruction
+  , relativeMidi
   , start
   , stepRecognition
   , stop
@@ -51,6 +52,7 @@ instance Show RecognitionPhase where
 type Recognition =
   { candidate :: Maybe Int
   , feedback :: Maybe Feedback
+  , firstMidi :: Maybe Int
   , phase :: RecognitionPhase
   , releaseFrames :: Int
   , stableFrames :: Int
@@ -75,6 +77,7 @@ initialRecognition :: Recognition
 initialRecognition =
   { candidate: Nothing
   , feedback: Nothing
+  , firstMidi: Nothing
   , phase: WaitingForFirst
   , releaseFrames: 0
   , stableFrames: 0
@@ -161,7 +164,7 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
               next = stepStable settings.stableFramesRequired (unwrapFeedback feedback) recognition
             in
               if next.stableFrames >= settings.stableFramesRequired then
-                next { phase = WaitingForRelease, releaseFrames = 0 }
+                next { firstMidi = Just (unwrapFeedback feedback).midi, phase = WaitingForRelease, releaseFrames = 0 }
               else next
         | otherwise -> resetStable feedback recognition
       WaitingForRelease
@@ -192,3 +195,11 @@ phaseInstruction WaitingForFirst = "Sing the first note"
 phaseInstruction WaitingForRelease = "Release or move away from the first note"
 phaseInstruction WaitingForSecond = "Sing the second note"
 phaseInstruction RecognitionComplete = "Both notes accepted"
+
+relativeMidi :: OctavePolicy -> Pitch -> Recognition -> Int -> Int
+relativeMidi WrittenOctave _ _ detectedMidi = detectedMidi
+relativeMidi AnyOctave root recognition detectedMidi = case recognition.firstMidi of
+  Just firstMidi -> detectedMidi + midiNumber root - firstMidi
+  Nothing ->
+    if detectedMidi `mod` 12 == midiNumber root `mod` 12 then midiNumber root
+    else detectedMidi

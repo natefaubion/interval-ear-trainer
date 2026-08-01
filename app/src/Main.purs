@@ -64,6 +64,7 @@ type State =
   , choices :: Array Quiz.IntervalChoice
   , config :: ExerciseConfig
   , ghostMidi :: Maybe Int
+  , ghostRevision :: Int
   , monitor :: Maybe Detection.Monitor
   , prompt :: Quiz.Prompt
   , recognition :: Detection.Recognition
@@ -84,6 +85,8 @@ data Action
   | AudioFailed String
   | StartListening
   | PitchDetected Detection.PitchSample
+  | ClearGhost Int
+  | FinishSinging Int
   | MicrophoneFailed String
   | ChooseInterval Interval
   | NextPrompt
@@ -109,6 +112,7 @@ component =
     , choices: Quiz.makeChoices 0 (Quiz.makePrompt 0 defaultConfig)
     , config: defaultConfig
     , ghostMidi: Nothing
+    , ghostRevision: 0
     , monitor: Nothing
     , prompt: Quiz.makePrompt 0 defaultConfig
     , recognition: Detection.initialRecognition
@@ -434,6 +438,7 @@ component =
         , captureStatus = ReadyToPlay
         , choices = choices
         , ghostMidi = Nothing
+        , ghostRevision = state.ghostRevision + 1
         , prompt = prompt
         , recognition = Detection.initialRecognition
         , revealedChoices = []
@@ -450,6 +455,7 @@ component =
           H.modify_ _
             { captureStatus = PlayingAudio
             , ghostMidi = Nothing
+            , ghostRevision = state.ghostRevision + 1
             , monitor = Nothing
             , recognition = Detection.initialRecognition
             }
@@ -480,9 +486,8 @@ component =
       state <- H.get
       when (state.captureStatus == Listening) do
         let
-          ghostMidi =
-            if sample.frequency > 0.0 then Just (Detection.nearestMidi sample.frequency)
-            else Nothing
+          detectedMidi =
+            if sample.frequency > 0.0 then Just (Detection.nearestMidi sample.frequency) else Nothing
           next = Detection.stepRecognition
             Detection.defaultRecognitionSettings
             state.config.octavePolicy
@@ -490,17 +495,48 @@ component =
             state.prompt.target
             sample
             state.recognition
+          detectedGhost = map (Detection.relativeMidi state.config.octavePolicy state.prompt.root next) detectedMidi
+          nextGhost = case detectedGhost of
+            Nothing -> state.ghostMidi
+            Just midi -> Just midi
+          revision = if detectedGhost == Nothing then state.ghostRevision else state.ghostRevision + 1
           completed =
             state.recognition.phase /= Detection.RecognitionComplete
               && next.phase == Detection.RecognitionComplete
-        H.modify_ _ { ghostMidi = ghostMidi, recognition = next }
-        when (ghostMidi /= state.ghostMidi) do
-          case ghostMidi of
-            Nothing -> renderPromptNotation state.prompt
+        H.modify_ _ { ghostMidi = nextGhost, ghostRevision = revision, recognition = next }
+        when (detectedGhost /= Nothing && detectedGhost /= state.ghostMidi) do
+          case detectedGhost of
             Just midi -> renderGhostNotation state.prompt (pitchFromMidi midi)
+            Nothing -> pure unit
+        when (detectedGhost == Nothing && state.ghostMidi /= Nothing) do
+          void $ H.fork do
+            H.liftAff (delay (Milliseconds 700.0))
+            handleAction (ClearGhost revision)
         when completed do
           stopMonitor state.monitor
-          H.modify_ _ { captureStatus = ChoosingAnswer, ghostMidi = Nothing, monitor = Nothing }
+          H.modify_ _ { monitor = Nothing }
+          void $ H.fork do
+            H.liftAff (delay (Milliseconds 700.0))
+            handleAction (FinishSinging revision)
+    ClearGhost revision -> do
+      state <- H.get
+      when
+        ( state.captureStatus == Listening
+            && state.ghostRevision == revision
+            && state.ghostMidi /= Nothing
+        )
+        do
+          H.modify_ _ { ghostMidi = Nothing }
+          renderPromptNotation state.prompt
+    FinishSinging revision -> do
+      state <- H.get
+      when
+        ( state.captureStatus == Listening
+            && state.recognition.phase == Detection.RecognitionComplete
+            && state.ghostRevision == revision
+        )
+        do
+          H.modify_ _ { captureStatus = ChoosingAnswer, ghostMidi = Nothing }
           renderPromptNotation state.prompt
           renderChoiceNotation state.prompt.root state.choices
     MicrophoneFailed message ->
@@ -533,6 +569,7 @@ component =
         , captureStatus = ReadyToPlay
         , choices = choices
         , ghostMidi = Nothing
+        , ghostRevision = state.ghostRevision + 1
         , prompt = prompt
         , recognition = Detection.initialRecognition
         , revealedChoices = []
@@ -544,7 +581,13 @@ component =
       case state.sampler of
         Nothing -> pure unit
         Just sampler -> H.liftEffect (Audio.stop sampler)
-      H.modify_ _ { captureStatus = ReadyToPlay, ghostMidi = Nothing, monitor = Nothing, screen = Setup }
+      H.modify_ _
+        { captureStatus = ReadyToPlay
+        , ghostMidi = Nothing
+        , ghostRevision = state.ghostRevision + 1
+        , monitor = Nothing
+        , screen = Setup
+        }
 
   stopMonitor = case _ of
     Nothing -> pure unit

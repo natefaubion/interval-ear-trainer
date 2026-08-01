@@ -23,6 +23,7 @@ import EarTrainer.PitchDetection
   , defaultRecognitionSettings
   , initialRecognition
   , nearestMidi
+  , relativeMidi
   , stepRecognition
   )
 import EarTrainer.Quiz (Event(..), Phase(..), makeChoices, makePrompt, transition)
@@ -35,6 +36,7 @@ main = do
     c4 = pitch C (Accidental 0) 4
     e4 = pitch E (Accidental 0) 4
     c4Sample = { frequency: 261.625565, clarity: 0.98 }
+    c3Sample = { frequency: 130.812783, clarity: 0.98 }
     c5Sample = { frequency: 523.251131, clarity: 0.98 }
     e4Sample = { frequency: 329.627557, clarity: 0.98 }
     silence = { frequency: 0.0, clarity: 0.0 }
@@ -44,6 +46,7 @@ main = do
     afterRelease = foldl (\recognition _ -> step silence recognition) afterFirst (Array.replicate 5 unit)
     afterSecond = foldl (\recognition _ -> step e4Sample recognition) afterRelease (Array.replicate 12 unit)
     anyOctaveFirst = foldl (\recognition _ -> step c5Sample recognition) initialRecognition (Array.replicate 12 unit)
+    octaveBelowFirst = foldl (\recognition _ -> step c3Sample recognition) initialRecognition (Array.replicate 12 unit)
     writtenOctaveFirst = foldl
       ( \recognition _ ->
           stepRecognition defaultRecognitionSettings WrittenOctave c4 e4 c5Sample recognition
@@ -77,6 +80,14 @@ main = do
   assertEqual
     { actual: writtenOctaveFirst.phase
     , expected: WaitingForFirst
+    }
+  assertEqual
+    { actual: relativeMidi AnyOctave c4 octaveBelowFirst 57
+    , expected: 69
+    }
+  assertEqual
+    { actual: relativeMidi WrittenOctave c4 octaveBelowFirst 57
+    , expected: 57
     }
   assertEqual
     { actual: Array.length generatedChoices
