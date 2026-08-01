@@ -7,26 +7,34 @@ import {
   Voice,
 } from "vexflow";
 
-export const renderNotesImpl = (element) => (notes) => () => {
+export const renderScoreImpl = (element) => (clef) => (width) => (events) => () => {
   element.replaceChildren();
 
-  const width = 720;
   const height = 190;
   const renderer = new Renderer(element, Renderer.Backends.SVG);
   renderer.resize(width, height);
 
   const context = renderer.getContext();
-  const stave = new Stave(12, 28, width - 24);
-  stave.addClef("treble").setContext(context).draw();
+  const stave = new Stave(8, 28, width - 16);
+  stave.addClef(clef).setContext(context).draw();
 
-  const staveNotes = notes.map(({ key, accidental }) => {
-    const note = new StaveNote({ clef: "treble", keys: [key], duration: "q" });
-    if (accidental !== "") note.addModifier(new Accidental(accidental), 0);
+  const staveNotes = events.map((event) => {
+    const note = new StaveNote({
+      clef,
+      keys: event.notes.map(({ key }) => key),
+      duration: "q",
+    });
+    event.notes.forEach(({ accidental }, index) => {
+      if (accidental !== "") note.addModifier(new Accidental(accidental), index);
+    });
+    if (event.dim) {
+      note.setStyle({ fillStyle: "#aeb4b0", strokeStyle: "#aeb4b0" });
+    }
     return note;
   });
 
   const voice = new Voice({ numBeats: staveNotes.length, beatValue: 4 }).addTickables(staveNotes);
-  new Formatter().joinVoices([voice]).format([voice], width - 180);
+  new Formatter().joinVoices([voice]).format([voice], width - 105);
   voice.draw(context, stave);
 
   const svg = element.querySelector("svg");

@@ -21,6 +21,7 @@ module EarTrainer.Music
   , intervalSemitones
   , midiNumber
   , pitch
+  , pitchFromMidi
   , pitchClassName
   , pitchName
   , playbackModeName
@@ -165,6 +166,25 @@ allVocalRangePresets = [ Bass, Baritone, Tenor, Alto, MezzoSoprano, Soprano ]
 
 pitch :: Letter -> Accidental -> Int -> Pitch
 pitch letter accidental octave = Pitch (PitchClass letter accidental) octave
+
+pitchFromMidi :: Int -> Pitch
+pitchFromMidi midi =
+  let
+    octave = midi `div` 12 - 1
+  in
+    case midi `mod` 12 of
+      0 -> pitch C (Accidental 0) octave
+      1 -> pitch C (Accidental 1) octave
+      2 -> pitch D (Accidental 0) octave
+      3 -> pitch D (Accidental 1) octave
+      4 -> pitch E (Accidental 0) octave
+      5 -> pitch F (Accidental 0) octave
+      6 -> pitch F (Accidental 1) octave
+      7 -> pitch G (Accidental 0) octave
+      8 -> pitch G (Accidental 1) octave
+      9 -> pitch A (Accidental 0) octave
+      10 -> pitch A (Accidental 1) octave
+      _ -> pitch B (Accidental 0) octave
 
 accidentalOffset :: Accidental -> Int
 accidentalOffset (Accidental offset) = offset

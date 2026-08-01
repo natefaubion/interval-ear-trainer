@@ -21,6 +21,7 @@ import EarTrainer.Music
   , allVocalRangePresets
   , intervalName
   , pitchClassName
+  , pitchFromMidi
   , pitchName
   , playbackModeName
   , presetName
@@ -62,6 +63,7 @@ type State =
   , captureStatus :: CaptureStatus
   , choices :: Array Quiz.IntervalChoice
   , config :: ExerciseConfig
+  , ghostMidi :: Maybe Int
   , monitor :: Maybe Detection.Monitor
   , prompt :: Quiz.Prompt
   , recognition :: Detection.Recognition
@@ -106,6 +108,7 @@ component =
     , captureStatus: ReadyToPlay
     , choices: Quiz.makeChoices 0 (Quiz.makePrompt 0 defaultConfig)
     , config: defaultConfig
+    , ghostMidi: Nothing
     , monitor: Nothing
     , prompt: Quiz.makePrompt 0 defaultConfig
     , recognition: Detection.initialRecognition
@@ -430,13 +433,14 @@ component =
         { answerCorrect = false
         , captureStatus = ReadyToPlay
         , choices = choices
+        , ghostMidi = Nothing
         , prompt = prompt
         , recognition = Detection.initialRecognition
         , revealedChoices = []
         , sampler = Just sampler
         , screen = Practice
         }
-      renderNotation [ prompt.root ]
+      renderPromptNotation prompt
     PlayPrompt -> do
       state <- H.get
       stopMonitor state.monitor
@@ -445,10 +449,11 @@ component =
         Just sampler -> do
           H.modify_ _
             { captureStatus = PlayingAudio
+            , ghostMidi = Nothing
             , monitor = Nothing
             , recognition = Detection.initialRecognition
             }
-          renderNotation [ state.prompt.root ]
+          renderPromptNotation state.prompt
           { emitter, listener } <- H.liftEffect HS.create
           void (H.subscribe emitter)
           H.liftEffect $ Audio.playInterval sampler state.prompt.mode state.prompt.root state.prompt.target
@@ -475,6 +480,9 @@ component =
       state <- H.get
       when (state.captureStatus == Listening) do
         let
+          ghostMidi =
+            if sample.frequency > 0.0 then Just (Detection.nearestMidi sample.frequency)
+            else Nothing
           next = Detection.stepRecognition
             Detection.defaultRecognitionSettings
             state.config.octavePolicy
@@ -485,17 +493,27 @@ component =
           completed =
             state.recognition.phase /= Detection.RecognitionComplete
               && next.phase == Detection.RecognitionComplete
-        H.modify_ _ { recognition = next }
+        H.modify_ _ { ghostMidi = ghostMidi, recognition = next }
+        when (ghostMidi /= state.ghostMidi) do
+          case ghostMidi of
+            Nothing -> renderPromptNotation state.prompt
+            Just midi -> renderGhostNotation state.prompt (pitchFromMidi midi)
         when completed do
           stopMonitor state.monitor
-          H.modify_ _ { captureStatus = ChoosingAnswer, monitor = Nothing }
-          renderNotation [ state.prompt.root, state.prompt.target ]
+          H.modify_ _ { captureStatus = ChoosingAnswer, ghostMidi = Nothing, monitor = Nothing }
+          renderPromptNotation state.prompt
           renderChoiceNotation state.prompt.root state.choices
     MicrophoneFailed message ->
       H.modify_ _ { captureStatus = CaptureFailed message, monitor = Nothing }
     ChooseInterval interval -> do
       state <- H.get
       when (state.captureStatus == ChoosingAnswer && not (Array.elem interval state.revealedChoices)) do
+        case state.sampler, Array.find (\choice -> choice.interval == interval) state.choices of
+          Just sampler, Just choice ->
+            H.liftEffect $ Audio.playInterval sampler state.prompt.mode state.prompt.root choice.target
+              (pure unit)
+              (\_ -> pure unit)
+          _, _ -> pure unit
         let
           correct = interval == state.prompt.interval
           revealed = Array.snoc state.revealedChoices interval
@@ -514,28 +532,37 @@ component =
         { answerCorrect = false
         , captureStatus = ReadyToPlay
         , choices = choices
+        , ghostMidi = Nothing
         , prompt = prompt
         , recognition = Detection.initialRecognition
         , revealedChoices = []
         }
-      renderNotation [ prompt.root ]
+      renderPromptNotation prompt
     EditSetup -> do
       state <- H.get
       stopMonitor state.monitor
       case state.sampler of
         Nothing -> pure unit
         Just sampler -> H.liftEffect (Audio.stop sampler)
-      H.modify_ _ { captureStatus = ReadyToPlay, monitor = Nothing, screen = Setup }
+      H.modify_ _ { captureStatus = ReadyToPlay, ghostMidi = Nothing, monitor = Nothing, screen = Setup }
 
   stopMonitor = case _ of
     Nothing -> pure unit
     Just monitor -> H.liftEffect (Detection.stop monitor)
 
-  renderNotation notes = do
+  renderPromptNotation prompt = do
     maybeElement <- H.getHTMLElementRef notationRef
     case maybeElement of
       Nothing -> pure unit
-      Just htmlElement -> H.liftEffect (Notation.renderNotes (HTMLElement.toElement htmlElement) notes)
+      Just htmlElement ->
+        H.liftEffect (Notation.renderPrompt (HTMLElement.toElement htmlElement) prompt.root prompt.target)
+
+  renderGhostNotation prompt detected = do
+    maybeElement <- H.getHTMLElementRef notationRef
+    case maybeElement of
+      Nothing -> pure unit
+      Just htmlElement ->
+        H.liftEffect (Notation.renderGhost (HTMLElement.toElement htmlElement) prompt.root prompt.target detected)
 
   renderChoiceNotation root choices =
     for_ (Array.mapWithIndex (\index choice -> { choice, index }) choices) \item -> do
@@ -543,7 +570,7 @@ component =
       case maybeElement of
         Nothing -> pure unit
         Just htmlElement ->
-          H.liftEffect (Notation.renderNotes (HTMLElement.toElement htmlElement) [ root, item.choice.target ])
+          H.liftEffect (Notation.renderIntervalChoice (HTMLElement.toElement htmlElement) root item.choice.target)
 
 main :: Effect Unit
 main = HA.runHalogenAff do

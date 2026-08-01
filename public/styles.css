@@ -120,7 +120,7 @@ h1 {
 }
 
 .notation-canvas {
-  width: min(100%, 45rem);
+  width: min(100%, 24rem);
   min-height: 11.875rem;
   margin-inline: auto;
 }
