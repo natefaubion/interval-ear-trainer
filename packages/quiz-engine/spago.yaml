@@ -1,6 +1,7 @@
 package:
   name: ear-trainer-quiz-engine
   dependencies:
+    - arrays
     - ear-trainer-music-core
     - maybe
     - prelude

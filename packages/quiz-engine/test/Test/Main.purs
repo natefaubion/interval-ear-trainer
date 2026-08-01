@@ -12,8 +12,10 @@ import EarTrainer.Music
   , Interval(..)
   , Letter(..)
   , OctavePolicy(..)
+  , PlaybackMode(..)
   , midiNumber
   , pitch
+  , presetRange
   , transpose
   )
 import EarTrainer.PitchDetection
@@ -23,7 +25,7 @@ import EarTrainer.PitchDetection
   , nearestMidi
   , stepRecognition
   )
-import EarTrainer.Quiz (Event(..), Phase(..), transition)
+import EarTrainer.Quiz (Event(..), Phase(..), makeChoices, makePrompt, transition)
 import Effect (Effect)
 import Test.Assert (assertEqual)
 
@@ -48,6 +50,10 @@ main = do
       )
       initialRecognition
       (Array.replicate 12 unit)
+    descendingConfig = defaultConfig { playbackModes = [ MelodicDescending ] }
+    generatedPrompt = makePrompt 128 descendingConfig
+    generatedChoices = makeChoices 128 generatedPrompt
+    generatedRange = presetRange descendingConfig.vocalRange
   assertEqual
     { actual: nearestMidi 440.0
     , expected: 69
@@ -71,6 +77,22 @@ main = do
   assertEqual
     { actual: writtenOctaveFirst.phase
     , expected: WaitingForFirst
+    }
+  assertEqual
+    { actual: Array.length generatedChoices
+    , expected: 4
+    }
+  assertEqual
+    { actual: Array.length (Array.filter (\choice -> choice.interval == generatedPrompt.interval) generatedChoices)
+    , expected: 1
+    }
+  assertEqual
+    { actual:
+        midiNumber generatedPrompt.root >= midiNumber generatedRange.low
+          && midiNumber generatedPrompt.target >= midiNumber generatedRange.low
+          && midiNumber generatedPrompt.root <= midiNumber generatedRange.high
+          && midiNumber generatedPrompt.target <= midiNumber generatedRange.high
+    , expected: true
     }
   assertEqual
     { actual: midiNumber (pitch A (Accidental 0) 4)

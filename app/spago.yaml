@@ -9,9 +9,11 @@ package:
     - ear-trainer-notation
     - ear-trainer-pitch-detection
     - ear-trainer-quiz-engine
+    - foldable-traversable
     - halogen
     - datetime
     - maybe
     - integers
     - prelude
+    - random
     - web-html

@@ -3,39 +3,36 @@ module Main where
 import Prelude
 
 import Data.Array as Array
+import Data.Foldable (for_)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
 import EarTrainer.Config (ExerciseConfig, defaultConfig, isValid, toggleInterval, togglePlaybackMode, toggleRootPitchClass)
 import EarTrainer.Music
-  ( Accidental(..)
-  , Direction(..)
-  , Interval(..)
-  , Letter(..)
+  ( Interval
   , OctavePolicy(..)
-  , Pitch(..)
-  , PitchClass(..)
-  , PlaybackMode(..)
+  , PitchClass
+  , PlaybackMode
   , VocalRangePreset
   , allIntervals
   , allPlaybackModes
   , allRootPitchClasses
   , allVocalRangePresets
   , intervalName
-  , midiNumber
   , pitchClassName
   , pitchName
   , playbackModeName
   , presetName
   , presetRange
-  , transpose
   )
 import EarTrainer.Notation as Notation
 import EarTrainer.PitchDetection as Detection
+import EarTrainer.Quiz as Quiz
 import Effect (Effect)
 import Effect.Aff (delay)
 import Effect.Aff.Class (class MonadAff)
+import Effect.Random (randomInt)
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML as HH
@@ -55,22 +52,20 @@ data CaptureStatus
   | Listening
   | CaptureFailed String
   | PlaybackFailed String
+  | ChoosingAnswer
+  | AnswerComplete
 
 derive instance Eq CaptureStatus
 
-type Prompt =
-  { interval :: Interval
-  , mode :: PlaybackMode
-  , root :: Pitch
-  , target :: Pitch
-  }
-
 type State =
-  { captureStatus :: CaptureStatus
+  { answerCorrect :: Boolean
+  , captureStatus :: CaptureStatus
+  , choices :: Array Quiz.IntervalChoice
   , config :: ExerciseConfig
   , monitor :: Maybe Detection.Monitor
-  , prompt :: Prompt
+  , prompt :: Quiz.Prompt
   , recognition :: Detection.Recognition
+  , revealedChoices :: Array Interval
   , sampler :: Maybe Audio.Sampler
   , screen :: Screen
   }
@@ -88,10 +83,15 @@ data Action
   | StartListening
   | PitchDetected Detection.PitchSample
   | MicrophoneFailed String
+  | ChooseInterval Interval
+  | NextPrompt
   | EditSetup
 
 notationRef :: H.RefLabel
 notationRef = H.RefLabel "prompt-notation"
+
+choiceNotationRef :: Int -> H.RefLabel
+choiceNotationRef index = H.RefLabel ("choice-notation-" <> show index)
 
 component :: forall query input output m. MonadAff m => H.Component query input output m
 component =
@@ -102,11 +102,14 @@ component =
     }
   where
   initialState =
-    { captureStatus: ReadyToPlay
+    { answerCorrect: false
+    , captureStatus: ReadyToPlay
+    , choices: Quiz.makeChoices 0 (Quiz.makePrompt 0 defaultConfig)
     , config: defaultConfig
     , monitor: Nothing
-    , prompt: makePrompt defaultConfig
+    , prompt: Quiz.makePrompt 0 defaultConfig
     , recognition: Detection.initialRecognition
+    , revealedChoices: []
     , sampler: Nothing
     , screen: Setup
     }
@@ -238,6 +241,7 @@ component =
                       ]
                       []
               ]
+          , renderIntervalChoices state
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "practice-actions") ]
@@ -246,7 +250,11 @@ component =
           , HH.button
               [ HP.type_ HP.ButtonButton
               , HP.class_ (H.ClassName "primary-button play-button")
-              , HP.disabled (state.captureStatus == PlayingAudio)
+              , HP.disabled
+                  ( state.captureStatus == PlayingAudio
+                      || state.captureStatus == ChoosingAnswer
+                      || state.captureStatus == AnswerComplete
+                  )
               , HE.onClick \_ -> PlayPrompt
               ]
               [ HH.span
@@ -256,6 +264,60 @@ component =
               ]
           ]
       ]
+
+  renderIntervalChoices state
+    | state.captureStatus /= ChoosingAnswer && state.captureStatus /= AnswerComplete = HH.text ""
+    | otherwise =
+        HH.section
+          [ HP.class_ (H.ClassName "answer-panel") ]
+          [ HH.p
+              [ HP.class_ (H.ClassName "step-label") ]
+              [ HH.text "Choose the interval you produced" ]
+          , HH.div
+              [ HP.class_ (H.ClassName "answer-grid") ]
+              (Array.mapWithIndex (renderIntervalChoice state) state.choices)
+          , if state.answerCorrect then
+              HH.button
+                [ HP.type_ HP.ButtonButton
+                , HP.class_ (H.ClassName "primary-button next-button")
+                , HE.onClick \_ -> NextPrompt
+                ]
+                [ HH.text "Next interval" ]
+            else if Array.null state.revealedChoices then
+              HH.p_ [ HH.text "Select the matching notation. Labels remain hidden until selected." ]
+            else
+              HH.p
+                [ HP.class_ (H.ClassName "incorrect-message") ]
+                [ HH.text "Not quite. Compare the spellings and try again." ]
+          ]
+
+  renderIntervalChoice state index choice =
+    let
+      revealed = Array.elem choice.interval state.revealedChoices
+      correct = revealed && choice.interval == state.prompt.interval
+      incorrect = revealed && not correct
+    in
+      HH.button
+        [ HP.type_ HP.ButtonButton
+        , HP.classes
+            ( [ H.ClassName "interval-answer" ]
+                <>
+                  if correct then [ H.ClassName "correct" ]
+                  else if incorrect then [ H.ClassName "incorrect" ]
+                  else []
+            )
+        , HP.disabled state.answerCorrect
+        , HE.onClick \_ -> ChooseInterval choice.interval
+        ]
+        [ HH.div
+            [ HP.ref (choiceNotationRef index)
+            , HP.class_ (H.ClassName "choice-notation")
+            ]
+            []
+        , HH.span
+            [ HP.class_ (H.ClassName "choice-label") ]
+            [ HH.text if revealed then intervalName choice.interval else "Interval hidden" ]
+        ]
 
   settingGroup title description controls =
     HH.fieldset
@@ -316,6 +378,8 @@ component =
     Listening -> Detection.phaseInstruction state.recognition.phase
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
+    ChoosingAnswer -> "Both notes accepted. Choose the matching written interval."
+    AnswerComplete -> "Correct — the interval is " <> intervalName state.prompt.interval <> "."
 
   captureStatusName = case _ of
     ReadyToPlay -> "Ready"
@@ -323,6 +387,8 @@ component =
     Listening -> "Listening"
     CaptureFailed _ -> "Microphone unavailable"
     PlaybackFailed _ -> "Playback unavailable"
+    ChoosingAnswer -> "Choose notation"
+    AnswerComplete -> "Correct"
 
   feedbackName = case _ of
     Nothing -> "—"
@@ -353,14 +419,20 @@ component =
       H.modify_ \state -> state { config = state.config { octavePolicy = policy } }
     BeginPractice -> do
       state <- H.get
+      seed <- H.liftEffect (randomInt 0 2147483647)
       sampler <- case state.sampler of
         Just existing -> pure existing
         Nothing -> H.liftEffect Audio.createSampler
-      let prompt = makePrompt state.config
+      let
+        prompt = Quiz.makePrompt seed state.config
+        choices = Quiz.makeChoices seed prompt
       H.modify_ _
-        { captureStatus = ReadyToPlay
+        { answerCorrect = false
+        , captureStatus = ReadyToPlay
+        , choices = choices
         , prompt = prompt
         , recognition = Detection.initialRecognition
+        , revealedChoices = []
         , sampler = Just sampler
         , screen = Practice
         }
@@ -416,10 +488,37 @@ component =
         H.modify_ _ { recognition = next }
         when completed do
           stopMonitor state.monitor
-          H.modify_ _ { monitor = Nothing }
+          H.modify_ _ { captureStatus = ChoosingAnswer, monitor = Nothing }
           renderNotation [ state.prompt.root, state.prompt.target ]
+          renderChoiceNotation state.prompt.root state.choices
     MicrophoneFailed message ->
       H.modify_ _ { captureStatus = CaptureFailed message, monitor = Nothing }
+    ChooseInterval interval -> do
+      state <- H.get
+      when (state.captureStatus == ChoosingAnswer && not (Array.elem interval state.revealedChoices)) do
+        let
+          correct = interval == state.prompt.interval
+          revealed = Array.snoc state.revealedChoices interval
+        H.modify_ _
+          { answerCorrect = correct
+          , captureStatus = if correct then AnswerComplete else ChoosingAnswer
+          , revealedChoices = revealed
+          }
+    NextPrompt -> do
+      state <- H.get
+      seed <- H.liftEffect (randomInt 0 2147483647)
+      let
+        prompt = Quiz.makePrompt seed state.config
+        choices = Quiz.makeChoices seed prompt
+      H.modify_ _
+        { answerCorrect = false
+        , captureStatus = ReadyToPlay
+        , choices = choices
+        , prompt = prompt
+        , recognition = Detection.initialRecognition
+        , revealedChoices = []
+        }
+      renderNotation [ prompt.root ]
     EditSetup -> do
       state <- H.get
       stopMonitor state.monitor
@@ -438,29 +537,13 @@ component =
       Nothing -> pure unit
       Just htmlElement -> H.liftEffect (Notation.renderNotes (HTMLElement.toElement htmlElement) notes)
 
-makePrompt :: ExerciseConfig -> Prompt
-makePrompt config =
-  let
-    interval = fromMaybe MinorThird (Array.head config.intervals)
-    mode = fromMaybe MelodicAscending (Array.head config.playbackModes)
-    selectedRoot = fromMaybe (PitchClass C (Accidental 0)) (Array.head config.rootPitchClasses)
-    range = presetRange config.vocalRange
-    Pitch _ lowOctave = range.low
-    lowCandidate = Pitch selectedRoot lowOctave
-    root =
-      if midiNumber lowCandidate < midiNumber range.low then
-        Pitch selectedRoot (lowOctave + 1)
-      else
-        lowCandidate
-    direction = case mode of
-      MelodicDescending -> Descending
-      _ -> Ascending
-  in
-    { interval
-    , mode
-    , root
-    , target: transpose direction interval root
-    }
+  renderChoiceNotation root choices =
+    for_ (Array.mapWithIndex (\index choice -> { choice, index }) choices) \item -> do
+      maybeElement <- H.getHTMLElementRef (choiceNotationRef item.index)
+      case maybeElement of
+        Nothing -> pure unit
+        Just htmlElement ->
+          H.liftEffect (Notation.renderNotes (HTMLElement.toElement htmlElement) [ root, item.choice.target ])
 
 main :: Effect Unit
 main = HA.runHalogenAff do
