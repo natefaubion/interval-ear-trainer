@@ -18,7 +18,7 @@ type EngravedNote =
   }
 
 type EngravedEvent =
-  { dim :: Boolean
+  { appearance :: String
   , notes :: Array EngravedNote
   }
 
@@ -27,30 +27,32 @@ foreign import renderScoreImpl :: Element -> String -> Int -> Array EngravedEven
 renderNotes :: Element -> Array Pitch -> Effect Unit
 renderNotes element notes =
   renderScoreImpl element (selectClef notes) (if Array.length notes <= 1 then 280 else 360)
-    (map (\note -> engravedEvent false [ note ]) notes)
+    (map (\note -> engravedEvent "normal" [ note ]) notes)
 
 renderPrompt :: Element -> Pitch -> Pitch -> Effect Unit
 renderPrompt element root target =
-  renderScoreImpl element (selectClef [ root, target ]) 280
-    [ engravedEvent false [ root ] ]
+  renderScoreImpl element (selectClef [ root, target ]) 360
+    [ engravedEvent "normal" [ root ]
+    , engravedEvent "hidden" [ target ]
+    ]
 
 renderGhost :: Element -> Pitch -> Pitch -> Pitch -> Effect Unit
 renderGhost element root target detected =
   renderScoreImpl element (selectClef [ root, target ]) 360
-    [ engravedEvent false [ root ]
-    , engravedEvent true [ detected ]
+    [ engravedEvent "normal" [ root ]
+    , engravedEvent "dim" [ detected ]
     ]
 
 renderIntervalChoice :: Element -> Pitch -> Pitch -> Effect Unit
 renderIntervalChoice element root target =
   renderScoreImpl element (selectClef [ root, target ]) 430
-    [ engravedEvent false [ root, target ]
-    , engravedEvent false [ root ]
-    , engravedEvent false [ target ]
+    [ engravedEvent "normal" [ root, target ]
+    , engravedEvent "normal" [ root ]
+    , engravedEvent "normal" [ target ]
     ]
 
-engravedEvent :: Boolean -> Array Pitch -> EngravedEvent
-engravedEvent dim notes = { dim, notes: map engravedNote notes }
+engravedEvent :: String -> Array Pitch -> EngravedEvent
+engravedEvent appearance notes = { appearance, notes: map engravedNote notes }
 
 selectClef :: Array Pitch -> String
 selectClef notes =

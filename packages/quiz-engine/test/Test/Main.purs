@@ -13,6 +13,8 @@ import EarTrainer.Music
   , Letter(..)
   , OctavePolicy(..)
   , PlaybackMode(..)
+  , PitchClass(..)
+  , allRootPitchClasses
   , midiNumber
   , pitch
   , presetRange
@@ -124,6 +126,14 @@ main = do
   assertEqual
     { actual: transpose Ascending DiminishedFifth (pitch C (Accidental 0) 4)
     , expected: pitch G (Accidental (-1)) 4
+    }
+  assertEqual
+    { actual: Array.elem (PitchClass D (Accidental (-1))) allRootPitchClasses
+    , expected: true
+    }
+  assertEqual
+    { actual: transpose Ascending MinorThird (pitch D (Accidental (-1)) 4)
+    , expected: pitch F (Accidental (-1)) 4
     }
   assertEqual
     { actual: isValid (toggleInterval MinorThird defaultConfig)

@@ -146,15 +146,20 @@ allRootPitchClasses :: Array PitchClass
 allRootPitchClasses =
   [ PitchClass C (Accidental 0)
   , PitchClass C (Accidental 1)
+  , PitchClass D (Accidental (-1))
   , PitchClass D (Accidental 0)
   , PitchClass D (Accidental 1)
+  , PitchClass E (Accidental (-1))
   , PitchClass E (Accidental 0)
   , PitchClass F (Accidental 0)
   , PitchClass F (Accidental 1)
+  , PitchClass G (Accidental (-1))
   , PitchClass G (Accidental 0)
   , PitchClass G (Accidental 1)
+  , PitchClass A (Accidental (-1))
   , PitchClass A (Accidental 0)
   , PitchClass A (Accidental 1)
+  , PitchClass B (Accidental (-1))
   , PitchClass B (Accidental 0)
   ]
 

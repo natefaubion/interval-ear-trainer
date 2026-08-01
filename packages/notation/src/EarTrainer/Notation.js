@@ -25,10 +25,14 @@ export const renderScoreImpl = (element) => (clef) => (width) => (events) => () 
       duration: "q",
     });
     event.notes.forEach(({ accidental }, index) => {
-      if (accidental !== "") note.addModifier(new Accidental(accidental), index);
+      if (event.appearance !== "hidden" && accidental !== "") {
+        note.addModifier(new Accidental(accidental), index);
+      }
     });
-    if (event.dim) {
+    if (event.appearance === "dim") {
       note.setStyle({ fillStyle: "#aeb4b0", strokeStyle: "#aeb4b0" });
+    } else if (event.appearance === "hidden") {
+      note.setStyle({ fillStyle: "transparent", strokeStyle: "transparent" });
     }
     return note;
   });
