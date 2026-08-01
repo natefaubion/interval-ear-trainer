@@ -32,6 +32,7 @@ import EarTrainer.Music
 import EarTrainer.Notation as Notation
 import EarTrainer.PitchDetection as Detection
 import EarTrainer.Quiz as Quiz
+import EarTrainer.Settings as Settings
 import Effect (Effect)
 import Effect.Aff (delay)
 import Effect.Aff.Class (class MonadAff)
@@ -76,7 +77,8 @@ type State =
   }
 
 data Action
-  = ToggleInterval Interval
+  = Initialize
+  | ToggleInterval Interval
   | TogglePlaybackMode PlaybackMode
   | ToggleRoot PitchClass
   | SelectRange VocalRangePreset
@@ -105,7 +107,7 @@ component =
   H.mkComponent
     { initialState: const initialState
     , render
-    , eval: H.mkEval H.defaultEval { handleAction = handleAction }
+    , eval: H.mkEval H.defaultEval { handleAction = handleAction, initialize = Just Initialize }
     }
   where
   initialState =
@@ -404,16 +406,19 @@ component =
 
   handleAction :: Action -> H.HalogenM State Action () output m Unit
   handleAction = case _ of
+    Initialize -> do
+      config <- H.liftEffect Settings.load
+      H.modify_ _ { config = config }
     ToggleInterval interval ->
-      H.modify_ \state -> state { config = toggleInterval interval state.config }
+      updateConfig (toggleInterval interval)
     TogglePlaybackMode mode ->
-      H.modify_ \state -> state { config = togglePlaybackMode mode state.config }
+      updateConfig (togglePlaybackMode mode)
     ToggleRoot root ->
-      H.modify_ \state -> state { config = toggleRootPitchClass root state.config }
+      updateConfig (toggleRootPitchClass root)
     SelectRange preset ->
-      H.modify_ \state -> state { config = state.config { vocalRange = preset } }
+      updateConfig (_ { vocalRange = preset })
     SelectOctavePolicy policy ->
-      H.modify_ \state -> state { config = state.config { octavePolicy = policy } }
+      updateConfig (_ { octavePolicy = policy })
     BeginPractice -> do
       state <- H.get
       seed <- H.liftEffect (randomInt 0 2147483647)
@@ -591,6 +596,11 @@ component =
   stopMonitor = case _ of
     Nothing -> pure unit
     Just monitor -> H.liftEffect (Detection.stop monitor)
+
+  updateConfig update = do
+    H.modify_ \state -> state { config = update state.config }
+    state <- H.get
+    H.liftEffect (Settings.save state.config)
 
   renderPromptNotation prompt = do
     maybeElement <- H.getHTMLElementRef notationRef
