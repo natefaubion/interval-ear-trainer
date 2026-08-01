@@ -46,9 +46,9 @@ renderGhost element root target detected =
 renderIntervalChoice :: Element -> Pitch -> Pitch -> Effect Unit
 renderIntervalChoice element root target =
   renderScoreImpl element (selectClef [ root, target ]) 430
-    [ engravedEvent "normal" [ root, target ]
-    , engravedEvent "normal" [ root ]
+    [ engravedEvent "normal" [ root ]
     , engravedEvent "normal" [ target ]
+    , engravedEvent "normal" [ root, target ]
     ]
 
 engravedEvent :: String -> Array Pitch -> EngravedEvent
