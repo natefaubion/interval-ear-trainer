@@ -7,7 +7,7 @@ import Prelude
 
 import Data.Array as Array
 import Data.Maybe (Maybe(..))
-import EarTrainer.Config (AnswerCount(..), AnswerDisplay(..), ExerciseConfig, GhostMode(..), defaultConfig)
+import EarTrainer.Config (AnswerCount(..), AnswerDisplay(..), ExerciseConfig, GhostMode(..), QuizMode(..), defaultConfig)
 import EarTrainer.Music
   ( Accidental(..)
   , Interval(..)
@@ -31,6 +31,7 @@ type StoredSettings =
   , intervals :: Array String
   , octavePolicy :: String
   , playbackModes :: Array String
+  , quizMode :: String
   , rootPitchClasses :: Array StoredPitchClass
   , vocalRange :: String
   }
@@ -55,6 +56,7 @@ load = do
         , intervals = Array.mapMaybe decodeInterval value.intervals
         , octavePolicy = decodeOctavePolicy value.octavePolicy
         , playbackModes = Array.mapMaybe decodePlaybackMode value.playbackModes
+        , quizMode = decodeQuizMode value.quizMode
         , rootPitchClasses = map decodePitchClass value.rootPitchClasses
         , vocalRange = decodeVocalRange value.vocalRange
         }
@@ -67,9 +69,20 @@ save config = saveImpl
   , intervals: map encodeInterval config.intervals
   , octavePolicy: encodeOctavePolicy config.octavePolicy
   , playbackModes: map encodePlaybackMode config.playbackModes
+  , quizMode: encodeQuizMode config.quizMode
   , rootPitchClasses: map encodePitchClass config.rootPitchClasses
   , vocalRange: encodeVocalRange config.vocalRange
   }
+
+encodeQuizMode :: QuizMode -> String
+encodeQuizMode SingingOnly = "singing"
+encodeQuizMode RecognitionOnly = "recognition"
+encodeQuizMode SingingAndRecognition = "singing-and-recognition"
+
+decodeQuizMode :: String -> QuizMode
+decodeQuizMode "singing" = SingingOnly
+decodeQuizMode "recognition" = RecognitionOnly
+decodeQuizMode _ = SingingAndRecognition
 
 encodeAnswerCount :: AnswerCount -> String
 encodeAnswerCount AFew = "few"

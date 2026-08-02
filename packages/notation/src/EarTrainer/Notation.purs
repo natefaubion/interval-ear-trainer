@@ -1,5 +1,6 @@
 module EarTrainer.Notation
-  ( renderGhost
+  ( renderCompleted
+  , renderGhost
   , renderIntervalChoice
   , renderNotes
   , renderPrompt
@@ -34,6 +35,13 @@ renderPrompt element root target rootAccepted =
   renderScoreImpl element (selectClef [ root, target ]) 360
     [ engravedEvent (if rootAccepted then "accepted" else "normal") [ root ]
     , engravedEvent "hidden" [ target ]
+    ]
+
+renderCompleted :: Element -> Pitch -> Pitch -> Effect Unit
+renderCompleted element root target =
+  renderScoreImpl element (selectClef [ root, target ]) 360
+    [ engravedEvent "accepted" [ root ]
+    , engravedEvent "accepted" [ target ]
     ]
 
 renderGhost :: Element -> Pitch -> Pitch -> Pitch -> Boolean -> Effect Unit

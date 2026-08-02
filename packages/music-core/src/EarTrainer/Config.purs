@@ -3,8 +3,11 @@ module EarTrainer.Config
   , AnswerDisplay(..)
   , ExerciseConfig
   , GhostMode(..)
+  , QuizMode(..)
   , defaultConfig
   , isValid
+  , quizModeUsesRecognition
+  , quizModeUsesSinging
   , toggleInterval
   , togglePlaybackMode
   , toggleRootPitchClass
@@ -36,6 +39,18 @@ data AnswerCount = AFew | AllSelected
 
 derive instance Eq AnswerCount
 
+data QuizMode = SingingOnly | RecognitionOnly | SingingAndRecognition
+
+derive instance Eq QuizMode
+
+quizModeUsesSinging :: QuizMode -> Boolean
+quizModeUsesSinging RecognitionOnly = false
+quizModeUsesSinging _ = true
+
+quizModeUsesRecognition :: QuizMode -> Boolean
+quizModeUsesRecognition SingingOnly = false
+quizModeUsesRecognition _ = true
+
 type ExerciseConfig =
   { answerCount :: AnswerCount
   , answerDisplay :: AnswerDisplay
@@ -43,6 +58,7 @@ type ExerciseConfig =
   , intervals :: Array Interval
   , octavePolicy :: OctavePolicy
   , playbackModes :: Array PlaybackMode
+  , quizMode :: QuizMode
   , rootPitchClasses :: Array PitchClass
   , vocalRange :: VocalRangePreset
   }
@@ -55,6 +71,7 @@ defaultConfig =
   , intervals: defaultIntervals
   , octavePolicy: AnyOctave
   , playbackModes: allPlaybackModes
+  , quizMode: SingingAndRecognition
   , rootPitchClasses: defaultRootPitchClasses
   , vocalRange: Tenor
   }

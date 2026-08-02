@@ -13,8 +13,11 @@ import EarTrainer.Config
   , AnswerDisplay(..)
   , ExerciseConfig
   , GhostMode(..)
+  , QuizMode(..)
   , defaultConfig
   , isValid
+  , quizModeUsesRecognition
+  , quizModeUsesSinging
   , toggleInterval
   , togglePlaybackMode
   , toggleRootPitchClass
@@ -82,6 +85,7 @@ type State =
   , prompt :: Quiz.Prompt
   , recognition :: Detection.Recognition
   , revealedChoices :: Array Interval
+  , resumeAnswersAfterPlayback :: Boolean
   , sampler :: Maybe Audio.Sampler
   , screen :: Screen
   }
@@ -100,6 +104,7 @@ data Action
   | SelectGhostMode GhostMode
   | SelectAnswerCount AnswerCount
   | SelectAnswerDisplay AnswerDisplay
+  | SelectQuizMode QuizMode
   | BeginPractice
   | PlayPrompt
   | PlaybackStarted
@@ -138,6 +143,7 @@ component =
     , prompt: Quiz.makePrompt 0 defaultConfig
     , recognition: Detection.initialRecognition
     , revealedChoices: []
+    , resumeAnswersAfterPlayback: false
     , sampler: Nothing
     , screen: Setup
     }
@@ -157,6 +163,17 @@ component =
       , HH.div
           [ HP.class_ (H.ClassName "setup-content") ]
           [ settingGroup
+              "Quiz mode"
+              "Choose which parts of the exercise to practice."
+              [ choiceButton (state.config.quizMode == SingingOnly) (SelectQuizMode SingingOnly) "Singing only"
+              , choiceButton (state.config.quizMode == RecognitionOnly) (SelectQuizMode RecognitionOnly) "Recognition only"
+              , choiceButton
+                  (state.config.quizMode == SingingAndRecognition)
+                  (SelectQuizMode SingingAndRecognition)
+                  "Singing and recognition"
+              ]
+              Nothing
+          , settingGroup
               "Playback"
               "How the interval is played before the microphone begins listening."
               (map (modeButton state.config) allPlaybackModes)
@@ -213,33 +230,37 @@ component =
               , choiceButton (state.config.ghostMode == GhostPersist) (SelectGhostMode GhostPersist) "Kept visible"
               ]
               Nothing
-          , settingGroup
-              "Available answers"
-              "Choose how many interval choices are shown for each question."
-              [ choiceButton (state.config.answerCount == AFew) (SelectAnswerCount AFew) "A few"
-              , choiceButton
-                  (state.config.answerCount == AllSelected)
-                  (SelectAnswerCount AllSelected)
-                  "All selected choices"
-              ]
-              Nothing
-          , settingGroup
-              "Answer display"
-              "Choose how interval answers are presented."
-              [ choiceButton
-                  (state.config.answerDisplay == AnswerNotation)
-                  (SelectAnswerDisplay AnswerNotation)
-                  "Notation"
-              , choiceButton
-                  (state.config.answerDisplay == AnswerName)
-                  (SelectAnswerDisplay AnswerName)
-                  "Interval name"
-              , choiceButton
-                  (state.config.answerDisplay == AnswerBoth)
-                  (SelectAnswerDisplay AnswerBoth)
-                  "Both"
-              ]
-              Nothing
+          , if state.config.quizMode == SingingOnly then HH.text ""
+            else
+              settingGroup
+                "Available answers"
+                "Choose how many interval choices are shown for each question."
+                [ choiceButton (state.config.answerCount == AFew) (SelectAnswerCount AFew) "A few"
+                , choiceButton
+                    (state.config.answerCount == AllSelected)
+                    (SelectAnswerCount AllSelected)
+                    "All selected choices"
+                ]
+                Nothing
+          , if state.config.quizMode == SingingOnly then HH.text ""
+            else
+              settingGroup
+                "Answer display"
+                "Choose how interval answers are presented."
+                [ choiceButton
+                    (state.config.answerDisplay == AnswerNotation)
+                    (SelectAnswerDisplay AnswerNotation)
+                    "Notation"
+                , choiceButton
+                    (state.config.answerDisplay == AnswerName)
+                    (SelectAnswerDisplay AnswerName)
+                    "Interval name"
+                , choiceButton
+                    (state.config.answerDisplay == AnswerBoth)
+                    (SelectAnswerDisplay AnswerBoth)
+                    "Both"
+                ]
+                Nothing
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "setup-footer") ]
@@ -259,7 +280,7 @@ component =
       [ HH.div
           [ HP.class_ (H.ClassName "practice-toolbar") ]
           [ HH.div_
-              [ HH.h2_ [ HH.text (playbackModeName state.prompt.mode) ] ]
+              [ HH.h2_ [ HH.text (quizModeTitle state.config.quizMode) ] ]
           , HH.button
               [ HP.type_ HP.ButtonButton
               , HP.class_ (H.ClassName "text-button")
@@ -299,6 +320,7 @@ component =
       ]
 
   renderPitchMeter state
+    | state.config.quizMode == RecognitionOnly = HH.text ""
     | state.captureStatus == ChoosingAnswer || state.captureStatus == AnswerComplete = HH.text ""
     | otherwise =
         HH.div_
@@ -326,6 +348,7 @@ component =
           ]
 
   renderIntervalChoices state
+    | state.config.quizMode == SingingOnly = HH.text ""
     | state.captureStatus /= ChoosingAnswer && state.captureStatus /= AnswerComplete = HH.text ""
     | otherwise =
         HH.section
@@ -392,12 +415,10 @@ component =
 
   footerButtonDisabled state =
     state.captureStatus == PlayingAudio
-      || state.captureStatus == ChoosingAnswer
       || (state.captureStatus == Listening && state.recognition.phase == Detection.RecognitionComplete)
 
   footerButtonLabel state
     | state.captureStatus == PlayingAudio = "Playing…"
-    | state.captureStatus == ChoosingAnswer = "Next interval"
     | state.captureStatus == AnswerComplete = "Next interval"
     | state.captureStatus == Listening && state.recognition.phase == Detection.RecognitionComplete = "Next interval"
     | otherwise = "Play interval"
@@ -486,7 +507,10 @@ component =
 
   practiceInstruction state = case state.captureStatus of
     ReadyToPlay ->
-      "Listen to the interval, then sing."
+      if quizModeUsesSinging state.config.quizMode then
+        "Listen to the interval, then sing."
+      else
+        "Listen to the interval, then choose."
     PlayingAudio -> "Listen carefully."
     Listening -> Detection.phaseInstruction state.recognition.phase
     CaptureFailed message -> "Microphone unavailable: " <> message
@@ -512,6 +536,10 @@ component =
           "↑ " <> show (-cents) <> "¢"
 
   feedbackPosition cents = 50.0 + max (-50.0) (min 50.0 cents)
+
+  quizModeTitle SingingOnly = "Singing"
+  quizModeTitle RecognitionOnly = "Recognition"
+  quizModeTitle SingingAndRecognition = "Singing & Recognition"
 
   feedbackInRange feedback =
     feedback.clarity >= Detection.defaultRecognitionSettings.clarityThreshold
@@ -547,6 +575,8 @@ component =
       updateConfig (_ { answerCount = count })
     SelectAnswerDisplay display ->
       updateConfig (_ { answerDisplay = display })
+    SelectQuizMode mode ->
+      updateConfig (_ { quizMode = mode })
     BeginPractice -> do
       state <- H.get
       seed <- H.liftEffect (randomInt 0 2147483647)
@@ -565,6 +595,7 @@ component =
         , prompt = prompt
         , recognition = Detection.initialRecognition
         , revealedChoices = []
+        , resumeAnswersAfterPlayback = false
         , sampler = Just sampler
         , screen = Practice
         }
@@ -581,8 +612,10 @@ component =
             , ghostRevision = state.ghostRevision + 1
             , monitor = Nothing
             , recognition = Detection.initialRecognition
+            , resumeAnswersAfterPlayback = state.captureStatus == ChoosingAnswer
             }
-          renderPromptNotation state.prompt false
+          renderPromptNotation state.prompt
+            (state.captureStatus == ChoosingAnswer && quizModeUsesSinging state.config.quizMode)
           { emitter, listener } <- H.liftEffect HS.create
           void (H.subscribe emitter)
           H.liftEffect $ Audio.playInterval sampler state.prompt.mode state.prompt.root state.prompt.target
@@ -599,12 +632,16 @@ component =
     StartListening -> do
       state <- H.get
       when (state.screen == Practice && state.captureStatus == PlayingAudio) do
-        { emitter, listener } <- H.liftEffect HS.create
-        void (H.subscribe emitter)
-        monitor <- H.liftEffect $ Detection.start
-          (HS.notify listener <<< PitchDetected)
-          (HS.notify listener <<< MicrophoneFailed)
-        H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
+        if state.resumeAnswersAfterPlayback || not (quizModeUsesSinging state.config.quizMode) then do
+          H.modify_ _ { captureStatus = ChoosingAnswer, resumeAnswersAfterPlayback = false }
+          renderChoiceNotation state.prompt.root state.choices
+        else do
+          { emitter, listener } <- H.liftEffect HS.create
+          void (H.subscribe emitter)
+          monitor <- H.liftEffect $ Detection.start
+            (HS.notify listener <<< PitchDetected)
+            (HS.notify listener <<< MicrophoneFailed)
+          H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
     PitchDetected sample -> do
       state <- H.get
       when (state.captureStatus == Listening) do
@@ -682,12 +719,16 @@ component =
         )
         do
           let persistGhost = state.config.ghostMode == GhostPersist
-          H.modify_ _
-            { captureStatus = ChoosingAnswer
-            , ghostMidi = if persistGhost then state.ghostMidi else Nothing
-            }
-          unless persistGhost (renderPromptNotation state.prompt true)
-          renderChoiceNotation state.prompt.root state.choices
+          if not (quizModeUsesRecognition state.config.quizMode) then do
+            H.modify_ _ { captureStatus = AnswerComplete, ghostMidi = Nothing }
+            renderCompletedNotation state.prompt
+          else do
+            H.modify_ _
+              { captureStatus = ChoosingAnswer
+              , ghostMidi = if persistGhost then state.ghostMidi else Nothing
+              }
+            unless persistGhost (renderPromptNotation state.prompt true)
+            renderChoiceNotation state.prompt.root state.choices
     MicrophoneFailed message ->
       H.modify_ _ { captureStatus = CaptureFailed message, monitor = Nothing }
     ChooseInterval interval -> do
@@ -722,6 +763,7 @@ component =
         , prompt = prompt
         , recognition = Detection.initialRecognition
         , revealedChoices = []
+        , resumeAnswersAfterPlayback = false
         }
       renderPromptNotation prompt false
     EditSetup -> do
@@ -753,6 +795,13 @@ component =
       Nothing -> pure unit
       Just htmlElement ->
         H.liftEffect (Notation.renderPrompt (HTMLElement.toElement htmlElement) prompt.root prompt.target rootAccepted)
+
+  renderCompletedNotation prompt = do
+    maybeElement <- H.getHTMLElementRef notationRef
+    case maybeElement of
+      Nothing -> pure unit
+      Just htmlElement ->
+        H.liftEffect (Notation.renderCompleted (HTMLElement.toElement htmlElement) prompt.root prompt.target)
 
   renderGhostNotation prompt detected rootAccepted = do
     maybeElement <- H.getHTMLElementRef notationRef

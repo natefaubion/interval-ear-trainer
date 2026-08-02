@@ -5,7 +5,15 @@ import Prelude
 import Data.Array as Array
 import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..))
-import EarTrainer.Config (AnswerCount(..), defaultConfig, isValid, toggleInterval)
+import EarTrainer.Config
+  ( AnswerCount(..)
+  , QuizMode(..)
+  , defaultConfig
+  , isValid
+  , quizModeUsesRecognition
+  , quizModeUsesSinging
+  , toggleInterval
+  )
 import EarTrainer.Music
   ( Accidental(..)
   , Direction(..)
@@ -190,6 +198,17 @@ main = do
   assertEqual
     { actual: presetRange ExtraWide
     , expected: { low: pitch C (Accidental 0) 1, high: pitch C (Accidental 0) 7 }
+    }
+  assertEqual
+    { actual:
+        [ quizModeUsesSinging SingingOnly
+        , quizModeUsesRecognition SingingOnly
+        , quizModeUsesSinging RecognitionOnly
+        , quizModeUsesRecognition RecognitionOnly
+        , quizModeUsesSinging SingingAndRecognition
+        , quizModeUsesRecognition SingingAndRecognition
+        ]
+    , expected: [ true, false, false, true, true, true ]
     }
   assertEqual
     { actual: transpose Ascending MinorThird (pitch D (Accidental (-1)) 4)
