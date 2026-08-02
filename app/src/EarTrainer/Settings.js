@@ -26,9 +26,12 @@ export const loadImpl = (just) => (nothing) => () => {
           ...value,
           answerCount: typeof value.answerCount === "string" ? value.answerCount : "few",
           answerDisplay: typeof value.answerDisplay === "string" ? value.answerDisplay : "notation",
+          customLowMidi: Number.isInteger(value.customLowMidi) ? value.customLowMidi : 48,
+          customHighMidi: Number.isInteger(value.customHighMidi) ? value.customHighMidi : 79,
           ghostMode: typeof value.ghostMode === "string" ? value.ghostMode : "on",
+          showPitchTuner: typeof value.showPitchTuner === "boolean" ? value.showPitchTuner : true,
           quizMode: typeof value.quizMode === "string" ? value.quizMode : "singing-and-recognition",
-          quizProgression: typeof value.quizProgression === "string" ? value.quizProgression : "manual",
+          quizProgression: typeof value.quizProgression === "string" ? value.quizProgression : "automatic",
         })
       : nothing;
   } catch {

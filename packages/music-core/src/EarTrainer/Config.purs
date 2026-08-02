@@ -6,6 +6,7 @@ module EarTrainer.Config
   , QuizMode(..)
   , QuizProgression(..)
   , defaultConfig
+  , exerciseRange
   , isValid
   , quizModeUsesRecognition
   , quizModeUsesSinging
@@ -21,11 +22,16 @@ import EarTrainer.Music
   ( Interval
   , OctavePolicy(..)
   , PitchClass
-  , PlaybackMode
+  , PlaybackMode(..)
   , VocalRangePreset(..)
-  , allPlaybackModes
+  , VocalRange
   , defaultIntervals
   , defaultRootPitchClasses
+  , midiNumber
+  , pitch
+  , Letter(..)
+  , Accidental(..)
+  , presetRange
   )
 
 data GhostMode = GhostOff | GhostOn | GhostPersist
@@ -60,10 +66,12 @@ quizModeUsesRecognition _ = true
 type ExerciseConfig =
   { answerCount :: AnswerCount
   , answerDisplay :: AnswerDisplay
+  , customRange :: VocalRange
   , ghostMode :: GhostMode
   , intervals :: Array Interval
   , octavePolicy :: OctavePolicy
   , playbackModes :: Array PlaybackMode
+  , showPitchTuner :: Boolean
   , quizMode :: QuizMode
   , quizProgression :: QuizProgression
   , rootPitchClasses :: Array PitchClass
@@ -74,12 +82,14 @@ defaultConfig :: ExerciseConfig
 defaultConfig =
   { answerCount: AFew
   , answerDisplay: AnswerNotation
+  , customRange: { low: pitch C (Accidental 0) 3, high: pitch G (Accidental 0) 5 }
   , ghostMode: GhostOn
   , intervals: defaultIntervals
   , octavePolicy: AnyOctave
-  , playbackModes: allPlaybackModes
+  , playbackModes: [ MelodicAscending ]
+  , showPitchTuner: true
   , quizMode: SingingAndRecognition
-  , quizProgression: ManualProgression
+  , quizProgression: AutomaticProgression
   , rootPitchClasses: defaultRootPitchClasses
   , vocalRange: Tenor
   }
@@ -101,5 +111,17 @@ toggleRootPitchClass pitchClass config = config { rootPitchClasses = toggleMembe
 isValid :: ExerciseConfig -> Boolean
 isValid config =
   not (Array.null config.intervals)
-    && (config.quizMode == Audiation || not (Array.null config.playbackModes))
+    && not
+      ( Array.null
+          ( if config.quizMode == Audiation then
+              Array.filter (_ /= Harmonic) config.playbackModes
+            else config.playbackModes
+          )
+      )
     && not (Array.null config.rootPitchClasses)
+    && midiNumber (exerciseRange config).low <= midiNumber (exerciseRange config).high
+
+exerciseRange :: ExerciseConfig -> VocalRange
+exerciseRange config =
+  if config.vocalRange == Custom then config.customRange
+  else presetRange config.vocalRange

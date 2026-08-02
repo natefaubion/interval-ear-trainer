@@ -25,6 +25,7 @@ import EarTrainer.Music
   , PitchClass(..)
   , VocalRangePreset(..)
   , allRootPitchClasses
+  , allMajorKeyPresets
   , midiNumber
   , pitch
   , pitchFromMidiLike
@@ -52,7 +53,9 @@ main = do
     c4Sample = { frequency: 261.625565, clarity: 0.98 }
     c3Sample = { frequency: 130.812783, clarity: 0.98 }
     c5Sample = { frequency: 523.251131, clarity: 0.98 }
+    c4SharpFortyCentsSample = { frequency: 267.744, clarity: 0.98 }
     e4Sample = { frequency: 329.627557, clarity: 0.98 }
+    e4SharpFortyCentsSample = { frequency: 337.337, clarity: 0.98 }
     b2Sample = { frequency: 123.470825, clarity: 0.98 }
     b3Sample = { frequency: 246.941651, clarity: 0.98 }
     silence = { frequency: 0.0, clarity: 0.0 }
@@ -69,6 +72,16 @@ main = do
       (Array.replicate stableSamples unit)
     afterRelease = foldl (\recognition _ -> step silence recognition) afterFirst (Array.replicate 5 unit)
     afterSecond = foldl (\recognition _ -> step e4Sample recognition) afterRelease (Array.replicate stableSamples unit)
+    wrongFirst = foldl (\recognition _ -> step e4Sample recognition) initialRecognition (Array.replicate stableSamples unit)
+    wrongSecond = foldl (\recognition _ -> step b3Sample recognition) afterRelease (Array.replicate stableSamples unit)
+    detunedFirst = foldl
+      (\recognition _ -> step c4SharpFortyCentsSample recognition)
+      initialRecognition
+      (Array.replicate stableSamples unit)
+    detunedSecond = foldl
+      (\recognition _ -> step e4SharpFortyCentsSample recognition)
+      afterRelease
+      (Array.replicate stableSamples unit)
     anyOctaveFirst = foldl (\recognition _ -> step c5Sample recognition) initialRecognition (Array.replicate stableSamples unit)
     octaveBelowFirst = foldl (\recognition _ -> step c3Sample recognition) initialRecognition (Array.replicate stableSamples unit)
     majorSeventhStep sample recognition =
@@ -103,6 +116,7 @@ main = do
     generatedRange = presetRange descendingConfig.vocalRange
     audiationConfig = descendingConfig { quizMode = Audiation }
     audiationPrompt = makePrompt 128 audiationConfig
+    ascendingAudiationPrompt = makePrompt 128 (defaultConfig { quizMode = Audiation, playbackModes = [ MelodicAscending ] })
   assertEqual
     { actual: nearestMidi 440.0
     , expected: 69
@@ -124,12 +138,20 @@ main = do
     , expected: RecognitionComplete
     }
   assertEqual
+    { actual: [ wrongFirst.phase, wrongSecond.phase ]
+    , expected: [ RecognitionIncorrect, RecognitionIncorrect ]
+    }
+  assertEqual
+    { actual: [ detunedFirst.phase, detunedSecond.phase ]
+    , expected: [ WaitingForFirst, WaitingForSecond ]
+    }
+  assertEqual
     { actual: anyOctaveFirst.phase
     , expected: WaitingForRelease
     }
   assertEqual
     { actual: writtenOctaveFirst.phase
-    , expected: WaitingForFirst
+    , expected: RecognitionIncorrect
     }
   assertEqual
     { actual: relativeMidi AnyOctave c4 octaveBelowFirst 57
@@ -141,7 +163,7 @@ main = do
     }
   assertEqual
     { actual: wrongOctaveSecond.phase
-    , expected: WaitingForSecond
+    , expected: RecognitionIncorrect
     }
   assertEqual
     { actual: correctNormalizedSecond.phase
@@ -199,6 +221,16 @@ main = do
     , expected: true
     }
   assertEqual
+    { actual:
+        [ Array.elem (PitchClass C (Accidental (-1))) allRootPitchClasses
+        , Array.elem (PitchClass F (Accidental (-1))) allRootPitchClasses
+        , Array.elem (PitchClass E (Accidental 1)) allRootPitchClasses
+        , Array.elem (PitchClass B (Accidental 1)) allRootPitchClasses
+        , Array.length allMajorKeyPresets == 15
+        ]
+    , expected: [ true, true, true, true, true ]
+    }
+  assertEqual
     { actual: presetRange ExtraWide
     , expected: { low: pitch C (Accidental 0) 1, high: pitch C (Accidental 0) 7 }
     }
@@ -216,12 +248,16 @@ main = do
     , expected: [ true, false, false, true, true, true, true, false ]
     }
   assertEqual
-    { actual: defaultConfig.quizProgression == ManualProgression
+    { actual: defaultConfig.quizProgression == AutomaticProgression
     , expected: true
     }
   assertEqual
-    { actual: midiNumber audiationPrompt.target > midiNumber audiationPrompt.root
-    , expected: true
+    { actual:
+        [ midiNumber audiationPrompt.target < midiNumber audiationPrompt.root
+        , midiNumber ascendingAudiationPrompt.target > midiNumber ascendingAudiationPrompt.root
+        , isValid (defaultConfig { quizMode = Audiation, playbackModes = [ Harmonic ] })
+        ]
+    , expected: [ true, true, false ]
     }
   assertEqual
     { actual: transpose Ascending MinorThird (pitch D (Accidental (-1)) 4)
@@ -250,4 +286,12 @@ main = do
   assertEqual
     { actual: transition AwaitingRearticulation VoiceReleased
     , expected: Just SingingSecondNote
+    }
+  assertEqual
+    { actual:
+        [ transition SingingFirstNote PitchRejected
+        , transition SingingSecondNote PitchRejected
+        , transition IntervalError Continue
+        ]
+    , expected: [ Just IntervalError, Just IntervalError, Just PlayingInterval ]
     }

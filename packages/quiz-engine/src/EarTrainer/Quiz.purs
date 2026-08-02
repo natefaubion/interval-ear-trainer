@@ -13,7 +13,7 @@ import Prelude
 import Data.Array as Array
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Ord (abs)
-import EarTrainer.Config (AnswerCount(..), ExerciseConfig, QuizMode(..))
+import EarTrainer.Config (AnswerCount(..), ExerciseConfig, QuizMode(..), exerciseRange)
 import EarTrainer.Music
   ( Accidental(..)
   , Direction(..)
@@ -23,7 +23,6 @@ import EarTrainer.Music
   , PitchClass(..)
   , PlaybackMode(..)
   , midiNumber
-  , presetRange
   , transpose
   )
 
@@ -51,9 +50,12 @@ makePrompt :: Int -> ExerciseConfig -> Prompt
 makePrompt seed config =
   let
     interval = pick MinorThird seed config.intervals
-    mode = pick MelodicAscending (seed `div` 7) config.playbackModes
-    direction = if config.quizMode == Audiation then Ascending else directionFor mode
-    range = presetRange config.vocalRange
+    availableModes =
+      if config.quizMode == Audiation then Array.filter (_ /= Harmonic) config.playbackModes
+      else config.playbackModes
+    mode = pick MelodicAscending (seed `div` 7) availableModes
+    direction = directionFor mode
+    range = exerciseRange config
     Pitch _ lowOctave = range.low
     Pitch _ highOctave = range.high
     roots = do
@@ -105,6 +107,7 @@ data Phase
   | SingingFirstNote
   | AwaitingRearticulation
   | SingingSecondNote
+  | IntervalError
   | ChoosingNotation
   | RevealingAnswer
 
@@ -118,6 +121,7 @@ instance Show Phase where
   show SingingFirstNote = "SingingFirstNote"
   show AwaitingRearticulation = "AwaitingRearticulation"
   show SingingSecondNote = "SingingSecondNote"
+  show IntervalError = "IntervalError"
   show ChoosingNotation = "ChoosingNotation"
   show RevealingAnswer = "RevealingAnswer"
 
@@ -129,6 +133,7 @@ data Event
   | FirstPitchAccepted
   | VoiceReleased
   | SecondPitchAccepted
+  | PitchRejected
   | ChoiceSubmitted Boolean
   | Continue
 
@@ -138,8 +143,11 @@ transition ShowingPrompt PromptReady = Just PlayingInterval
 transition PlayingInterval PlaybackFinished = Just WaitingForSilence
 transition WaitingForSilence RoomIsQuiet = Just SingingFirstNote
 transition SingingFirstNote FirstPitchAccepted = Just AwaitingRearticulation
+transition SingingFirstNote PitchRejected = Just IntervalError
 transition AwaitingRearticulation VoiceReleased = Just SingingSecondNote
 transition SingingSecondNote SecondPitchAccepted = Just ChoosingNotation
+transition SingingSecondNote PitchRejected = Just IntervalError
+transition IntervalError Continue = Just PlayingInterval
 transition ChoosingNotation (ChoiceSubmitted _) = Just RevealingAnswer
 transition RevealingAnswer Continue = Just ShowingPrompt
 transition _ _ = Nothing

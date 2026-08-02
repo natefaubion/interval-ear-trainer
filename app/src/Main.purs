@@ -5,7 +5,7 @@ import Prelude
 import Data.Array as Array
 import Data.Foldable (for_)
 import Data.Int as Int
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe, isNothing)
 import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
 import EarTrainer.Config
@@ -29,15 +29,18 @@ import EarTrainer.Music
   , OctavePolicy(..)
   , Pitch(..)
   , PitchClass(..)
-  , PlaybackMode
-  , VocalRangePreset
+  , PlaybackMode(..)
+  , VocalRangePreset(..)
   , allIntervals
+  , allMajorKeyPresets
   , allPlaybackModes
   , allRootPitchClasses
   , allVocalRangePresets
   , intervalName
+  , midiNumber
   , pitchClassName
   , pitchFromMidiLike
+  , pitchFromMidi
   , pitchName
   , playbackModeName
   , presetName
@@ -58,6 +61,8 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Subscription as HS
 import Halogen.VDom.Driver (runUI)
+import Type.Proxy (Proxy(..))
+import Web.DOM.Element as Element
 import Web.HTML.HTMLElement as HTMLElement
 
 data Screen = Setup | Practice
@@ -70,6 +75,7 @@ data CaptureStatus
   | Listening
   | CaptureFailed String
   | PlaybackFailed String
+  | IntervalError
   | ChoosingAnswer
   | AnswerComplete
 
@@ -77,6 +83,7 @@ derive instance Eq CaptureStatus
 
 type State =
   { answerCorrect :: Boolean
+  , activityRevision :: Int
   , automaticAdvancePending :: Boolean
   , captureStatus :: CaptureStatus
   , choices :: Array Quiz.IntervalChoice
@@ -95,6 +102,7 @@ type State =
 
 data Action
   = Initialize
+  | Finalize
   | ToggleInterval Interval
   | SelectAllIntervals
   | ClearIntervals
@@ -105,61 +113,564 @@ data Action
   | SelectRange VocalRangePreset
   | SelectOctavePolicy OctavePolicy
   | SelectGhostMode GhostMode
+  | SelectPitchTuner Boolean
   | SelectAnswerCount AnswerCount
   | SelectAnswerDisplay AnswerDisplay
   | SelectQuizMode QuizMode
   | SelectQuizProgression QuizProgression
   | BeginPractice
   | PlayPrompt
-  | PlaybackStarted
-  | AudioFailed String
-  | StartListening
-  | PitchDetected Detection.PitchSample
+  | PlaybackStarted Int
+  | AudioFailed Int String
+  | StartListening Int
+  | PitchDetected Int Detection.PitchSample
   | ClearGhost Int
   | FinishSinging Int
-  | MicrophoneFailed String
+  | MicrophoneFailed Int String
   | ChooseInterval Interval
   | NextPrompt
   | AdvanceAutomatically Int
+  | RetryAutomatically Int
   | EditSetup
 
 notationRef :: H.RefLabel
 notationRef = H.RefLabel "prompt-notation"
 
+practiceContentRef :: H.RefLabel
+practiceContentRef = H.RefLabel "practice-content"
+
 choiceNotationRef :: Int -> H.RefLabel
 choiceNotationRef index = H.RefLabel ("choice-notation-" <> show index)
 
-component :: forall query input output m. MonadAff m => H.Component query input output m
-component =
+type PracticeInput =
+  { config :: ExerciseConfig
+  , sampler :: Audio.Sampler
+  , seed :: Int
+  }
+
+data PracticeOutput = BackToSetup
+
+data PracticeQuery :: Type -> Type
+data PracticeQuery a
+
+data SetupOutput
+  = SetupConfigChanged ExerciseConfig
+  | SetupBeginRequested
+
+data SetupQuery :: Type -> Type
+data SetupQuery a
+
+type RootState =
+  { config :: ExerciseConfig
+  , practice :: Maybe PracticeInput
+  , sampler :: Maybe Audio.Sampler
+  }
+
+data RootAction
+  = RootInitialize
+  | RootToggleInterval Interval
+  | RootSelectAllIntervals
+  | RootClearIntervals
+  | RootTogglePlaybackMode PlaybackMode
+  | RootToggleRoot PitchClass
+  | RootSelectMajorKey String
+  | RootSelectAllRoots
+  | RootClearRoots
+  | RootSelectRange VocalRangePreset
+  | RootSelectCustomLowClass Int
+  | RootSelectCustomLowOctave Int
+  | RootSelectCustomHighClass Int
+  | RootSelectCustomHighOctave Int
+  | RootSelectOctavePolicy OctavePolicy
+  | RootSelectGhostMode GhostMode
+  | RootSelectPitchTuner Boolean
+  | RootSelectAnswerCount AnswerCount
+  | RootSelectAnswerDisplay AnswerDisplay
+  | RootSelectQuizMode QuizMode
+  | RootSelectQuizProgression QuizProgression
+  | RootResetDefaults
+  | RootBeginPractice
+  | RootPracticeOutput PracticeOutput
+  | RootSetupOutput SetupOutput
+  | RootReceiveSetup RootState
+
+type RootSlots =
+  ( practice :: H.Slot PracticeQuery PracticeOutput Unit
+  , setup :: H.Slot SetupQuery SetupOutput Unit
+  )
+
+practiceSlot :: Proxy "practice"
+practiceSlot = Proxy
+
+setupSlot :: Proxy "setup"
+setupSlot = Proxy
+
+rootComponent :: forall query input output m. MonadAff m => H.Component query input output m
+rootComponent =
   H.mkComponent
-    { initialState: const initialState
-    , render
-    , eval: H.mkEval H.defaultEval { handleAction = handleAction, initialize = Just Initialize }
+    { initialState: const { config: defaultConfig, practice: Nothing, sampler: Nothing }
+    , render: renderRoot
+    , eval: H.mkEval H.defaultEval { handleAction = handleRootAction, initialize = Just RootInitialize }
     }
   where
-  initialState =
-    { answerCorrect: false
-    , automaticAdvancePending: false
-    , captureStatus: ReadyToPlay
-    , choices: Quiz.makeChoices 0 defaultConfig (Quiz.makePrompt 0 defaultConfig)
-    , config: defaultConfig
-    , ghostMidi: Nothing
-    , ghostRevision: 0
-    , monitor: Nothing
-    , prompt: Quiz.makePrompt 0 defaultConfig
-    , promptRevision: 0
-    , recognition: Detection.initialRecognition
-    , revealedChoices: []
-    , resumeAnswersAfterPlayback: false
-    , sampler: Nothing
-    , screen: Setup
+  renderRoot :: RootState -> H.ComponentHTML RootAction RootSlots m
+  renderRoot state =
+    HH.main
+      [ HP.class_ (H.ClassName "app-shell") ]
+      [ case state.practice of
+          Just input -> HH.slot practiceSlot unit component input RootPracticeOutput
+          Nothing -> HH.slot setupSlot unit setupComponent state RootSetupOutput
+      ]
+
+  setupComponent :: H.Component SetupQuery RootState SetupOutput m
+  setupComponent =
+    H.mkComponent
+      { initialState: identity
+      , render: renderRootSetup
+      , eval:
+          H.mkEval H.defaultEval
+            { handleAction = handleSetupAction
+            , receive = Just <<< RootReceiveSetup
+            }
+      }
+
+  renderRootSetup state =
+    HH.section
+      [ HP.class_ (H.ClassName "setup-card") ]
+      [ HH.div
+          [ HP.class_ (H.ClassName "setup-heading") ]
+          [ HH.h2_ [ HH.text "Exercise setup" ] ]
+      , HH.div
+          [ HP.class_ (H.ClassName "setup-content") ]
+          [ rootSettingGroup
+              "Quiz mode"
+              "Choose which parts of the exercise to practice."
+              [ rootChoiceButton
+                  (state.config.quizMode == SingingAndRecognition)
+                  (RootSelectQuizMode SingingAndRecognition)
+                  "Singing and recognition"
+              , rootChoiceButton (state.config.quizMode == SingingOnly) (RootSelectQuizMode SingingOnly) "Singing only"
+              , rootChoiceButton (state.config.quizMode == RecognitionOnly) (RootSelectQuizMode RecognitionOnly) "Recognition only"
+              , rootChoiceButton (state.config.quizMode == Audiation) (RootSelectQuizMode Audiation) "Audiation"
+              ]
+              Nothing
+          , rootSettingGroup
+              "Quiz progression"
+              "Choose how the next interval begins after a correct answer."
+              [ rootChoiceButton
+                  (state.config.quizProgression == AutomaticProgression)
+                  (RootSelectQuizProgression AutomaticProgression)
+                  "Automatic"
+              , rootChoiceButton
+                  (state.config.quizProgression == ManualProgression)
+                  (RootSelectQuizProgression ManualProgression)
+                  "Manual"
+              ]
+              Nothing
+          , let
+              availableOrientations =
+                if state.config.quizMode == Audiation then
+                  Array.filter (_ /= Harmonic) allPlaybackModes
+                else allPlaybackModes
+              selectedOrientations = Array.filter (flip Array.elem state.config.playbackModes) availableOrientations
+            in
+              rootSettingGroup
+                "Interval orientation"
+                "Choose the directions or forms intervals may take."
+                (map (rootModeButton state.config) availableOrientations)
+                (if Array.null selectedOrientations then Just "Select at least one interval orientation." else Nothing)
+          , rootSettingGroup
+              "Intervals"
+              "Choose the intervals that may appear in an exercise."
+              ( map (rootIntervalButton state.config) allIntervals
+                  <>
+                    [ rootSelectionActions
+                        RootSelectAllIntervals
+                        RootClearIntervals
+                        (Array.length state.config.intervals == Array.length allIntervals)
+                        (Array.null state.config.intervals)
+                    ]
+              )
+              (if Array.null state.config.intervals then Just "Select at least one interval." else Nothing)
+          , rootSettingGroup
+              "Singing range"
+              "Choose the written and playback register."
+              ( map (rootRangeButton state.config) allVocalRangePresets
+                  <> if state.config.vocalRange == Custom then [ rootCustomRangeControls state.config ] else []
+              )
+              ( if
+                  state.config.vocalRange == Custom
+                    && midiNumber state.config.customRange.low > midiNumber state.config.customRange.high then
+                  Just "The lowest note must not be above the highest note."
+                else Nothing
+              )
+          , rootSettingGroup
+              "Root notes"
+              "Choose individual root notes, or replace them with the notes of a major key."
+              ( [ rootMajorKeySelector state.config ]
+                  <> map (rootRootButton state.config) allRootPitchClasses
+                  <>
+                    [ rootSelectionActions
+                        RootSelectAllRoots
+                        RootClearRoots
+                        (Array.length state.config.rootPitchClasses == Array.length allRootPitchClasses)
+                        (Array.null state.config.rootPitchClasses)
+                    ]
+              )
+              (if Array.null state.config.rootPitchClasses then Just "Select at least one root note." else Nothing)
+          , rootSettingGroup
+              "Octave matching"
+              "Choose whether the first sung note must match the written register. The second note must always form the written interval from it."
+              [ rootChoiceButton
+                  (state.config.octavePolicy == AnyOctave)
+                  (RootSelectOctavePolicy AnyOctave)
+                  "Any octave"
+              , rootChoiceButton
+                  (state.config.octavePolicy == WrittenOctave)
+                  (RootSelectOctavePolicy WrittenOctave)
+                  "Written octave"
+              ]
+              Nothing
+          , rootSettingGroup
+              "Sung pitch on staff"
+              "Choose how the pitch you are currently singing appears on the staff."
+              [ rootChoiceButton (state.config.ghostMode == GhostOn) (RootSelectGhostMode GhostOn) "Show briefly"
+              , rootChoiceButton
+                  (state.config.ghostMode == GhostPersist)
+                  (RootSelectGhostMode GhostPersist)
+                  "Keep visible"
+              , rootChoiceButton (state.config.ghostMode == GhostOff) (RootSelectGhostMode GhostOff) "Hidden"
+              ]
+              Nothing
+          , rootSettingGroup
+              "Pitch tuner"
+              "Choose whether to show cents feedback while singing."
+              [ rootChoiceButton state.config.showPitchTuner (RootSelectPitchTuner true) "Shown"
+              , rootChoiceButton (not state.config.showPitchTuner) (RootSelectPitchTuner false) "Hidden"
+              ]
+              Nothing
+          , if quizModeUsesRecognition state.config.quizMode then
+              rootSettingGroup
+                "Number of available answers"
+                "Choose how many interval choices are shown."
+                [ rootChoiceButton (state.config.answerCount == AFew) (RootSelectAnswerCount AFew) "A few"
+                , rootChoiceButton
+                    (state.config.answerCount == AllSelected)
+                    (RootSelectAnswerCount AllSelected)
+                    "All selected choices"
+                ]
+                Nothing
+            else HH.text ""
+          , if quizModeUsesRecognition state.config.quizMode then
+              rootSettingGroup
+                "Answer display"
+                "Choose how interval choices are presented."
+                [ rootChoiceButton
+                    (state.config.answerDisplay == AnswerNotation)
+                    (RootSelectAnswerDisplay AnswerNotation)
+                    "Notation"
+                , rootChoiceButton
+                    (state.config.answerDisplay == AnswerName)
+                    (RootSelectAnswerDisplay AnswerName)
+                    "Interval name"
+                , rootChoiceButton
+                    (state.config.answerDisplay == AnswerBoth)
+                    (RootSelectAnswerDisplay AnswerBoth)
+                    "Both"
+                ]
+                Nothing
+            else HH.text ""
+          ]
+      , HH.footer
+          [ HP.class_ (H.ClassName "setup-footer") ]
+          [ HH.button
+              [ HP.type_ HP.ButtonButton
+              , HP.class_ (H.ClassName "secondary-button")
+              , HP.disabled (state.config == defaultConfig)
+              , HE.onClick \_ -> RootResetDefaults
+              ]
+              [ HH.text "Reset to defaults" ]
+          , HH.button
+              [ HP.type_ HP.ButtonButton
+              , HP.class_ (H.ClassName "primary-button")
+              , HP.disabled (not (isValid state.config) || isNothing state.sampler)
+              , HE.onClick \_ -> RootBeginPractice
+              ]
+              [ HH.text "Begin practice" ]
+          ]
+      ]
+
+  rootSettingGroup title description controls validation =
+    HH.fieldset
+      [ HP.class_ (H.ClassName "setting-group") ]
+      [ HH.legend_ [ HH.text title ]
+      , HH.p [ HP.class_ (H.ClassName "setting-description") ] [ HH.text description ]
+      , HH.div [ HP.class_ (H.ClassName "choice-grid") ] controls
+      , case validation of
+          Nothing -> HH.text ""
+          Just message -> HH.p [ HP.class_ (H.ClassName "setting-error") ] [ HH.text message ]
+      ]
+
+  rootChoiceButton selected action label =
+    HH.button
+      [ HP.type_ HP.ButtonButton
+      , HP.classes
+          if selected then [ H.ClassName "choice-chip", H.ClassName "selected" ]
+          else [ H.ClassName "choice-chip" ]
+      , HE.onClick \_ -> action
+      ]
+      [ HH.text label ]
+
+  rootSelectionActions selectAction clearAction selectDisabled clearDisabled =
+    HH.div
+      [ HP.class_ (H.ClassName "selection-actions") ]
+      [ HH.button
+          [ HP.type_ HP.ButtonButton
+          , HP.class_ (H.ClassName "small-text-button")
+          , HP.disabled selectDisabled
+          , HE.onClick \_ -> selectAction
+          ]
+          [ HH.text "Select All" ]
+      , HH.button
+          [ HP.type_ HP.ButtonButton
+          , HP.class_ (H.ClassName "small-text-button")
+          , HP.disabled clearDisabled
+          , HE.onClick \_ -> clearAction
+          ]
+          [ HH.text "Clear" ]
+      ]
+
+  rootModeButton config mode =
+    rootChoiceButton (Array.elem mode config.playbackModes) (RootTogglePlaybackMode mode) (playbackModeName mode)
+
+  rootIntervalButton config interval =
+    rootChoiceButton (Array.elem interval config.intervals) (RootToggleInterval interval) (intervalName interval)
+
+  rootRootButton config root =
+    rootChoiceButton (Array.elem root config.rootPitchClasses) (RootToggleRoot root) (pitchClassName root)
+
+  rootMajorKeySelector config =
+    HH.label
+      [ HP.class_ (H.ClassName "major-key-preset") ]
+      [ HH.span_ [ HH.text "Major-key preset" ]
+      , HH.select
+          [ HP.value (selectedMajorKeyId config.rootPitchClasses)
+          , HE.onValueChange RootSelectMajorKey
+          ]
+          ( [ HH.option [ HP.value "custom" ] [ HH.text "Custom" ] ]
+              <> map rootMajorKeyOption allMajorKeyPresets
+          )
+      ]
+
+  rootMajorKeyOption preset =
+    HH.option [ HP.value preset.id ] [ HH.text preset.name ]
+
+  selectedMajorKeyId roots = case Array.find (\preset -> samePitchClasses preset.roots roots) allMajorKeyPresets of
+    Just preset -> preset.id
+    Nothing -> "custom"
+
+  samePitchClasses left right =
+    Array.length left == Array.length right && Array.all (flip Array.elem right) left
+
+  rootRangeButton config preset =
+    let
+      label = case preset of
+        Custom -> "Custom"
+        _ ->
+          let
+            range = presetRange preset
+          in
+            presetName preset <> " · " <> pitchName range.low <> "–" <> pitchName range.high
+    in
+      rootChoiceButton (config.vocalRange == preset) (RootSelectRange preset) label
+
+  rootCustomRangeControls config =
+    HH.div
+      [ HP.class_ (H.ClassName "custom-range") ]
+      [ rootPitchBoundary "Lowest note" config.customRange.low RootSelectCustomLowClass RootSelectCustomLowOctave
+      , rootPitchBoundary "Highest note" config.customRange.high RootSelectCustomHighClass RootSelectCustomHighOctave
+      ]
+
+  rootPitchBoundary label current selectClass selectOctave =
+    let
+      currentMidi = midiNumber current
+      currentClass = currentMidi `mod` 12
+      currentOctave = currentMidi `div` 12 - 1
+    in
+      HH.label
+        [ HP.class_ (H.ClassName "custom-range-boundary") ]
+        [ HH.span_ [ HH.text label ]
+        , HH.div
+            [ HP.class_ (H.ClassName "custom-range-selects") ]
+            [ HH.select
+                [ HP.value (show currentClass)
+                , HE.onValueChange (selectClass <<< fromMaybe currentClass <<< Int.fromString)
+                ]
+                (Array.mapWithIndex (rootPitchClassOption currentClass) customPitchClassLabels)
+            , HH.select
+                [ HP.value (show currentOctave)
+                , HE.onValueChange (selectOctave <<< fromMaybe currentOctave <<< Int.fromString)
+                ]
+                (map (rootOctaveOption currentOctave) (Array.range 1 7))
+            ]
+        ]
+
+  rootPitchClassOption selected index label =
+    HH.option
+      [ HP.value (show index), HP.selected (index == selected) ]
+      [ HH.text label ]
+
+  rootOctaveOption selected octave =
+    HH.option
+      [ HP.value (show octave), HP.selected (octave == selected) ]
+      [ HH.text (show octave) ]
+
+  customPitchClassLabels = [ "C", "C♯ / D♭", "D", "D♯ / E♭", "E", "F", "F♯ / G♭", "G", "G♯ / A♭", "A", "A♯ / B♭", "B" ]
+
+  handleRootAction = case _ of
+    RootInitialize -> do
+      config <- H.liftEffect Settings.load
+      sampler <- H.liftEffect Audio.createSampler
+      H.modify_ _ { config = config, sampler = Just sampler }
+    RootToggleInterval interval -> rootUpdateConfig (toggleInterval interval)
+    RootSelectAllIntervals -> rootUpdateConfig (_ { intervals = allIntervals })
+    RootClearIntervals -> rootUpdateConfig (_ { intervals = [] })
+    RootTogglePlaybackMode mode -> rootUpdateConfig (togglePlaybackMode mode)
+    RootToggleRoot root -> rootUpdateConfig (toggleRootPitchClass root)
+    RootSelectMajorKey presetId -> rootUpdateConfig (selectMajorKey presetId)
+    RootSelectAllRoots -> rootUpdateConfig (_ { rootPitchClasses = allRootPitchClasses })
+    RootClearRoots -> rootUpdateConfig (_ { rootPitchClasses = [] })
+    RootSelectRange preset -> rootUpdateConfig (_ { vocalRange = preset })
+    RootSelectCustomLowClass pitchClass -> rootUpdateConfig (setCustomLowClass pitchClass)
+    RootSelectCustomLowOctave octave -> rootUpdateConfig (setCustomLowOctave octave)
+    RootSelectCustomHighClass pitchClass -> rootUpdateConfig (setCustomHighClass pitchClass)
+    RootSelectCustomHighOctave octave -> rootUpdateConfig (setCustomHighOctave octave)
+    RootSelectOctavePolicy policy -> rootUpdateConfig (_ { octavePolicy = policy })
+    RootSelectGhostMode mode -> rootUpdateConfig (_ { ghostMode = mode })
+    RootSelectPitchTuner shown -> rootUpdateConfig (_ { showPitchTuner = shown })
+    RootSelectAnswerCount count -> rootUpdateConfig (_ { answerCount = count })
+    RootSelectAnswerDisplay display -> rootUpdateConfig (_ { answerDisplay = display })
+    RootSelectQuizMode mode -> rootUpdateConfig (_ { quizMode = mode })
+    RootSelectQuizProgression progression -> rootUpdateConfig (_ { quizProgression = progression })
+    RootResetDefaults -> rootUpdateConfig (const defaultConfig)
+    RootBeginPractice -> do
+      state <- H.get
+      case state.sampler of
+        Nothing -> pure unit
+        Just sampler -> do
+          seed <- H.liftEffect (randomInt 0 2147483647)
+          H.modify_ _ { practice = Just { config: state.config, sampler, seed } }
+    RootPracticeOutput BackToSetup -> H.modify_ _ { practice = Nothing }
+    RootSetupOutput (SetupConfigChanged config) -> do
+      H.modify_ _ { config = config }
+      H.liftEffect (Settings.save config)
+    RootSetupOutput SetupBeginRequested -> handleRootAction RootBeginPractice
+    RootReceiveSetup _ -> pure unit
+
+  handleSetupAction = case _ of
+    RootToggleInterval interval -> setupUpdateConfig (toggleInterval interval)
+    RootSelectAllIntervals -> setupUpdateConfig (_ { intervals = allIntervals })
+    RootClearIntervals -> setupUpdateConfig (_ { intervals = [] })
+    RootTogglePlaybackMode mode -> setupUpdateConfig (togglePlaybackMode mode)
+    RootToggleRoot root -> setupUpdateConfig (toggleRootPitchClass root)
+    RootSelectMajorKey presetId -> setupUpdateConfig (selectMajorKey presetId)
+    RootSelectAllRoots -> setupUpdateConfig (_ { rootPitchClasses = allRootPitchClasses })
+    RootClearRoots -> setupUpdateConfig (_ { rootPitchClasses = [] })
+    RootSelectRange preset -> setupUpdateConfig (_ { vocalRange = preset })
+    RootSelectCustomLowClass pitchClass -> setupUpdateConfig (setCustomLowClass pitchClass)
+    RootSelectCustomLowOctave octave -> setupUpdateConfig (setCustomLowOctave octave)
+    RootSelectCustomHighClass pitchClass -> setupUpdateConfig (setCustomHighClass pitchClass)
+    RootSelectCustomHighOctave octave -> setupUpdateConfig (setCustomHighOctave octave)
+    RootSelectOctavePolicy policy -> setupUpdateConfig (_ { octavePolicy = policy })
+    RootSelectGhostMode mode -> setupUpdateConfig (_ { ghostMode = mode })
+    RootSelectPitchTuner shown -> setupUpdateConfig (_ { showPitchTuner = shown })
+    RootSelectAnswerCount count -> setupUpdateConfig (_ { answerCount = count })
+    RootSelectAnswerDisplay display -> setupUpdateConfig (_ { answerDisplay = display })
+    RootSelectQuizMode mode -> setupUpdateConfig (_ { quizMode = mode })
+    RootSelectQuizProgression progression -> setupUpdateConfig (_ { quizProgression = progression })
+    RootResetDefaults -> setupUpdateConfig (const defaultConfig)
+    RootBeginPractice -> H.raise SetupBeginRequested
+    RootReceiveSetup input -> H.put input
+    RootInitialize -> pure unit
+    RootPracticeOutput _ -> pure unit
+    RootSetupOutput _ -> pure unit
+
+  setupUpdateConfig update = do
+    H.modify_ \state -> state { config = update state.config }
+    state <- H.get
+    H.raise (SetupConfigChanged state.config)
+
+  rootUpdateConfig update = do
+    H.modify_ \state -> state { config = update state.config }
+    state <- H.get
+    H.liftEffect (Settings.save state.config)
+
+  setCustomLowClass pitchClass config =
+    let
+      octave = midiNumber config.customRange.low `div` 12 - 1
+    in
+      config { customRange = config.customRange { low = pitchFromMidi (12 * (octave + 1) + pitchClass) } }
+
+  setCustomLowOctave octave config =
+    let
+      pitchClass = midiNumber config.customRange.low `mod` 12
+    in
+      config { customRange = config.customRange { low = pitchFromMidi (12 * (octave + 1) + pitchClass) } }
+
+  setCustomHighClass pitchClass config =
+    let
+      octave = midiNumber config.customRange.high `div` 12 - 1
+    in
+      config { customRange = config.customRange { high = pitchFromMidi (12 * (octave + 1) + pitchClass) } }
+
+  setCustomHighOctave octave config =
+    let
+      pitchClass = midiNumber config.customRange.high `mod` 12
+    in
+      config { customRange = config.customRange { high = pitchFromMidi (12 * (octave + 1) + pitchClass) } }
+
+  selectMajorKey presetId config = case Array.find (\preset -> preset.id == presetId) allMajorKeyPresets of
+    Just preset -> config { rootPitchClasses = preset.roots }
+    Nothing -> config
+
+component :: forall query m. MonadAff m => H.Component query PracticeInput PracticeOutput m
+component =
+  H.mkComponent
+    { initialState: initialState
+    , render
+    , eval:
+        H.mkEval H.defaultEval
+          { handleAction = handleAction
+          , initialize = Just Initialize
+          , finalize = Just Finalize
+          }
     }
+  where
+  initialState input =
+    let
+      prompt = Quiz.makePrompt input.seed input.config
+    in
+      { answerCorrect: false
+      , activityRevision: 0
+      , automaticAdvancePending: false
+      , captureStatus: ReadyToPlay
+      , choices: Quiz.makeChoices input.seed input.config prompt
+      , config: input.config
+      , ghostMidi: Nothing
+      , ghostRevision: 0
+      , monitor: Nothing
+      , prompt: prompt
+      , promptRevision: 0
+      , recognition: Detection.initialRecognition
+      , revealedChoices: []
+      , resumeAnswersAfterPlayback: false
+      , sampler: Just input.sampler
+      , screen: Practice
+      }
 
   render :: State -> H.ComponentHTML Action () m
   render state =
-    HH.main
-      [ HP.class_ (H.ClassName "app-shell") ]
-      [ if state.screen == Setup then renderSetup state else renderPractice state ]
+    if state.screen == Setup then renderSetup state else renderPractice state
 
   renderSetup state =
     HH.section
@@ -172,12 +683,12 @@ component =
           [ settingGroup
               "Quiz mode"
               "Choose which parts of the exercise to practice."
-              [ choiceButton (state.config.quizMode == SingingOnly) (SelectQuizMode SingingOnly) "Singing only"
-              , choiceButton (state.config.quizMode == RecognitionOnly) (SelectQuizMode RecognitionOnly) "Recognition only"
-              , choiceButton
+              [ choiceButton
                   (state.config.quizMode == SingingAndRecognition)
                   (SelectQuizMode SingingAndRecognition)
                   "Singing and recognition"
+              , choiceButton (state.config.quizMode == SingingOnly) (SelectQuizMode SingingOnly) "Singing only"
+              , choiceButton (state.config.quizMode == RecognitionOnly) (SelectQuizMode RecognitionOnly) "Recognition only"
               , choiceButton (state.config.quizMode == Audiation) (SelectQuizMode Audiation) "Audiation"
               ]
               Nothing
@@ -185,22 +696,27 @@ component =
               "Quiz progression"
               "Choose how the next interval begins after a correct answer."
               [ choiceButton
-                  (state.config.quizProgression == ManualProgression)
-                  (SelectQuizProgression ManualProgression)
-                  "Manual"
-              , choiceButton
                   (state.config.quizProgression == AutomaticProgression)
                   (SelectQuizProgression AutomaticProgression)
                   "Automatic"
+              , choiceButton
+                  (state.config.quizProgression == ManualProgression)
+                  (SelectQuizProgression ManualProgression)
+                  "Manual"
               ]
               Nothing
-          , if state.config.quizMode == Audiation then HH.text ""
-            else
+          , let
+              availableOrientations =
+                if state.config.quizMode == Audiation then
+                  Array.filter (_ /= Harmonic) allPlaybackModes
+                else allPlaybackModes
+              selectedOrientations = Array.filter (flip Array.elem state.config.playbackModes) availableOrientations
+            in
               settingGroup
-                "Playback"
-                "How the interval is played before the microphone begins listening."
-                (map (modeButton state.config) allPlaybackModes)
-                (if Array.null state.config.playbackModes then Just "Select at least one playback mode." else Nothing)
+                "Interval orientation"
+                "Choose the directions or forms intervals may take."
+                (map (modeButton state.config) availableOrientations)
+                (if Array.null selectedOrientations then Just "Select at least one interval orientation." else Nothing)
           , settingGroup
               "Intervals"
               "Choose the intervals that may appear in an exercise."
@@ -248,9 +764,16 @@ component =
           , settingGroup
               "Ghost note"
               "The ghost note shows the pitch you are currently singing on the staff."
-              [ choiceButton (state.config.ghostMode == GhostOff) (SelectGhostMode GhostOff) "Hidden"
-              , choiceButton (state.config.ghostMode == GhostOn) (SelectGhostMode GhostOn) "Shown briefly"
+              [ choiceButton (state.config.ghostMode == GhostOn) (SelectGhostMode GhostOn) "Shown briefly"
               , choiceButton (state.config.ghostMode == GhostPersist) (SelectGhostMode GhostPersist) "Kept visible"
+              , choiceButton (state.config.ghostMode == GhostOff) (SelectGhostMode GhostOff) "Hidden"
+              ]
+              Nothing
+          , settingGroup
+              "Pitch tuner"
+              "Choose whether to show cents feedback while singing."
+              [ choiceButton state.config.showPitchTuner (SelectPitchTuner true) "Shown"
+              , choiceButton (not state.config.showPitchTuner) (SelectPitchTuner false) "Hidden"
               ]
               Nothing
           , if not (quizModeUsesRecognition state.config.quizMode) then HH.text ""
@@ -306,13 +829,15 @@ component =
               [ HH.h2_ [ HH.text (quizModeTitle state.config.quizMode) ] ]
           , HH.button
               [ HP.type_ HP.ButtonButton
-              , HP.class_ (H.ClassName "text-button")
+              , HP.class_ (H.ClassName "secondary-button")
               , HE.onClick \_ -> EditSetup
               ]
-              [ HH.text "Edit setup" ]
+              [ HH.text "Back to setup" ]
           ]
       , HH.div
-          [ HP.class_ (H.ClassName "practice-content") ]
+          [ HP.ref practiceContentRef
+          , HP.class_ (H.ClassName "practice-content")
+          ]
           [ HH.div
               [ HP.class_ (H.ClassName "notation-panel") ]
               [ HH.div
@@ -323,7 +848,7 @@ component =
               , if shouldShowIntervalName state then
                   HH.p
                     [ HP.class_ (H.ClassName "completed-interval-name") ]
-                    [ HH.text (intervalName state.prompt.interval) ]
+                    [ HH.text (promptIntervalLabel state) ]
                 else
                   HH.text ""
               , renderPitchMeter state
@@ -350,6 +875,8 @@ component =
 
   renderPitchMeter state
     | state.config.quizMode == RecognitionOnly = HH.text ""
+    | not state.config.showPitchTuner = HH.text ""
+    | state.captureStatus == IntervalError = HH.text ""
     | state.captureStatus == ChoosingAnswer || state.captureStatus == AnswerComplete = HH.text ""
     | otherwise =
         HH.div_
@@ -550,6 +1077,7 @@ component =
     Listening -> Detection.phaseInstruction state.recognition.phase
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
+    IntervalError -> "Incorrect pitch."
     ChoosingAnswer ->
       if Array.null state.revealedChoices then
         "Choose the matching interval."
@@ -579,18 +1107,33 @@ component =
 
   shouldShowIntervalName state =
     state.config.quizMode == Audiation
-      || (state.config.quizMode == SingingOnly && state.captureStatus == AnswerComplete)
+      || state.config.quizMode == SingingOnly
+
+  promptIntervalLabel state =
+    intervalName state.prompt.interval
+      <>
+        if state.config.quizMode == Audiation || state.config.quizMode == SingingOnly then
+          " · " <> playbackModeName state.prompt.mode
+        else ""
 
   feedbackInRange feedback =
     feedback.clarity >= Detection.defaultRecognitionSettings.clarityThreshold
       && feedback.cents >= -Detection.defaultRecognitionSettings.toleranceCents
       && feedback.cents <= Detection.defaultRecognitionSettings.toleranceCents
 
-  handleAction :: Action -> H.HalogenM State Action () output m Unit
+  handleAction :: Action -> H.HalogenM State Action () PracticeOutput m Unit
   handleAction = case _ of
     Initialize -> do
-      config <- H.liftEffect Settings.load
-      H.modify_ _ { config = config }
+      state <- H.get
+      renderPromptNotation state.prompt false
+      when (state.config.quizProgression == AutomaticProgression) do
+        handleAction PlayPrompt
+    Finalize -> do
+      state <- H.get
+      stopMonitor state.monitor
+      case state.sampler of
+        Nothing -> pure unit
+        Just sampler -> H.liftEffect (Audio.stop sampler)
     ToggleInterval interval ->
       updateConfig (toggleInterval interval)
     SelectAllIntervals ->
@@ -611,6 +1154,8 @@ component =
       updateConfig (_ { octavePolicy = policy })
     SelectGhostMode mode ->
       updateConfig (_ { ghostMode = mode })
+    SelectPitchTuner shown ->
+      updateConfig (_ { showPitchTuner = shown })
     SelectAnswerCount count ->
       updateConfig (_ { answerCount = count })
     SelectAnswerDisplay display ->
@@ -621,6 +1166,10 @@ component =
       updateConfig (_ { quizProgression = progression })
     BeginPractice -> do
       state <- H.get
+      stopMonitor state.monitor
+      case state.sampler of
+        Nothing -> pure unit
+        Just sampler -> H.liftEffect (Audio.stop sampler)
       seed <- H.liftEffect (randomInt 0 2147483647)
       sampler <- case state.sampler of
         Just existing -> pure existing
@@ -630,6 +1179,7 @@ component =
         choices = Quiz.makeChoices seed state.config prompt
       H.modify_ _
         { answerCorrect = false
+        , activityRevision = state.activityRevision + 1
         , automaticAdvancePending = false
         , captureStatus = ReadyToPlay
         , choices = choices
@@ -652,8 +1202,10 @@ component =
       case state.sampler of
         Nothing -> pure unit
         Just sampler -> do
+          let activityRevision = state.activityRevision + 1
           H.modify_ _
-            { automaticAdvancePending = false
+            { activityRevision = activityRevision
+            , automaticAdvancePending = false
             , captureStatus = PlayingAudio
             , ghostMidi = Nothing
             , ghostRevision = state.ghostRevision + 1
@@ -667,40 +1219,52 @@ component =
           void (H.subscribe emitter)
           if state.config.quizMode == Audiation then
             H.liftEffect $ Audio.playRoot sampler state.prompt.root
-              (HS.notify listener PlaybackStarted)
-              (HS.notify listener <<< AudioFailed)
+              (HS.notify listener (PlaybackStarted activityRevision))
+              (HS.notify listener <<< AudioFailed activityRevision)
           else
             H.liftEffect $ Audio.playInterval sampler state.prompt.mode state.prompt.root state.prompt.target
-              (HS.notify listener PlaybackStarted)
-              (HS.notify listener <<< AudioFailed)
-    PlaybackStarted -> do
+              (HS.notify listener (PlaybackStarted activityRevision))
+              (HS.notify listener <<< AudioFailed activityRevision)
+    PlaybackStarted activityRevision -> do
       state <- H.get
-      when (state.screen == Practice && state.captureStatus == PlayingAudio) do
-        void $ H.fork do
-          let
-            playbackMilliseconds =
-              if state.config.quizMode == Audiation then Audio.rootPlaybackDurationMilliseconds
-              else Audio.playbackDurationMilliseconds state.prompt.mode
-          H.liftAff (delay (Milliseconds (playbackMilliseconds + 350.0)))
-          handleAction StartListening
-    AudioFailed message ->
-      H.modify_ _ { captureStatus = PlaybackFailed message }
-    StartListening -> do
+      when
+        ( state.screen == Practice
+            && state.captureStatus == PlayingAudio
+            && state.activityRevision == activityRevision
+        )
+        do
+          void $ H.fork do
+            let
+              playbackMilliseconds =
+                if state.config.quizMode == Audiation then Audio.rootPlaybackDurationMilliseconds
+                else Audio.playbackDurationMilliseconds state.prompt.mode
+            H.liftAff (delay (Milliseconds (playbackMilliseconds + 350.0)))
+            handleAction (StartListening activityRevision)
+    AudioFailed activityRevision message -> do
       state <- H.get
-      when (state.screen == Practice && state.captureStatus == PlayingAudio) do
-        if state.resumeAnswersAfterPlayback || not (quizModeUsesSinging state.config.quizMode) then do
-          H.modify_ _ { captureStatus = ChoosingAnswer, resumeAnswersAfterPlayback = false }
-          renderChoiceNotation state.prompt.root state.choices
-        else do
-          { emitter, listener } <- H.liftEffect HS.create
-          void (H.subscribe emitter)
-          monitor <- H.liftEffect $ Detection.start
-            (HS.notify listener <<< PitchDetected)
-            (HS.notify listener <<< MicrophoneFailed)
-          H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
-    PitchDetected sample -> do
+      when (state.activityRevision == activityRevision) do
+        H.modify_ _ { captureStatus = PlaybackFailed message }
+    StartListening activityRevision -> do
       state <- H.get
-      when (state.captureStatus == Listening) do
+      when
+        ( state.screen == Practice
+            && state.captureStatus == PlayingAudio
+            && state.activityRevision == activityRevision
+        )
+        do
+          if state.resumeAnswersAfterPlayback || not (quizModeUsesSinging state.config.quizMode) then do
+            H.modify_ _ { captureStatus = ChoosingAnswer, resumeAnswersAfterPlayback = false }
+            renderChoiceNotation state.prompt.root state.choices
+          else do
+            { emitter, listener } <- H.liftEffect HS.create
+            void (H.subscribe emitter)
+            monitor <- H.liftEffect $ Detection.start
+              (HS.notify listener <<< PitchDetected activityRevision)
+              (HS.notify listener <<< MicrophoneFailed activityRevision)
+            H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
+    PitchDetected activityRevision sample -> do
+      state <- H.get
+      when (state.captureStatus == Listening && state.activityRevision == activityRevision) do
         let
           detectedMidi =
             if sample.frequency > 0.0 then Just (Detection.nearestMidi sample.frequency) else Nothing
@@ -721,8 +1285,11 @@ component =
           completed =
             state.recognition.phase /= Detection.RecognitionComplete
               && next.phase == Detection.RecognitionComplete
-          firstAccepted = next.phase /= Detection.WaitingForFirst
-          firstJustAccepted = state.recognition.phase == Detection.WaitingForFirst && firstAccepted
+          incorrect =
+            state.recognition.phase /= Detection.RecognitionIncorrect
+              && next.phase == Detection.RecognitionIncorrect
+          firstAccepted = next.firstMidi /= Nothing
+          firstJustAccepted = state.recognition.firstMidi == Nothing && firstAccepted
         H.modify_ _ { ghostMidi = nextGhost, ghostRevision = revision, recognition = next }
         when ((detectedGhost /= Nothing && detectedGhost /= state.ghostMidi) || firstJustAccepted) do
           case nextGhost of
@@ -755,6 +1322,29 @@ component =
               handleAction (FinishSinging revision)
           else
             handleAction (FinishSinging revision)
+        when incorrect do
+          stopMonitor state.monitor
+          H.modify_ _
+            { captureStatus = IntervalError
+            , monitor = Nothing
+            , recognition = next
+            }
+          case next.feedback of
+            Just feedback -> do
+              let
+                midi = Detection.relativeMidi state.config.octavePolicy state.prompt.root next feedback.midi
+                spellingReference = case state.prompt.root, state.prompt.target of
+                  Pitch (PitchClass _ (Accidental rootAccidental)) _,
+                  Pitch (PitchClass _ (Accidental targetAccidental)) _ ->
+                    if rootAccidental /= 0 then state.prompt.root
+                    else if targetAccidental /= 0 then state.prompt.target
+                    else state.prompt.root
+              renderIncorrectNotation
+                state.prompt
+                (pitchFromMidiLike spellingReference midi)
+                firstAccepted
+            Nothing -> pure unit
+          scheduleAutomaticRetry state
     ClearGhost revision -> do
       state <- H.get
       when
@@ -786,8 +1376,10 @@ component =
               }
             unless persistGhost (renderPromptNotation state.prompt true)
             renderChoiceNotation state.prompt.root state.choices
-    MicrophoneFailed message ->
-      H.modify_ _ { captureStatus = CaptureFailed message, monitor = Nothing }
+    MicrophoneFailed activityRevision message -> do
+      state <- H.get
+      when (state.activityRevision == activityRevision) do
+        H.modify_ _ { captureStatus = CaptureFailed message, monitor = Nothing }
     ChooseInterval interval -> do
       state <- H.get
       when (state.captureStatus == ChoosingAnswer && not (Array.elem interval state.revealedChoices)) do
@@ -808,12 +1400,16 @@ component =
         when correct (scheduleAutomaticAdvance state)
     NextPrompt -> do
       state <- H.get
+      case state.sampler of
+        Nothing -> pure unit
+        Just sampler -> H.liftEffect (Audio.stop sampler)
       seed <- H.liftEffect (randomInt 0 2147483647)
       let
         prompt = Quiz.makePrompt seed state.config
         choices = Quiz.makeChoices seed state.config prompt
       H.modify_ _
         { answerCorrect = false
+        , activityRevision = state.activityRevision + 1
         , automaticAdvancePending = false
         , captureStatus = ReadyToPlay
         , choices = choices
@@ -825,6 +1421,7 @@ component =
         , revealedChoices = []
         , resumeAnswersAfterPlayback = false
         }
+      resetPracticeScroll
       renderPromptNotation prompt false
     AdvanceAutomatically revision -> do
       state <- H.get
@@ -837,24 +1434,28 @@ component =
         do
           handleAction NextPrompt
           handleAction PlayPrompt
-    EditSetup -> do
+    RetryAutomatically revision -> do
       state <- H.get
-      stopMonitor state.monitor
-      case state.sampler of
-        Nothing -> pure unit
-        Just sampler -> H.liftEffect (Audio.stop sampler)
-      H.modify_ _
-        { automaticAdvancePending = false
-        , captureStatus = ReadyToPlay
-        , ghostMidi = Nothing
-        , ghostRevision = state.ghostRevision + 1
-        , monitor = Nothing
-        , screen = Setup
-        }
+      when
+        ( state.screen == Practice
+            && state.automaticAdvancePending
+            && state.promptRevision == revision
+            && state.captureStatus == IntervalError
+        )
+        do
+          handleAction PlayPrompt
+    EditSetup -> do
+      H.raise BackToSetup
 
   stopMonitor = case _ of
     Nothing -> pure unit
     Just monitor -> H.liftEffect (Detection.stop monitor)
+
+  resetPracticeScroll = do
+    maybeElement <- H.getHTMLElementRef practiceContentRef
+    case maybeElement of
+      Nothing -> pure unit
+      Just htmlElement -> H.liftEffect (Element.setScrollTop 0.0 (HTMLElement.toElement htmlElement))
 
   updateConfig update = do
     H.modify_ \state -> state { config = update state.config }
@@ -871,6 +1472,13 @@ component =
             else Audio.playbackDurationMilliseconds state.prompt.mode + 500.0
         H.liftAff (delay (Milliseconds waitMilliseconds))
         handleAction (AdvanceAutomatically state.promptRevision)
+
+  scheduleAutomaticRetry state =
+    when (state.config.quizProgression == AutomaticProgression) do
+      H.modify_ _ { automaticAdvancePending = true }
+      void $ H.fork do
+        H.liftAff (delay (Milliseconds 1200.0))
+        handleAction (RetryAutomatically state.promptRevision)
 
   renderPromptNotation prompt rootAccepted = do
     maybeElement <- H.getHTMLElementRef notationRef
@@ -893,6 +1501,14 @@ component =
       Just htmlElement ->
         H.liftEffect (Notation.renderGhost (HTMLElement.toElement htmlElement) prompt.root prompt.target detected rootAccepted)
 
+  renderIncorrectNotation prompt detected rootAccepted = do
+    maybeElement <- H.getHTMLElementRef notationRef
+    case maybeElement of
+      Nothing -> pure unit
+      Just htmlElement ->
+        H.liftEffect
+          (Notation.renderIncorrect (HTMLElement.toElement htmlElement) prompt.root prompt.target detected rootAccepted)
+
   renderChoiceNotation root choices =
     for_ (Array.mapWithIndex (\index choice -> { choice, index }) choices) \item -> do
       maybeElement <- H.getHTMLElementRef (choiceNotationRef item.index)
@@ -904,4 +1520,4 @@ component =
 main :: Effect Unit
 main = HA.runHalogenAff do
   body <- HA.awaitBody
-  runUI component unit body
+  runUI rootComponent unit body

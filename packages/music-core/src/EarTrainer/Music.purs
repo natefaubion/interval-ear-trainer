@@ -3,6 +3,7 @@ module EarTrainer.Music
   , Direction(..)
   , Interval(..)
   , Letter(..)
+  , MajorKeyPreset
   , OctavePolicy(..)
   , Pitch(..)
   , PitchClass(..)
@@ -10,6 +11,7 @@ module EarTrainer.Music
   , VocalRange(..)
   , VocalRangePreset(..)
   , allIntervals
+  , allMajorKeyPresets
   , allPlaybackModes
   , allRootPitchClasses
   , allVocalRangePresets
@@ -105,6 +107,7 @@ data VocalRangePreset
   | MezzoSoprano
   | Soprano
   | ExtraWide
+  | Custom
 
 derive instance Eq VocalRangePreset
 derive instance Ord VocalRangePreset
@@ -112,6 +115,12 @@ derive instance Ord VocalRangePreset
 type VocalRange =
   { low :: Pitch
   , high :: Pitch
+  }
+
+type MajorKeyPreset =
+  { id :: String
+  , name :: String
+  , roots :: Array PitchClass
   }
 
 allIntervals :: Array Interval
@@ -134,8 +143,7 @@ allIntervals =
 
 defaultIntervals :: Array Interval
 defaultIntervals =
-  [ MinorThird
-  , MajorThird
+  [ MajorThird
   , PerfectFourth
   , PerfectFifth
   , PerfectOctave
@@ -163,13 +171,65 @@ allRootPitchClasses =
   , PitchClass A (Accidental 1)
   , PitchClass B (Accidental (-1))
   , PitchClass B (Accidental 0)
+  , PitchClass C (Accidental (-1))
+  , PitchClass F (Accidental (-1))
+  , PitchClass E (Accidental 1)
+  , PitchClass B (Accidental 1)
   ]
 
 defaultRootPitchClasses :: Array PitchClass
-defaultRootPitchClasses = allRootPitchClasses
+defaultRootPitchClasses =
+  [ PitchClass C (Accidental 0)
+  , PitchClass D (Accidental 0)
+  , PitchClass E (Accidental 0)
+  , PitchClass F (Accidental 0)
+  , PitchClass G (Accidental 0)
+  , PitchClass A (Accidental 0)
+  , PitchClass B (Accidental 0)
+  ]
+
+allMajorKeyPresets :: Array MajorKeyPreset
+allMajorKeyPresets =
+  [ majorKey "c-flat" "C♭ major"
+      [ pc C (-1), pc D (-1), pc E (-1), pc F (-1), pc G (-1), pc A (-1), pc B (-1) ]
+  , majorKey "g-flat" "G♭ major"
+      [ pc G (-1), pc A (-1), pc B (-1), pc C (-1), pc D (-1), pc E (-1), pc F 0 ]
+  , majorKey "d-flat" "D♭ major"
+      [ pc D (-1), pc E (-1), pc F 0, pc G (-1), pc A (-1), pc B (-1), pc C 0 ]
+  , majorKey "a-flat" "A♭ major"
+      [ pc A (-1), pc B (-1), pc C 0, pc D (-1), pc E (-1), pc F 0, pc G 0 ]
+  , majorKey "e-flat" "E♭ major"
+      [ pc E (-1), pc F 0, pc G 0, pc A (-1), pc B (-1), pc C 0, pc D 0 ]
+  , majorKey "b-flat" "B♭ major"
+      [ pc B (-1), pc C 0, pc D 0, pc E (-1), pc F 0, pc G 0, pc A 0 ]
+  , majorKey "f" "F major"
+      [ pc F 0, pc G 0, pc A 0, pc B (-1), pc C 0, pc D 0, pc E 0 ]
+  , majorKey "c" "C major"
+      [ pc C 0, pc D 0, pc E 0, pc F 0, pc G 0, pc A 0, pc B 0 ]
+  , majorKey "g" "G major"
+      [ pc G 0, pc A 0, pc B 0, pc C 0, pc D 0, pc E 0, pc F 1 ]
+  , majorKey "d" "D major"
+      [ pc D 0, pc E 0, pc F 1, pc G 0, pc A 0, pc B 0, pc C 1 ]
+  , majorKey "a" "A major"
+      [ pc A 0, pc B 0, pc C 1, pc D 0, pc E 0, pc F 1, pc G 1 ]
+  , majorKey "e" "E major"
+      [ pc E 0, pc F 1, pc G 1, pc A 0, pc B 0, pc C 1, pc D 1 ]
+  , majorKey "b" "B major"
+      [ pc B 0, pc C 1, pc D 1, pc E 0, pc F 1, pc G 1, pc A 1 ]
+  , majorKey "f-sharp" "F♯ major"
+      [ pc F 1, pc G 1, pc A 1, pc B 0, pc C 1, pc D 1, pc E 1 ]
+  , majorKey "c-sharp" "C♯ major"
+      [ pc C 1, pc D 1, pc E 1, pc F 1, pc G 1, pc A 1, pc B 1 ]
+  ]
+
+majorKey :: String -> String -> Array PitchClass -> MajorKeyPreset
+majorKey id name roots = { id, name, roots }
+
+pc :: Letter -> Int -> PitchClass
+pc letter accidental = PitchClass letter (Accidental accidental)
 
 allVocalRangePresets :: Array VocalRangePreset
-allVocalRangePresets = [ Bass, Baritone, Tenor, Alto, MezzoSoprano, Soprano, ExtraWide ]
+allVocalRangePresets = [ Bass, Baritone, Tenor, Alto, MezzoSoprano, Soprano, ExtraWide, Custom ]
 
 pitch :: Letter -> Accidental -> Int -> Pitch
 pitch letter accidental octave = Pitch (PitchClass letter accidental) octave
@@ -298,8 +358,8 @@ intervalName MajorSeventh = "Major seventh"
 intervalName PerfectOctave = "Perfect octave"
 
 playbackModeName :: PlaybackMode -> String
-playbackModeName MelodicAscending = "Melodic ascending"
-playbackModeName MelodicDescending = "Melodic descending"
+playbackModeName MelodicAscending = "Ascending"
+playbackModeName MelodicDescending = "Descending"
 playbackModeName Harmonic = "Harmonic"
 
 transpose :: Direction -> Interval -> Pitch -> Pitch
@@ -345,6 +405,7 @@ presetName Alto = "Alto"
 presetName MezzoSoprano = "Mezzo-soprano"
 presetName Soprano = "Soprano"
 presetName ExtraWide = "Extra wide"
+presetName Custom = "Custom"
 
 presetRange :: VocalRangePreset -> VocalRange
 presetRange Bass = { low: pitch E (Accidental 0) 2, high: pitch E (Accidental 0) 4 }
@@ -354,3 +415,4 @@ presetRange Alto = { low: pitch F (Accidental 0) 3, high: pitch F (Accidental 0)
 presetRange MezzoSoprano = { low: pitch A (Accidental 0) 3, high: pitch A (Accidental 0) 5 }
 presetRange Soprano = { low: pitch C (Accidental 0) 4, high: pitch C (Accidental 0) 6 }
 presetRange ExtraWide = { low: pitch C (Accidental 0) 1, high: pitch C (Accidental 0) 7 }
+presetRange Custom = { low: pitch C (Accidental 0) 3, high: pitch G (Accidental 0) 5 }

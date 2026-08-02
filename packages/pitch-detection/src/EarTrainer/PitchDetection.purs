@@ -39,6 +39,7 @@ data RecognitionPhase
   = WaitingForFirst
   | WaitingForRelease
   | WaitingForSecond
+  | RecognitionIncorrect
   | RecognitionComplete
 
 derive instance Eq RecognitionPhase
@@ -47,6 +48,7 @@ instance Show RecognitionPhase where
   show WaitingForFirst = "WaitingForFirst"
   show WaitingForRelease = "WaitingForRelease"
   show WaitingForSecond = "WaitingForSecond"
+  show RecognitionIncorrect = "RecognitionIncorrect"
   show RecognitionComplete = "RecognitionComplete"
 
 type Recognition =
@@ -112,12 +114,13 @@ feedbackFor allowOctaveEquivalent expectedMidi sample
 
 matchesExpected :: RecognitionSettings -> Boolean -> Int -> Feedback -> Boolean
 matchesExpected settings allowOctaveEquivalent expected feedback =
-  let
-    octaveMatches =
-      if allowOctaveEquivalent then feedback.midi `mod` 12 == expected `mod` 12
-      else feedback.midi == expected
-  in
-    octaveMatches && absolute feedback.cents <= settings.toleranceCents
+  matchesPitchIdentity allowOctaveEquivalent expected feedback
+    && absolute feedback.cents <= settings.toleranceCents
+
+matchesPitchIdentity :: Boolean -> Int -> Feedback -> Boolean
+matchesPitchIdentity allowOctaveEquivalent expected feedback =
+  if allowOctaveEquivalent then feedback.midi `mod` 12 == expected `mod` 12
+  else feedback.midi == expected
 
 absolute :: Number -> Number
 absolute value = if value < 0.0 then -value else value
@@ -160,6 +163,7 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
             Nothing -> writtenFirst
         }
       WaitingForSecond -> { allowOctaveEquivalent: false, midi: normalizedSecond }
+      RecognitionIncorrect -> { allowOctaveEquivalent: false, midi: normalizedSecond }
       RecognitionComplete -> { allowOctaveEquivalent: false, midi: normalizedSecond }
     feedback = feedbackFor expectation.allowOctaveEquivalent expectation.midi sample
     clear = sample.clarity >= settings.clarityThreshold
@@ -170,14 +174,19 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
   in
     case recognition.phase of
       RecognitionComplete -> recognition { feedback = feedback }
+      RecognitionIncorrect -> recognition { feedback = feedback }
       WaitingForFirst
-        | matches ->
-            let
-              next = stepStable settings.stableFramesRequired (unwrapFeedback feedback) recognition
-            in
-              if next.stableFrames >= settings.stableFramesRequired then
-                next { firstMidi = Just (unwrapFeedback feedback).midi, phase = WaitingForRelease, releaseFrames = 0 }
-              else next
+        | clear -> case feedback of
+            Just current ->
+              let
+                next = stepStable settings.stableFramesRequired current recognition
+              in
+                if next.stableFrames < settings.stableFramesRequired then next
+                else if matches then
+                  next { firstMidi = Just current.midi, phase = WaitingForRelease, releaseFrames = 0 }
+                else if matchesPitchIdentity expectation.allowOctaveEquivalent expectation.midi current then next
+                else next { phase = RecognitionIncorrect }
+            Nothing -> resetStable feedback recognition
         | otherwise -> resetStable feedback recognition
       WaitingForRelease
         | matches -> recognition { feedback = feedback, releaseFrames = 0 }
@@ -189,23 +198,23 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
                 (resetStable feedback recognition) { phase = WaitingForSecond, releaseFrames = frames }
               else recognition { feedback = feedback, releaseFrames = frames }
       WaitingForSecond
-        | matches ->
-            let
-              next = stepStable settings.stableFramesRequired (unwrapFeedback feedback) recognition
-            in
-              if next.stableFrames >= settings.stableFramesRequired then
-                next { phase = RecognitionComplete }
-              else next
+        | clear -> case feedback of
+            Just current ->
+              let
+                next = stepStable settings.stableFramesRequired current recognition
+              in
+                if next.stableFrames < settings.stableFramesRequired then next
+                else if matches then next { phase = RecognitionComplete }
+                else if matchesPitchIdentity expectation.allowOctaveEquivalent expectation.midi current then next
+                else next { phase = RecognitionIncorrect }
+            Nothing -> resetStable feedback recognition
         | otherwise -> resetStable feedback recognition
-
-unwrapFeedback :: Maybe Feedback -> Feedback
-unwrapFeedback (Just feedback) = feedback
-unwrapFeedback Nothing = { cents: 0.0, clarity: 0.0, midi: 0 }
 
 phaseInstruction :: RecognitionPhase -> String
 phaseInstruction WaitingForFirst = "Sing the first note"
 phaseInstruction WaitingForRelease = "Release or move away from the first note"
 phaseInstruction WaitingForSecond = "Sing the second note"
+phaseInstruction RecognitionIncorrect = "Incorrect pitch"
 phaseInstruction RecognitionComplete = "Both notes accepted"
 
 relativeMidi :: OctavePolicy -> Pitch -> Recognition -> Int -> Int

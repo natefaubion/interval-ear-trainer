@@ -1,6 +1,7 @@
 module EarTrainer.Notation
   ( renderCompleted
   , renderGhost
+  , renderIncorrect
   , renderIntervalChoice
   , renderNotes
   , renderPrompt
@@ -27,33 +28,40 @@ foreign import renderScoreImpl :: Element -> String -> Int -> Array EngravedEven
 
 renderNotes :: Element -> Array Pitch -> Effect Unit
 renderNotes element notes =
-  renderScoreImpl element (selectClef notes) (if Array.length notes <= 1 then 280 else 360)
+  renderScoreImpl element (selectClef notes) (if Array.length notes <= 1 then 240 else 300)
     (map (\note -> engravedEvent "normal" [ note ]) notes)
 
 renderPrompt :: Element -> Pitch -> Pitch -> Boolean -> Effect Unit
 renderPrompt element root target rootAccepted =
-  renderScoreImpl element (selectClef [ root, target ]) 360
+  renderScoreImpl element (selectClef [ root, target ]) 300
     [ engravedEvent (if rootAccepted then "accepted" else "normal") [ root ]
     , engravedEvent "hidden" [ target ]
     ]
 
 renderCompleted :: Element -> Pitch -> Pitch -> Effect Unit
 renderCompleted element root target =
-  renderScoreImpl element (selectClef [ root, target ]) 360
+  renderScoreImpl element (selectClef [ root, target ]) 300
     [ engravedEvent "accepted" [ root ]
     , engravedEvent "accepted" [ target ]
     ]
 
 renderGhost :: Element -> Pitch -> Pitch -> Pitch -> Boolean -> Effect Unit
 renderGhost element root target detected rootAccepted =
-  renderScoreImpl element (selectClef [ root, target ]) 360
+  renderScoreImpl element (selectClef [ root, target ]) 300
     [ engravedEvent (if rootAccepted then "accepted" else "normal") [ root ]
     , engravedEvent "dim" [ detected ]
     ]
 
+renderIncorrect :: Element -> Pitch -> Pitch -> Pitch -> Boolean -> Effect Unit
+renderIncorrect element root target detected rootAccepted =
+  renderScoreImpl element (selectClef [ root, target ]) 300
+    [ engravedEvent (if rootAccepted then "accepted" else "normal") [ root ]
+    , engravedEvent "incorrect" [ detected ]
+    ]
+
 renderIntervalChoice :: Element -> Pitch -> Pitch -> Effect Unit
 renderIntervalChoice element root target =
-  renderScoreImpl element (selectClef [ root, target ]) 360
+  renderScoreImpl element (selectClef [ root, target ]) 300
     [ engravedEvent "normal" [ root ]
     , engravedEvent "normal" [ target ]
     , engravedEvent "normal" [ root, target ]

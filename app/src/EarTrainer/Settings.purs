@@ -23,6 +23,8 @@ import EarTrainer.Music
   , OctavePolicy(..)
   , PitchClass(..)
   , PlaybackMode(..)
+  , midiNumber
+  , pitchFromMidi
   , VocalRangePreset(..)
   )
 import Effect (Effect)
@@ -35,10 +37,13 @@ type StoredPitchClass =
 type StoredSettings =
   { answerCount :: String
   , answerDisplay :: String
+  , customHighMidi :: Int
+  , customLowMidi :: Int
   , ghostMode :: String
   , intervals :: Array String
   , octavePolicy :: String
   , playbackModes :: Array String
+  , showPitchTuner :: Boolean
   , quizMode :: String
   , quizProgression :: String
   , rootPitchClasses :: Array StoredPitchClass
@@ -61,10 +66,12 @@ load = do
       defaultConfig
         { answerCount = decodeAnswerCount value.answerCount
         , answerDisplay = decodeAnswerDisplay value.answerDisplay
+        , customRange = { low: pitchFromMidi value.customLowMidi, high: pitchFromMidi value.customHighMidi }
         , ghostMode = decodeGhostMode value.ghostMode
         , intervals = Array.mapMaybe decodeInterval value.intervals
         , octavePolicy = decodeOctavePolicy value.octavePolicy
         , playbackModes = Array.mapMaybe decodePlaybackMode value.playbackModes
+        , showPitchTuner = value.showPitchTuner
         , quizMode = decodeQuizMode value.quizMode
         , quizProgression = decodeQuizProgression value.quizProgression
         , rootPitchClasses = map decodePitchClass value.rootPitchClasses
@@ -75,10 +82,13 @@ save :: ExerciseConfig -> Effect Unit
 save config = saveImpl
   { answerCount: encodeAnswerCount config.answerCount
   , answerDisplay: encodeAnswerDisplay config.answerDisplay
+  , customHighMidi: midiNumber config.customRange.high
+  , customLowMidi: midiNumber config.customRange.low
   , ghostMode: encodeGhostMode config.ghostMode
   , intervals: map encodeInterval config.intervals
   , octavePolicy: encodeOctavePolicy config.octavePolicy
   , playbackModes: map encodePlaybackMode config.playbackModes
+  , showPitchTuner: config.showPitchTuner
   , quizMode: encodeQuizMode config.quizMode
   , quizProgression: encodeQuizProgression config.quizProgression
   , rootPitchClasses: map encodePitchClass config.rootPitchClasses
@@ -193,6 +203,7 @@ encodeVocalRange Alto = "alto"
 encodeVocalRange MezzoSoprano = "mezzo-soprano"
 encodeVocalRange Soprano = "soprano"
 encodeVocalRange ExtraWide = "extra-wide"
+encodeVocalRange Custom = "custom"
 
 decodeVocalRange :: String -> VocalRangePreset
 decodeVocalRange "bass" = Bass
@@ -201,6 +212,7 @@ decodeVocalRange "alto" = Alto
 decodeVocalRange "mezzo-soprano" = MezzoSoprano
 decodeVocalRange "soprano" = Soprano
 decodeVocalRange "extra-wide" = ExtraWide
+decodeVocalRange "custom" = Custom
 decodeVocalRange _ = Tenor
 
 encodePitchClass :: PitchClass -> StoredPitchClass
