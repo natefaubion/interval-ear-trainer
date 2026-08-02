@@ -231,7 +231,9 @@ button {
 }
 
 .choice-notation {
+  width: min(100%, 22.5rem);
   min-height: 6.5rem;
+  margin-inline: auto;
 }
 
 .choice-notation svg {
@@ -447,11 +449,13 @@ button {
   outline-offset: 3px;
 }
 
-@media (max-width: 36rem) {
+@media (max-width: 48rem) {
   .answer-grid {
     grid-template-columns: 1fr;
   }
+}
 
+@media (max-width: 36rem) {
   .setup-heading {
     grid-template-columns: 1fr;
     gap: 0.75rem;
