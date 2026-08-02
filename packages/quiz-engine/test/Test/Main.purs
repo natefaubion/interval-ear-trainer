@@ -46,19 +46,27 @@ main = do
     b2Sample = { frequency: 123.470825, clarity: 0.98 }
     b3Sample = { frequency: 246.941651, clarity: 0.98 }
     silence = { frequency: 0.0, clarity: 0.0 }
+    stableSamples = defaultRecognitionSettings.stableFramesRequired
     step sample recognition =
       stepRecognition defaultRecognitionSettings AnyOctave c4 e4 sample recognition
-    afterFirst = foldl (\recognition _ -> step c4Sample recognition) initialRecognition (Array.replicate 12 unit)
+    beforeFirst = foldl
+      (\recognition _ -> step c4Sample recognition)
+      initialRecognition
+      (Array.replicate (stableSamples - 1) unit)
+    afterFirst = foldl
+      (\recognition _ -> step c4Sample recognition)
+      initialRecognition
+      (Array.replicate stableSamples unit)
     afterRelease = foldl (\recognition _ -> step silence recognition) afterFirst (Array.replicate 5 unit)
-    afterSecond = foldl (\recognition _ -> step e4Sample recognition) afterRelease (Array.replicate 12 unit)
-    anyOctaveFirst = foldl (\recognition _ -> step c5Sample recognition) initialRecognition (Array.replicate 12 unit)
-    octaveBelowFirst = foldl (\recognition _ -> step c3Sample recognition) initialRecognition (Array.replicate 12 unit)
+    afterSecond = foldl (\recognition _ -> step e4Sample recognition) afterRelease (Array.replicate stableSamples unit)
+    anyOctaveFirst = foldl (\recognition _ -> step c5Sample recognition) initialRecognition (Array.replicate stableSamples unit)
+    octaveBelowFirst = foldl (\recognition _ -> step c3Sample recognition) initialRecognition (Array.replicate stableSamples unit)
     majorSeventhStep sample recognition =
       stepRecognition defaultRecognitionSettings AnyOctave c4 b4 sample recognition
     majorSeventhFirst = foldl
       (\recognition _ -> majorSeventhStep c3Sample recognition)
       initialRecognition
-      (Array.replicate 12 unit)
+      (Array.replicate stableSamples unit)
     majorSeventhRelease = foldl
       (\recognition _ -> majorSeventhStep silence recognition)
       majorSeventhFirst
@@ -66,17 +74,17 @@ main = do
     wrongOctaveSecond = foldl
       (\recognition _ -> majorSeventhStep b2Sample recognition)
       majorSeventhRelease
-      (Array.replicate 12 unit)
+      (Array.replicate stableSamples unit)
     correctNormalizedSecond = foldl
       (\recognition _ -> majorSeventhStep b3Sample recognition)
       majorSeventhRelease
-      (Array.replicate 12 unit)
+      (Array.replicate stableSamples unit)
     writtenOctaveFirst = foldl
       ( \recognition _ ->
           stepRecognition defaultRecognitionSettings WrittenOctave c4 e4 c5Sample recognition
       )
       initialRecognition
-      (Array.replicate 12 unit)
+      (Array.replicate stableSamples unit)
     descendingConfig = defaultConfig { playbackModes = [ MelodicDescending ] }
     generatedPrompt = makePrompt 128 descendingConfig
     generatedChoices = makeChoices 128 generatedPrompt
@@ -84,6 +92,10 @@ main = do
   assertEqual
     { actual: nearestMidi 440.0
     , expected: 69
+    }
+  assertEqual
+    { actual: beforeFirst.phase
+    , expected: WaitingForFirst
     }
   assertEqual
     { actual: afterFirst.phase
