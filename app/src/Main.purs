@@ -284,7 +284,10 @@ component =
                   Nothing -> HH.text ""
                   Just feedback ->
                     HH.div
-                      [ HP.class_ (H.ClassName "tuner-dot")
+                      [ HP.classes
+                          ( [ H.ClassName "tuner-dot" ]
+                              <> if feedbackInRange feedback then [ H.ClassName "in-range" ] else []
+                          )
                       , HP.style ("left: " <> show (feedbackPosition feedback.cents) <> "%")
                       ]
                       []
@@ -454,6 +457,11 @@ component =
 
   feedbackPosition cents = 50.0 + max (-50.0) (min 50.0 cents)
 
+  feedbackInRange feedback =
+    feedback.clarity >= Detection.defaultRecognitionSettings.clarityThreshold
+      && feedback.cents >= -Detection.defaultRecognitionSettings.toleranceCents
+      && feedback.cents <= Detection.defaultRecognitionSettings.toleranceCents
+
   handleAction :: Action -> H.HalogenM State Action () output m Unit
   handleAction = case _ of
     Initialize -> do
@@ -494,7 +502,7 @@ component =
         , sampler = Just sampler
         , screen = Practice
         }
-      renderPromptNotation prompt
+      renderPromptNotation prompt false
     PlayPrompt -> do
       state <- H.get
       stopMonitor state.monitor
@@ -508,7 +516,7 @@ component =
             , monitor = Nothing
             , recognition = Detection.initialRecognition
             }
-          renderPromptNotation state.prompt
+          renderPromptNotation state.prompt false
           { emitter, listener } <- H.liftEffect HS.create
           void (H.subscribe emitter)
           H.liftEffect $ Audio.playInterval sampler state.prompt.mode state.prompt.root state.prompt.target
@@ -554,9 +562,11 @@ component =
           completed =
             state.recognition.phase /= Detection.RecognitionComplete
               && next.phase == Detection.RecognitionComplete
+          firstAccepted = next.phase /= Detection.WaitingForFirst
+          firstJustAccepted = state.recognition.phase == Detection.WaitingForFirst && firstAccepted
         H.modify_ _ { ghostMidi = nextGhost, ghostRevision = revision, recognition = next }
-        when (detectedGhost /= Nothing && detectedGhost /= state.ghostMidi) do
-          case detectedGhost of
+        when ((detectedGhost /= Nothing && detectedGhost /= state.ghostMidi) || firstJustAccepted) do
+          case nextGhost of
             Just midi ->
               let
                 spellingReference = case state.prompt.root, state.prompt.target of
@@ -566,8 +576,8 @@ component =
                     else if targetAccidental /= 0 then state.prompt.target
                     else state.prompt.root
               in
-                renderGhostNotation state.prompt (pitchFromMidiLike spellingReference midi)
-            Nothing -> pure unit
+                renderGhostNotation state.prompt (pitchFromMidiLike spellingReference midi) firstAccepted
+            Nothing -> renderPromptNotation state.prompt firstAccepted
         when
           ( state.config.ghostMode == GhostOn
               && detectedGhost == Nothing
@@ -596,7 +606,7 @@ component =
         do
           when (state.config.ghostMode == GhostOn) do
             H.modify_ _ { ghostMidi = Nothing }
-            renderPromptNotation state.prompt
+            renderPromptNotation state.prompt (state.recognition.phase /= Detection.WaitingForFirst)
     FinishSinging revision -> do
       state <- H.get
       when
@@ -610,7 +620,7 @@ component =
             { captureStatus = ChoosingAnswer
             , ghostMidi = if persistGhost then state.ghostMidi else Nothing
             }
-          unless persistGhost (renderPromptNotation state.prompt)
+          unless persistGhost (renderPromptNotation state.prompt true)
           renderChoiceNotation state.prompt.root state.choices
     MicrophoneFailed message ->
       H.modify_ _ { captureStatus = CaptureFailed message, monitor = Nothing }
@@ -647,7 +657,7 @@ component =
         , recognition = Detection.initialRecognition
         , revealedChoices = []
         }
-      renderPromptNotation prompt
+      renderPromptNotation prompt false
     EditSetup -> do
       state <- H.get
       stopMonitor state.monitor
@@ -671,19 +681,19 @@ component =
     state <- H.get
     H.liftEffect (Settings.save state.config)
 
-  renderPromptNotation prompt = do
+  renderPromptNotation prompt rootAccepted = do
     maybeElement <- H.getHTMLElementRef notationRef
     case maybeElement of
       Nothing -> pure unit
       Just htmlElement ->
-        H.liftEffect (Notation.renderPrompt (HTMLElement.toElement htmlElement) prompt.root prompt.target)
+        H.liftEffect (Notation.renderPrompt (HTMLElement.toElement htmlElement) prompt.root prompt.target rootAccepted)
 
-  renderGhostNotation prompt detected = do
+  renderGhostNotation prompt detected rootAccepted = do
     maybeElement <- H.getHTMLElementRef notationRef
     case maybeElement of
       Nothing -> pure unit
       Just htmlElement ->
-        H.liftEffect (Notation.renderGhost (HTMLElement.toElement htmlElement) prompt.root prompt.target detected)
+        H.liftEffect (Notation.renderGhost (HTMLElement.toElement htmlElement) prompt.root prompt.target detected rootAccepted)
 
   renderChoiceNotation root choices =
     for_ (Array.mapWithIndex (\index choice -> { choice, index }) choices) \item -> do

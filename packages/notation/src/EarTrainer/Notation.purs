@@ -29,17 +29,17 @@ renderNotes element notes =
   renderScoreImpl element (selectClef notes) (if Array.length notes <= 1 then 280 else 360)
     (map (\note -> engravedEvent "normal" [ note ]) notes)
 
-renderPrompt :: Element -> Pitch -> Pitch -> Effect Unit
-renderPrompt element root target =
+renderPrompt :: Element -> Pitch -> Pitch -> Boolean -> Effect Unit
+renderPrompt element root target rootAccepted =
   renderScoreImpl element (selectClef [ root, target ]) 360
-    [ engravedEvent "normal" [ root ]
+    [ engravedEvent (if rootAccepted then "accepted" else "normal") [ root ]
     , engravedEvent "hidden" [ target ]
     ]
 
-renderGhost :: Element -> Pitch -> Pitch -> Pitch -> Effect Unit
-renderGhost element root target detected =
+renderGhost :: Element -> Pitch -> Pitch -> Pitch -> Boolean -> Effect Unit
+renderGhost element root target detected rootAccepted =
   renderScoreImpl element (selectClef [ root, target ]) 360
-    [ engravedEvent "normal" [ root ]
+    [ engravedEvent (if rootAccepted then "accepted" else "normal") [ root ]
     , engravedEvent "dim" [ detected ]
     ]
 

@@ -159,6 +159,10 @@ button {
   transition: left 80ms linear;
 }
 
+.tuner-dot.in-range {
+  background: #2f7a4f;
+}
+
 .answer-panel {
   margin-top: 2.25rem;
   padding-top: 2rem;
