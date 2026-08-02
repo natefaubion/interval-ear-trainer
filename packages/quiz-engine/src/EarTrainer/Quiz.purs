@@ -159,7 +159,7 @@ makeChoices seed config prompt =
     configuredIntervals = case config.intervalSystem of
       ExactIntervals -> config.intervals
       FromSelectedNotes ->
-        Array.nub (map _.interval (derivedCandidates config (availableIntervalSizes config)))
+        Array.nub (map _.interval (derivedCandidates config config.availableIntervals))
     distractorPool =
       Array.nubBy compareSound
         (Array.filter (not <<< sameSound prompt.interval) configuredIntervals)

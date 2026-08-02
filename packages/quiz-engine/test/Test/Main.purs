@@ -132,6 +132,10 @@ main = do
       }
     collectionPrompts = map (flip makePrompt collectionConfig) (Array.range 0 80)
     collectionChoices = makeChoices 24 collectionConfig (makePrompt 24 collectionConfig)
+    allCollectionChoices =
+      makeChoices 24
+        (collectionConfig { answerCount = AllSelected })
+        (makePrompt 24 collectionConfig)
     descendingCollectionConfig = collectionConfig { playbackModes = [ MelodicDescending ] }
     descendingCollectionPrompts = map (flip makePrompt descendingCollectionConfig) (Array.range 0 40)
     pitchClassOf (Pitch pitchClass _) = pitchClass
@@ -261,11 +265,12 @@ main = do
   assertEqual
     { actual:
         [ Array.all (\prompt -> midiNumber prompt.target < midiNumber prompt.root) descendingCollectionPrompts
-        , Array.length collectionChoices == 4
+        , Array.length collectionChoices == 2
         , Array.length
             (Array.filter (\choice -> choice.interval == (makePrompt 24 collectionConfig).interval) collectionChoices) == 1
+        , Array.all (\choice -> intervalNumber choice.interval == 3) allCollectionChoices
         ]
-    , expected: [ true, true, true ]
+    , expected: [ true, true, true, true ]
     }
   assertEqual
     { actual:
