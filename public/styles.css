@@ -398,6 +398,7 @@ button:active:not(:disabled) {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  background: #faf7f0;
 }
 
 .setup-heading h2 {
@@ -414,6 +415,7 @@ button:active:not(:disabled) {
   padding: clamp(1.25rem, 4vw, 2.25rem);
   border: 0;
   border-bottom: 1px solid var(--line);
+  background: #faf7f0;
 }
 
 .setting-group:last-of-type {
