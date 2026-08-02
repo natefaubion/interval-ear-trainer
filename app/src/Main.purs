@@ -209,14 +209,12 @@ component =
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "setup-footer") ]
-          [ HH.p
-              [ HP.class_ (H.ClassName "setup-message") ]
-              [ HH.text
-                  if isValid state.config then
-                    "Ready to begin."
-                  else
-                    "Select at least one playback mode, interval, and root note."
-              ]
+          [ if isValid state.config then
+              HH.text ""
+            else
+              HH.p
+                [ HP.class_ (H.ClassName "setup-message") ]
+                [ HH.text "Select at least one playback mode, interval, and root note." ]
           , HH.button
               [ HP.type_ HP.ButtonButton
               , HP.class_ (H.ClassName "primary-button")
