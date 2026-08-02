@@ -306,13 +306,13 @@ rootComponent =
               "Interval system"
               "Choose exact interval qualities or derive their qualities from the selected notes."
               [ rootChoiceButton
-                  (state.config.intervalSystem == ExactIntervals)
-                  (RootSelectIntervalSystem ExactIntervals)
-                  "Exact intervals"
-              , rootChoiceButton
                   (state.config.intervalSystem == FromSelectedNotes)
                   (RootSelectIntervalSystem FromSelectedNotes)
                   "From selected notes"
+              , rootChoiceButton
+                  (state.config.intervalSystem == ExactIntervals)
+                  (RootSelectIntervalSystem ExactIntervals)
+                  "Exact intervals"
               ]
               Nothing
           , let

@@ -156,8 +156,9 @@ encodeIntervalSystem ExactIntervals = "exact"
 encodeIntervalSystem FromSelectedNotes = "from-selected-notes"
 
 decodeIntervalSystem :: String -> IntervalSystem
+decodeIntervalSystem "exact" = ExactIntervals
 decodeIntervalSystem "from-selected-notes" = FromSelectedNotes
-decodeIntervalSystem _ = ExactIntervals
+decodeIntervalSystem _ = FromSelectedNotes
 
 encodeIntervalSize :: IntervalSize -> String
 encodeIntervalSize SizeUnison = "unison"

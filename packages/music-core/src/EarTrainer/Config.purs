@@ -95,7 +95,7 @@ defaultConfig =
   , customRange: { low: pitch C (Accidental 0) 3, high: pitch G (Accidental 0) 5 }
   , ghostMode: GhostOn
   , intervals: defaultIntervals
-  , intervalSystem: ExactIntervals
+  , intervalSystem: FromSelectedNotes
   , octavePolicy: AnyOctave
   , playbackModes: [ MelodicAscending ]
   , showPitchTuner: true

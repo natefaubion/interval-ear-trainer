@@ -113,7 +113,10 @@ main = do
       )
       initialRecognition
       (Array.replicate stableSamples unit)
-    descendingConfig = defaultConfig { playbackModes = [ MelodicDescending ] }
+    descendingConfig = defaultConfig
+      { intervalSystem = ExactIntervals
+      , playbackModes = [ MelodicDescending ]
+      }
     generatedPrompt = makePrompt 128 descendingConfig
     generatedChoices = makeChoices 128 descendingConfig generatedPrompt
     allAnswersConfig = descendingConfig { answerCount = AllSelected }
