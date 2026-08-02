@@ -133,6 +133,13 @@ button {
   line-height: 1.5;
 }
 
+.notation-panel .completed-interval-name {
+  margin-top: 0.5rem;
+  color: #174b2d;
+  font-size: 1.1rem;
+  font-weight: 750;
+}
+
 .pitch-feedback {
   display: inline-flex;
   align-items: center;

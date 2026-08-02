@@ -297,6 +297,12 @@ component =
                   , HP.class_ (H.ClassName "notation-canvas")
                   ]
                   []
+              , if state.config.quizMode == SingingOnly && state.captureStatus == AnswerComplete then
+                  HH.p
+                    [ HP.class_ (H.ClassName "completed-interval-name") ]
+                    [ HH.text (intervalName state.prompt.interval) ]
+                else
+                  HH.text ""
               , renderPitchMeter state
               , renderIntervalChoices state
               ]
