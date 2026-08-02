@@ -141,11 +141,7 @@ component =
   render :: State -> H.ComponentHTML Action () m
   render state =
     HH.main
-      [ HP.classes
-          ( [ H.ClassName "app-shell" ]
-              <> if state.screen == Practice then [ H.ClassName "practice-shell" ] else []
-          )
-      ]
+      [ HP.class_ (H.ClassName "app-shell") ]
       [ if state.screen == Setup then renderSetup state else renderPractice state ]
 
   renderSetup state =
@@ -157,65 +153,68 @@ component =
           , HH.p_
               [ HH.text "Select at least one option in each group." ]
           ]
-      , settingGroup
-          "Playback"
-          "How the interval is played before the microphone begins listening."
-          (map (modeButton state.config) allPlaybackModes)
-      , settingGroup
-          "Intervals"
-          "Choose the intervals that may appear in an exercise."
-          (map (intervalButton state.config) allIntervals)
-      , settingGroup
-          "Singing range"
-          "Choose the written and playback register."
-          (map (rangeButton state.config) allVocalRangePresets)
-      , settingGroup
-          "Root notes"
-          "Choose the individual pitch classes that may begin an exercise."
-          (map (rootButton state.config) allRootPitchClasses)
-      , settingGroup
-          "Octave matching"
-          "Choose whether the detected pitch must be in the written octave."
-          [ choiceButton
-              (state.config.octavePolicy == AnyOctave)
-              (SelectOctavePolicy AnyOctave)
-              "Any comfortable octave"
-          , choiceButton
-              (state.config.octavePolicy == WrittenOctave)
-              (SelectOctavePolicy WrittenOctave)
-              "Written octave only"
-          ]
-      , settingGroup
-          "Ghost note"
-          "The ghost note shows the pitch you are currently singing on the staff."
-          [ choiceButton (state.config.ghostMode == GhostOff) (SelectGhostMode GhostOff) "Hidden"
-          , choiceButton (state.config.ghostMode == GhostOn) (SelectGhostMode GhostOn) "Shown briefly"
-          , choiceButton (state.config.ghostMode == GhostPersist) (SelectGhostMode GhostPersist) "Kept visible"
-          ]
-      , settingGroup
-          "Available answers"
-          "Choose how many interval choices are shown for each question."
-          [ choiceButton (state.config.answerCount == AFew) (SelectAnswerCount AFew) "A few"
-          , choiceButton
-              (state.config.answerCount == AllSelected)
-              (SelectAnswerCount AllSelected)
-              "All selected choices"
-          ]
-      , settingGroup
-          "Answer display"
-          "Choose how interval answers are presented."
-          [ choiceButton
-              (state.config.answerDisplay == AnswerNotation)
-              (SelectAnswerDisplay AnswerNotation)
-              "Notation"
-          , choiceButton
-              (state.config.answerDisplay == AnswerName)
-              (SelectAnswerDisplay AnswerName)
-              "Interval name"
-          , choiceButton
-              (state.config.answerDisplay == AnswerBoth)
-              (SelectAnswerDisplay AnswerBoth)
-              "Both"
+      , HH.div
+          [ HP.class_ (H.ClassName "setup-content") ]
+          [ settingGroup
+              "Playback"
+              "How the interval is played before the microphone begins listening."
+              (map (modeButton state.config) allPlaybackModes)
+          , settingGroup
+              "Intervals"
+              "Choose the intervals that may appear in an exercise."
+              (map (intervalButton state.config) allIntervals)
+          , settingGroup
+              "Singing range"
+              "Choose the written and playback register."
+              (map (rangeButton state.config) allVocalRangePresets)
+          , settingGroup
+              "Root notes"
+              "Choose the individual pitch classes that may begin an exercise."
+              (map (rootButton state.config) allRootPitchClasses)
+          , settingGroup
+              "Octave matching"
+              "Choose whether the detected pitch must be in the written octave."
+              [ choiceButton
+                  (state.config.octavePolicy == AnyOctave)
+                  (SelectOctavePolicy AnyOctave)
+                  "Any comfortable octave"
+              , choiceButton
+                  (state.config.octavePolicy == WrittenOctave)
+                  (SelectOctavePolicy WrittenOctave)
+                  "Written octave only"
+              ]
+          , settingGroup
+              "Ghost note"
+              "The ghost note shows the pitch you are currently singing on the staff."
+              [ choiceButton (state.config.ghostMode == GhostOff) (SelectGhostMode GhostOff) "Hidden"
+              , choiceButton (state.config.ghostMode == GhostOn) (SelectGhostMode GhostOn) "Shown briefly"
+              , choiceButton (state.config.ghostMode == GhostPersist) (SelectGhostMode GhostPersist) "Kept visible"
+              ]
+          , settingGroup
+              "Available answers"
+              "Choose how many interval choices are shown for each question."
+              [ choiceButton (state.config.answerCount == AFew) (SelectAnswerCount AFew) "A few"
+              , choiceButton
+                  (state.config.answerCount == AllSelected)
+                  (SelectAnswerCount AllSelected)
+                  "All selected choices"
+              ]
+          , settingGroup
+              "Answer display"
+              "Choose how interval answers are presented."
+              [ choiceButton
+                  (state.config.answerDisplay == AnswerNotation)
+                  (SelectAnswerDisplay AnswerNotation)
+                  "Notation"
+              , choiceButton
+                  (state.config.answerDisplay == AnswerName)
+                  (SelectAnswerDisplay AnswerName)
+                  "Interval name"
+              , choiceButton
+                  (state.config.answerDisplay == AnswerBoth)
+                  (SelectAnswerDisplay AnswerBoth)
+                  "Both"
+              ]
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "setup-footer") ]

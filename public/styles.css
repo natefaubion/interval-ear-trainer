@@ -30,17 +30,17 @@ button {
 
 .app-shell {
   width: min(100% - 2rem, 64rem);
-  margin-inline: auto;
-  padding-block: clamp(2rem, 8vw, 6rem);
-}
-
-.app-shell.practice-shell {
   height: 100dvh;
+  margin-inline: auto;
   padding-block: clamp(0.75rem, 2vw, 1.5rem);
 }
 
 .setup-card {
+  display: grid;
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   margin-top: 0;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 1.25rem;
   background: rgb(255 255 255 / 72%);
@@ -338,6 +338,13 @@ button {
   align-items: end;
   padding: clamp(1.25rem, 4vw, 2.25rem);
   border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.setup-content {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .setup-heading h2 {
@@ -416,6 +423,8 @@ button {
   align-items: center;
   gap: 1rem;
   padding: clamp(1.25rem, 4vw, 2.25rem);
+  border-top: 1px solid var(--line);
+  background: var(--paper);
 }
 
 .setup-message {
