@@ -633,6 +633,8 @@ component =
         , screen = Practice
         }
       renderPromptNotation prompt false
+      when (state.config.quizProgression == AutomaticProgression) do
+        handleAction PlayPrompt
     PlayPrompt -> do
       state <- H.get
       stopMonitor state.monitor
