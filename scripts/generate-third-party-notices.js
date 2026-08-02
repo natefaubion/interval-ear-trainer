@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const projectRoot = new URL("../", import.meta.url).pathname;
 const outputPath = join(projectRoot, "public", "third-party-notices.html");
+const deployedLicensePath = join(projectRoot, "public", "LICENSE.txt");
 const checkOnly = process.argv.includes("--check");
 
 const escapeHtml = (value) =>
@@ -148,15 +149,22 @@ const html = `<!doctype html>
   </body>
 </html>
 `;
+const projectLicense = readFileSync(join(projectRoot, "LICENSE"), "utf8");
 
 if (checkOnly) {
-  if (!existsSync(outputPath) || readFileSync(outputPath, "utf8") !== html) {
-    console.error("Third-party notices are out of date. Run `npm run licenses`.");
+  if (
+    !existsSync(outputPath)
+    || readFileSync(outputPath, "utf8") !== html
+    || !existsSync(deployedLicensePath)
+    || readFileSync(deployedLicensePath, "utf8") !== projectLicense
+  ) {
+    console.error("Deployed license notices are out of date. Run `npm run licenses`.");
     process.exitCode = 1;
   } else {
-    console.log("Third-party notices are current.");
+    console.log("Deployed license notices are current.");
   }
 } else {
   writeFileSync(outputPath, html);
-  console.log(`Wrote ${outputPath}`);
+  writeFileSync(deployedLicensePath, projectLicense);
+  console.log(`Wrote ${outputPath} and ${deployedLicensePath}`);
 }

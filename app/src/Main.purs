@@ -431,6 +431,11 @@ rootComponent =
               [ HP.class_ (H.ClassName "credits-section") ]
               [ HH.h3_ [ HH.text "Credits" ]
               , HH.p_
+                  [ HH.text "Original application code: "
+                  , HH.a [ HP.href "LICENSE.txt" ] [ HH.text "GPL version 3 or later" ]
+                  , HH.text "."
+                  ]
+              , HH.p_
                   [ HH.text "Piano samples: "
                   , HH.a
                       [ HP.href "https://archive.org/details/SalamanderGrandPianoV3"
