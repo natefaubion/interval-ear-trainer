@@ -27,7 +27,7 @@ The production site is an installable Progressive Web App. After the first compl
 - On iPhone or iPad, open the deployed site, use the Share menu, and choose **Add to Home Screen**.
 - On Android or desktop Chromium browsers, use the browser's **Install** action when available.
 
-Microphone access must still be granted on each browser or installed-app environment. Application updates are downloaded in the background and take effect after all open instances of the previous version have been closed.
+Microphone access must still be granted on each browser or installed-app environment. Application updates are downloaded in the background and are used the next time the application is opened or refreshed.
 
 ## Commands
 
