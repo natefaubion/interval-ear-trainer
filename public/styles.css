@@ -215,7 +215,7 @@ h1 {
 }
 
 .interval-answer:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: #587a70;
 }
 
 .interval-answer.answer-correct,
