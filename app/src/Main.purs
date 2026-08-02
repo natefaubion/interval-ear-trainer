@@ -431,7 +431,7 @@ component =
   practiceInstruction state = case state.captureStatus of
     ReadyToPlay ->
       "Listen to the interval, then sing."
-    PlayingAudio -> "Listen carefully. Microphone capture remains off during playback."
+    PlayingAudio -> "Listen carefully."
     Listening -> Detection.phaseInstruction state.recognition.phase
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
