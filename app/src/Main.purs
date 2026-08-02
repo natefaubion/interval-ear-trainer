@@ -945,7 +945,7 @@ component =
               , HP.class_ (H.ClassName "secondary-button")
               , HE.onClick \_ -> EditSetup
               ]
-              [ HH.text "Back to setup" ]
+              [ HH.text "Setup" ]
           ]
       , HH.div
           [ HP.ref practiceContentRef
