@@ -14,6 +14,7 @@ import EarTrainer.Config
   , ExerciseConfig
   , GhostMode(..)
   , QuizMode(..)
+  , QuizProgression(..)
   , defaultConfig
   , isValid
   , quizModeUsesRecognition
@@ -76,6 +77,7 @@ derive instance Eq CaptureStatus
 
 type State =
   { answerCorrect :: Boolean
+  , automaticAdvancePending :: Boolean
   , captureStatus :: CaptureStatus
   , choices :: Array Quiz.IntervalChoice
   , config :: ExerciseConfig
@@ -83,6 +85,7 @@ type State =
   , ghostRevision :: Int
   , monitor :: Maybe Detection.Monitor
   , prompt :: Quiz.Prompt
+  , promptRevision :: Int
   , recognition :: Detection.Recognition
   , revealedChoices :: Array Interval
   , resumeAnswersAfterPlayback :: Boolean
@@ -105,6 +108,7 @@ data Action
   | SelectAnswerCount AnswerCount
   | SelectAnswerDisplay AnswerDisplay
   | SelectQuizMode QuizMode
+  | SelectQuizProgression QuizProgression
   | BeginPractice
   | PlayPrompt
   | PlaybackStarted
@@ -116,6 +120,7 @@ data Action
   | MicrophoneFailed String
   | ChooseInterval Interval
   | NextPrompt
+  | AdvanceAutomatically Int
   | EditSetup
 
 notationRef :: H.RefLabel
@@ -134,6 +139,7 @@ component =
   where
   initialState =
     { answerCorrect: false
+    , automaticAdvancePending: false
     , captureStatus: ReadyToPlay
     , choices: Quiz.makeChoices 0 defaultConfig (Quiz.makePrompt 0 defaultConfig)
     , config: defaultConfig
@@ -141,6 +147,7 @@ component =
     , ghostRevision: 0
     , monitor: Nothing
     , prompt: Quiz.makePrompt 0 defaultConfig
+    , promptRevision: 0
     , recognition: Detection.initialRecognition
     , revealedChoices: []
     , resumeAnswersAfterPlayback: false
@@ -171,6 +178,19 @@ component =
                   (state.config.quizMode == SingingAndRecognition)
                   (SelectQuizMode SingingAndRecognition)
                   "Singing and recognition"
+              ]
+              Nothing
+          , settingGroup
+              "Quiz progression"
+              "Choose how the next interval begins after a correct answer."
+              [ choiceButton
+                  (state.config.quizProgression == ManualProgression)
+                  (SelectQuizProgression ManualProgression)
+                  "Manual"
+              , choiceButton
+                  (state.config.quizProgression == AutomaticProgression)
+                  (SelectQuizProgression AutomaticProgression)
+                  "Automatic"
               ]
               Nothing
           , settingGroup
@@ -422,7 +442,8 @@ component =
     if state.captureStatus == AnswerComplete then NextPrompt else PlayPrompt
 
   footerButtonDisabled state =
-    state.captureStatus == PlayingAudio
+    state.automaticAdvancePending
+      || state.captureStatus == PlayingAudio
       || (state.captureStatus == Listening && state.recognition.phase == Detection.RecognitionComplete)
 
   footerButtonLabel state
@@ -585,6 +606,8 @@ component =
       updateConfig (_ { answerDisplay = display })
     SelectQuizMode mode ->
       updateConfig (_ { quizMode = mode })
+    SelectQuizProgression progression ->
+      updateConfig (_ { quizProgression = progression })
     BeginPractice -> do
       state <- H.get
       seed <- H.liftEffect (randomInt 0 2147483647)
@@ -596,11 +619,13 @@ component =
         choices = Quiz.makeChoices seed state.config prompt
       H.modify_ _
         { answerCorrect = false
+        , automaticAdvancePending = false
         , captureStatus = ReadyToPlay
         , choices = choices
         , ghostMidi = Nothing
         , ghostRevision = state.ghostRevision + 1
         , prompt = prompt
+        , promptRevision = state.promptRevision + 1
         , recognition = Detection.initialRecognition
         , revealedChoices = []
         , resumeAnswersAfterPlayback = false
@@ -615,7 +640,8 @@ component =
         Nothing -> pure unit
         Just sampler -> do
           H.modify_ _
-            { captureStatus = PlayingAudio
+            { automaticAdvancePending = false
+            , captureStatus = PlayingAudio
             , ghostMidi = Nothing
             , ghostRevision = state.ghostRevision + 1
             , monitor = Nothing
@@ -730,6 +756,7 @@ component =
           if not (quizModeUsesRecognition state.config.quizMode) then do
             H.modify_ _ { captureStatus = AnswerComplete, ghostMidi = Nothing }
             renderCompletedNotation state.prompt
+            scheduleAutomaticAdvance state
           else do
             H.modify_ _
               { captureStatus = ChoosingAnswer
@@ -756,6 +783,7 @@ component =
           , captureStatus = if correct then AnswerComplete else ChoosingAnswer
           , revealedChoices = revealed
           }
+        when correct (scheduleAutomaticAdvance state)
     NextPrompt -> do
       state <- H.get
       seed <- H.liftEffect (randomInt 0 2147483647)
@@ -764,16 +792,29 @@ component =
         choices = Quiz.makeChoices seed state.config prompt
       H.modify_ _
         { answerCorrect = false
+        , automaticAdvancePending = false
         , captureStatus = ReadyToPlay
         , choices = choices
         , ghostMidi = Nothing
         , ghostRevision = state.ghostRevision + 1
         , prompt = prompt
+        , promptRevision = state.promptRevision + 1
         , recognition = Detection.initialRecognition
         , revealedChoices = []
         , resumeAnswersAfterPlayback = false
         }
       renderPromptNotation prompt false
+    AdvanceAutomatically revision -> do
+      state <- H.get
+      when
+        ( state.screen == Practice
+            && state.automaticAdvancePending
+            && state.promptRevision == revision
+            && state.captureStatus == AnswerComplete
+        )
+        do
+          handleAction NextPrompt
+          handleAction PlayPrompt
     EditSetup -> do
       state <- H.get
       stopMonitor state.monitor
@@ -781,7 +822,8 @@ component =
         Nothing -> pure unit
         Just sampler -> H.liftEffect (Audio.stop sampler)
       H.modify_ _
-        { captureStatus = ReadyToPlay
+        { automaticAdvancePending = false
+        , captureStatus = ReadyToPlay
         , ghostMidi = Nothing
         , ghostRevision = state.ghostRevision + 1
         , monitor = Nothing
@@ -796,6 +838,17 @@ component =
     H.modify_ \state -> state { config = update state.config }
     state <- H.get
     H.liftEffect (Settings.save state.config)
+
+  scheduleAutomaticAdvance state =
+    when (state.config.quizProgression == AutomaticProgression) do
+      H.modify_ _ { automaticAdvancePending = true }
+      void $ H.fork do
+        let
+          waitMilliseconds =
+            if state.config.quizMode == SingingOnly then 1200.0
+            else Audio.playbackDurationMilliseconds state.prompt.mode + 500.0
+        H.liftAff (delay (Milliseconds waitMilliseconds))
+        handleAction (AdvanceAutomatically state.promptRevision)
 
   renderPromptNotation prompt rootAccepted = do
     maybeElement <- H.getHTMLElementRef notationRef

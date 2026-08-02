@@ -4,6 +4,7 @@ module EarTrainer.Config
   , ExerciseConfig
   , GhostMode(..)
   , QuizMode(..)
+  , QuizProgression(..)
   , defaultConfig
   , isValid
   , quizModeUsesRecognition
@@ -43,6 +44,10 @@ data QuizMode = SingingOnly | RecognitionOnly | SingingAndRecognition
 
 derive instance Eq QuizMode
 
+data QuizProgression = ManualProgression | AutomaticProgression
+
+derive instance Eq QuizProgression
+
 quizModeUsesSinging :: QuizMode -> Boolean
 quizModeUsesSinging RecognitionOnly = false
 quizModeUsesSinging _ = true
@@ -59,6 +64,7 @@ type ExerciseConfig =
   , octavePolicy :: OctavePolicy
   , playbackModes :: Array PlaybackMode
   , quizMode :: QuizMode
+  , quizProgression :: QuizProgression
   , rootPitchClasses :: Array PitchClass
   , vocalRange :: VocalRangePreset
   }
@@ -72,6 +78,7 @@ defaultConfig =
   , octavePolicy: AnyOctave
   , playbackModes: allPlaybackModes
   , quizMode: SingingAndRecognition
+  , quizProgression: ManualProgression
   , rootPitchClasses: defaultRootPitchClasses
   , vocalRange: Tenor
   }

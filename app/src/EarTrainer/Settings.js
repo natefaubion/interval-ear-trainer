@@ -28,6 +28,7 @@ export const loadImpl = (just) => (nothing) => () => {
           answerDisplay: typeof value.answerDisplay === "string" ? value.answerDisplay : "notation",
           ghostMode: typeof value.ghostMode === "string" ? value.ghostMode : "on",
           quizMode: typeof value.quizMode === "string" ? value.quizMode : "singing-and-recognition",
+          quizProgression: typeof value.quizProgression === "string" ? value.quizProgression : "manual",
         })
       : nothing;
   } catch {

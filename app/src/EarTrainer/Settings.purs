@@ -7,7 +7,15 @@ import Prelude
 
 import Data.Array as Array
 import Data.Maybe (Maybe(..))
-import EarTrainer.Config (AnswerCount(..), AnswerDisplay(..), ExerciseConfig, GhostMode(..), QuizMode(..), defaultConfig)
+import EarTrainer.Config
+  ( AnswerCount(..)
+  , AnswerDisplay(..)
+  , ExerciseConfig
+  , GhostMode(..)
+  , QuizMode(..)
+  , QuizProgression(..)
+  , defaultConfig
+  )
 import EarTrainer.Music
   ( Accidental(..)
   , Interval(..)
@@ -32,6 +40,7 @@ type StoredSettings =
   , octavePolicy :: String
   , playbackModes :: Array String
   , quizMode :: String
+  , quizProgression :: String
   , rootPitchClasses :: Array StoredPitchClass
   , vocalRange :: String
   }
@@ -57,6 +66,7 @@ load = do
         , octavePolicy = decodeOctavePolicy value.octavePolicy
         , playbackModes = Array.mapMaybe decodePlaybackMode value.playbackModes
         , quizMode = decodeQuizMode value.quizMode
+        , quizProgression = decodeQuizProgression value.quizProgression
         , rootPitchClasses = map decodePitchClass value.rootPitchClasses
         , vocalRange = decodeVocalRange value.vocalRange
         }
@@ -70,6 +80,7 @@ save config = saveImpl
   , octavePolicy: encodeOctavePolicy config.octavePolicy
   , playbackModes: map encodePlaybackMode config.playbackModes
   , quizMode: encodeQuizMode config.quizMode
+  , quizProgression: encodeQuizProgression config.quizProgression
   , rootPitchClasses: map encodePitchClass config.rootPitchClasses
   , vocalRange: encodeVocalRange config.vocalRange
   }
@@ -83,6 +94,14 @@ decodeQuizMode :: String -> QuizMode
 decodeQuizMode "singing" = SingingOnly
 decodeQuizMode "recognition" = RecognitionOnly
 decodeQuizMode _ = SingingAndRecognition
+
+encodeQuizProgression :: QuizProgression -> String
+encodeQuizProgression ManualProgression = "manual"
+encodeQuizProgression AutomaticProgression = "automatic"
+
+decodeQuizProgression :: String -> QuizProgression
+decodeQuizProgression "automatic" = AutomaticProgression
+decodeQuizProgression _ = ManualProgression
 
 encodeAnswerCount :: AnswerCount -> String
 encodeAnswerCount AFew = "few"

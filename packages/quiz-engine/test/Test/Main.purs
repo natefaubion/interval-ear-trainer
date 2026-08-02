@@ -8,6 +8,7 @@ import Data.Maybe (Maybe(..))
 import EarTrainer.Config
   ( AnswerCount(..)
   , QuizMode(..)
+  , QuizProgression(..)
   , defaultConfig
   , isValid
   , quizModeUsesRecognition
@@ -209,6 +210,10 @@ main = do
         , quizModeUsesRecognition SingingAndRecognition
         ]
     , expected: [ true, false, false, true, true, true ]
+    }
+  assertEqual
+    { actual: defaultConfig.quizProgression == ManualProgression
+    , expected: true
     }
   assertEqual
     { actual: transpose Ascending MinorThird (pitch D (Accidental (-1)) 4)
