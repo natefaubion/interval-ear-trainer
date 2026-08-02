@@ -75,10 +75,19 @@ button {
 }
 
 .practice-toolbar h2 {
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   font-family: Georgia, serif;
   font-size: clamp(1.65rem, 4vw, 2.35rem);
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.practice-toolbar .text-button,
+.practice-actions .play-button {
+  flex: none;
 }
 
 .text-button {
@@ -320,6 +329,13 @@ button {
   background: var(--paper);
 }
 
+.practice-actions p {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .play-button {
   display: inline-flex;
   gap: 0.55rem;
@@ -481,11 +497,10 @@ button {
 
   .practice-toolbar,
   .practice-actions {
-    align-items: stretch;
-    flex-direction: column;
+    padding: 0.9rem;
   }
 
-  .practice-toolbar .text-button {
-    align-self: flex-start;
+  .practice-toolbar h2 {
+    font-size: 1.25rem;
   }
 }
