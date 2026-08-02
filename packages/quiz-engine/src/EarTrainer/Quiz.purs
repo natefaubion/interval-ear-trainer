@@ -13,7 +13,7 @@ import Prelude
 import Data.Array as Array
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Ord (abs)
-import EarTrainer.Config (AnswerCount(..), ExerciseConfig)
+import EarTrainer.Config (AnswerCount(..), ExerciseConfig, QuizMode(..))
 import EarTrainer.Music
   ( Accidental(..)
   , Direction(..)
@@ -52,7 +52,7 @@ makePrompt seed config =
   let
     interval = pick MinorThird seed config.intervals
     mode = pick MelodicAscending (seed `div` 7) config.playbackModes
-    direction = directionFor mode
+    direction = if config.quizMode == Audiation then Ascending else directionFor mode
     range = presetRange config.vocalRange
     Pitch _ lowOctave = range.low
     Pitch _ highOctave = range.high

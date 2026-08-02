@@ -40,7 +40,7 @@ data AnswerCount = AFew | AllSelected
 
 derive instance Eq AnswerCount
 
-data QuizMode = SingingOnly | RecognitionOnly | SingingAndRecognition
+data QuizMode = SingingOnly | RecognitionOnly | SingingAndRecognition | Audiation
 
 derive instance Eq QuizMode
 
@@ -54,6 +54,7 @@ quizModeUsesSinging _ = true
 
 quizModeUsesRecognition :: QuizMode -> Boolean
 quizModeUsesRecognition SingingOnly = false
+quizModeUsesRecognition Audiation = false
 quizModeUsesRecognition _ = true
 
 type ExerciseConfig =
@@ -100,5 +101,5 @@ toggleRootPitchClass pitchClass config = config { rootPitchClasses = toggleMembe
 isValid :: ExerciseConfig -> Boolean
 isValid config =
   not (Array.null config.intervals)
-    && not (Array.null config.playbackModes)
+    && (config.quizMode == Audiation || not (Array.null config.playbackModes))
     && not (Array.null config.rootPitchClasses)

@@ -178,6 +178,7 @@ component =
                   (state.config.quizMode == SingingAndRecognition)
                   (SelectQuizMode SingingAndRecognition)
                   "Singing and recognition"
+              , choiceButton (state.config.quizMode == Audiation) (SelectQuizMode Audiation) "Audiation"
               ]
               Nothing
           , settingGroup
@@ -193,11 +194,13 @@ component =
                   "Automatic"
               ]
               Nothing
-          , settingGroup
-              "Playback"
-              "How the interval is played before the microphone begins listening."
-              (map (modeButton state.config) allPlaybackModes)
-              (if Array.null state.config.playbackModes then Just "Select at least one playback mode." else Nothing)
+          , if state.config.quizMode == Audiation then HH.text ""
+            else
+              settingGroup
+                "Playback"
+                "How the interval is played before the microphone begins listening."
+                (map (modeButton state.config) allPlaybackModes)
+                (if Array.null state.config.playbackModes then Just "Select at least one playback mode." else Nothing)
           , settingGroup
               "Intervals"
               "Choose the intervals that may appear in an exercise."
@@ -250,7 +253,7 @@ component =
               , choiceButton (state.config.ghostMode == GhostPersist) (SelectGhostMode GhostPersist) "Kept visible"
               ]
               Nothing
-          , if state.config.quizMode == SingingOnly then HH.text ""
+          , if not (quizModeUsesRecognition state.config.quizMode) then HH.text ""
             else
               settingGroup
                 "Available answers"
@@ -262,7 +265,7 @@ component =
                     "All selected choices"
                 ]
                 Nothing
-          , if state.config.quizMode == SingingOnly then HH.text ""
+          , if not (quizModeUsesRecognition state.config.quizMode) then HH.text ""
             else
               settingGroup
                 "Answer display"
@@ -317,7 +320,7 @@ component =
                   , HP.class_ (H.ClassName "notation-canvas")
                   ]
                   []
-              , if state.config.quizMode == SingingOnly && state.captureStatus == AnswerComplete then
+              , if shouldShowIntervalName state then
                   HH.p
                     [ HP.class_ (H.ClassName "completed-interval-name") ]
                     [ HH.text (intervalName state.prompt.interval) ]
@@ -374,7 +377,7 @@ component =
           ]
 
   renderIntervalChoices state
-    | state.config.quizMode == SingingOnly = HH.text ""
+    | not (quizModeUsesRecognition state.config.quizMode) = HH.text ""
     | state.captureStatus /= ChoosingAnswer
         && state.captureStatus /= AnswerComplete
         && not (state.captureStatus == PlayingAudio && state.resumeAnswersAfterPlayback) = HH.text ""
@@ -450,6 +453,7 @@ component =
     | state.captureStatus == PlayingAudio = "Playing…"
     | state.captureStatus == AnswerComplete = "Next interval"
     | state.captureStatus == Listening && state.recognition.phase == Detection.RecognitionComplete = "Next interval"
+    | state.config.quizMode == Audiation = "Play root"
     | otherwise = "Play interval"
 
   footerButtonIcon state
@@ -536,7 +540,9 @@ component =
 
   practiceInstruction state = case state.captureStatus of
     ReadyToPlay ->
-      if quizModeUsesSinging state.config.quizMode then
+      if state.config.quizMode == Audiation then
+        "Listen to the root, then sing the interval."
+      else if quizModeUsesSinging state.config.quizMode then
         "Listen to the interval, then sing."
       else
         "Listen to the interval, then choose."
@@ -569,6 +575,11 @@ component =
   quizModeTitle SingingOnly = "Singing"
   quizModeTitle RecognitionOnly = "Recognition"
   quizModeTitle SingingAndRecognition = "Singing & Recognition"
+  quizModeTitle Audiation = "Audiation"
+
+  shouldShowIntervalName state =
+    state.config.quizMode == Audiation
+      || (state.config.quizMode == SingingOnly && state.captureStatus == AnswerComplete)
 
   feedbackInRange feedback =
     feedback.clarity >= Detection.defaultRecognitionSettings.clarityThreshold
@@ -654,14 +665,23 @@ component =
             (state.captureStatus == ChoosingAnswer && quizModeUsesSinging state.config.quizMode)
           { emitter, listener } <- H.liftEffect HS.create
           void (H.subscribe emitter)
-          H.liftEffect $ Audio.playInterval sampler state.prompt.mode state.prompt.root state.prompt.target
-            (HS.notify listener PlaybackStarted)
-            (HS.notify listener <<< AudioFailed)
+          if state.config.quizMode == Audiation then
+            H.liftEffect $ Audio.playRoot sampler state.prompt.root
+              (HS.notify listener PlaybackStarted)
+              (HS.notify listener <<< AudioFailed)
+          else
+            H.liftEffect $ Audio.playInterval sampler state.prompt.mode state.prompt.root state.prompt.target
+              (HS.notify listener PlaybackStarted)
+              (HS.notify listener <<< AudioFailed)
     PlaybackStarted -> do
       state <- H.get
       when (state.screen == Practice && state.captureStatus == PlayingAudio) do
         void $ H.fork do
-          H.liftAff (delay (Milliseconds (Audio.playbackDurationMilliseconds state.prompt.mode + 350.0)))
+          let
+            playbackMilliseconds =
+              if state.config.quizMode == Audiation then Audio.rootPlaybackDurationMilliseconds
+              else Audio.playbackDurationMilliseconds state.prompt.mode
+          H.liftAff (delay (Milliseconds (playbackMilliseconds + 350.0)))
           handleAction StartListening
     AudioFailed message ->
       H.modify_ _ { captureStatus = PlaybackFailed message }
@@ -847,7 +867,7 @@ component =
       void $ H.fork do
         let
           waitMilliseconds =
-            if state.config.quizMode == SingingOnly then 1200.0
+            if not (quizModeUsesRecognition state.config.quizMode) then 1200.0
             else Audio.playbackDurationMilliseconds state.prompt.mode + 500.0
         H.liftAff (delay (Milliseconds waitMilliseconds))
         handleAction (AdvanceAutomatically state.promptRevision)

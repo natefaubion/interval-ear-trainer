@@ -101,6 +101,8 @@ main = do
     allAnswersConfig = descendingConfig { answerCount = AllSelected }
     allSelectedChoices = makeChoices 128 allAnswersConfig generatedPrompt
     generatedRange = presetRange descendingConfig.vocalRange
+    audiationConfig = descendingConfig { quizMode = Audiation }
+    audiationPrompt = makePrompt 128 audiationConfig
   assertEqual
     { actual: nearestMidi 440.0
     , expected: 69
@@ -208,11 +210,17 @@ main = do
         , quizModeUsesRecognition RecognitionOnly
         , quizModeUsesSinging SingingAndRecognition
         , quizModeUsesRecognition SingingAndRecognition
+        , quizModeUsesSinging Audiation
+        , quizModeUsesRecognition Audiation
         ]
-    , expected: [ true, false, false, true, true, true ]
+    , expected: [ true, false, false, true, true, true, true, false ]
     }
   assertEqual
     { actual: defaultConfig.quizProgression == ManualProgression
+    , expected: true
+    }
+  assertEqual
+    { actual: midiNumber audiationPrompt.target > midiNumber audiationPrompt.root
     , expected: true
     }
   assertEqual

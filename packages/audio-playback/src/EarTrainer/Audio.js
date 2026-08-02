@@ -83,4 +83,20 @@ export const playIntervalImpl = (sampler) => (rootMidi) => (targetMidi) => (mode
   })();
 };
 
+export const playRootImpl = (sampler) => (rootMidi) => (onStarted) => (onError) => () => {
+  void (async () => {
+    try {
+      await Tone.start();
+      await samplerReady.get(sampler);
+
+      sampler.releaseAll();
+      sampler.triggerAttackRelease(midiNote(rootMidi), 0.9, Tone.now() + 0.05);
+      onStarted();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      onError(message)();
+    }
+  })();
+};
+
 export const stop = (sampler) => () => sampler.releaseAll();

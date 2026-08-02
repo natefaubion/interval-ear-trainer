@@ -89,10 +89,12 @@ encodeQuizMode :: QuizMode -> String
 encodeQuizMode SingingOnly = "singing"
 encodeQuizMode RecognitionOnly = "recognition"
 encodeQuizMode SingingAndRecognition = "singing-and-recognition"
+encodeQuizMode Audiation = "audiation"
 
 decodeQuizMode :: String -> QuizMode
 decodeQuizMode "singing" = SingingOnly
 decodeQuizMode "recognition" = RecognitionOnly
+decodeQuizMode "audiation" = Audiation
 decodeQuizMode _ = SingingAndRecognition
 
 encodeQuizProgression :: QuizProgression -> String
