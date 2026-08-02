@@ -135,7 +135,7 @@ button {
 
 .notation-panel .completed-interval-name {
   margin-top: 0.5rem;
-  color: #174b2d;
+  color: var(--ink);
   font-size: 1.1rem;
   font-weight: 750;
 }
