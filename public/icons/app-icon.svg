@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Two notes forming an ascending interval">
+  <rect width="1024" height="1024" fill="#f4efe5"/>
+  <circle cx="512" cy="512" r="400" fill="#bc4b2c" stroke="#1d2925" stroke-width="8"/>
+
+  <g fill="none" stroke="#fffdf7" stroke-linecap="round" stroke-width="16">
+    <path d="M288 416H736"/>
+    <path d="M288 512H736"/>
+    <path d="M288 608H736"/>
+  </g>
+
+  <g fill="#fffdf7">
+    <ellipse cx="416" cy="608" rx="52" ry="36" transform="rotate(-12 416 608)"/>
+    <rect x="364" y="608" width="16" height="112" rx="8"/>
+
+    <ellipse cx="608" cy="512" rx="52" ry="36" transform="rotate(-12 608 512)"/>
+    <rect x="644" y="400" width="16" height="112" rx="8"/>
+  </g>
+</svg>

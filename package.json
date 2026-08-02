@@ -14,6 +14,7 @@
     "dev": "npm run build:purs && npm run build:backend && vite",
     "format": "purs-tidy format-in-place 'app/**/*.purs' 'packages/**/*.purs' 'test/**/*.purs'",
     "format:check": "purs-tidy check 'app/**/*.purs' 'packages/**/*.purs' 'test/**/*.purs'",
+    "icons": "node scripts/generate-icons.js",
     "licenses": "node scripts/generate-third-party-notices.js",
     "licenses:check": "node scripts/generate-third-party-notices.js --check",
     "test": "spago test -p ear-trainer-quiz-engine",
@@ -28,6 +29,7 @@
     "purescript": "0.15.16",
     "purs-backend-es": "1.4.3",
     "purs-tidy": "0.11.1",
+    "sharp": "^0.35.3",
     "spago": "1.0.4",
     "vite": "8.2.0"
   }

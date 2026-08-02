@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -35,19 +34,17 @@ const licenseFile = (directory, declaredLicense) => {
 };
 
 const npmPackages = () => {
-  const tree = JSON.parse(
-    execFileSync("npm", ["ls", "--omit=dev", "--all", "--json"], {
-      cwd: projectRoot,
-      encoding: "utf8",
-    }),
-  );
+  const lock = JSON.parse(readFileSync(join(projectRoot, "package-lock.json"), "utf8"));
   const packages = new Map();
 
   const visit = (dependencies = {}) => {
-    for (const [name, dependency] of Object.entries(dependencies)) {
+    for (const name of Object.keys(dependencies)) {
+      const lockPath = `node_modules/${name}`;
+      const dependency = lock.packages[lockPath];
+      if (!dependency) throw new Error(`npm dependency is missing from package-lock.json: ${name}`);
       const key = `${name}@${dependency.version}`;
       if (!packages.has(key)) {
-        const directory = join(projectRoot, "node_modules", name);
+        const directory = join(projectRoot, lockPath);
         const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
         packages.set(key, {
           name,
@@ -60,7 +57,7 @@ const npmPackages = () => {
     }
   };
 
-  visit(tree.dependencies);
+  visit(lock.packages[""].dependencies);
   return [...packages.values()].sort((left, right) => left.name.localeCompare(right.name));
 };
 
