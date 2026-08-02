@@ -368,6 +368,10 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
+.setting-group:last-child {
+  border-bottom: 0;
+}
+
 .setting-group legend {
   float: left;
   width: 100%;
