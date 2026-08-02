@@ -36,8 +36,14 @@ const sampleUrls = {
 const sampleBaseUrl = new URL("./audio/salamander/", document.baseURI).href;
 const midiNote = (midi) => Tone.Frequency(midi, "midi").toNote();
 const samplerReady = new WeakMap();
+let contextConfigured = false;
 
 export const createSampler = () => {
+  if (!contextConfigured) {
+    Tone.setContext(new Tone.Context({ latencyHint: "balanced" }), true);
+    contextConfigured = true;
+  }
+
   let markReady;
   const ready = new Promise((resolve) => {
     markReady = resolve;
