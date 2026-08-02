@@ -354,7 +354,7 @@ rootComponent =
                   else Nothing
                 )
           , rootSettingGroup
-              "Singing range"
+              "Playback range"
               "Choose the written and playback register."
               ( map (rootRangeButton state.config) allVocalRangePresets
                   <> if state.config.vocalRange == Custom then [ rootCustomRangeControls state.config ] else []
@@ -555,9 +555,12 @@ rootComponent =
 
   rootCustomRangeControls config =
     HH.div
-      [ HP.class_ (H.ClassName "custom-range") ]
-      [ rootPitchBoundary "Lowest note" config.customRange.low RootSelectCustomLowClass RootSelectCustomLowOctave
-      , rootPitchBoundary "Highest note" config.customRange.high RootSelectCustomHighClass RootSelectCustomHighOctave
+      [ HP.class_ (H.ClassName "custom-range-row") ]
+      [ HH.div
+          [ HP.class_ (H.ClassName "custom-range") ]
+          [ rootPitchBoundary "Lowest note" config.customRange.low RootSelectCustomLowClass RootSelectCustomLowOctave
+          , rootPitchBoundary "Highest note" config.customRange.high RootSelectCustomHighClass RootSelectCustomHighOctave
+          ]
       ]
 
   rootPitchBoundary label current selectClass selectOctave =
@@ -812,7 +815,7 @@ component =
               )
               (if Array.null state.config.intervals then Just "Select at least one interval." else Nothing)
           , settingGroup
-              "Singing range"
+              "Playback range"
               "Choose the written and playback register."
               (map (rangeButton state.config) allVocalRangePresets)
               Nothing
