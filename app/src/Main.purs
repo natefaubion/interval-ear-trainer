@@ -140,18 +140,7 @@ component =
   render state =
     HH.main
       [ HP.class_ (H.ClassName "app-shell") ]
-      [ HH.header
-          [ HP.class_ (H.ClassName "hero") ]
-          [ HH.p
-              [ HP.class_ (H.ClassName "eyebrow") ]
-              [ HH.text "Interval practice" ]
-          , HH.h1_ [ HH.text "Train the space between notes." ]
-          , HH.p
-              [ HP.class_ (H.ClassName "lede") ]
-              [ HH.text "Hear an interval, sing both notes, then connect what you sang to notation." ]
-          ]
-      , if state.screen == Setup then renderSetup state else renderPractice state
-      ]
+      [ if state.screen == Setup then renderSetup state else renderPractice state ]
 
   renderSetup state =
     HH.section
