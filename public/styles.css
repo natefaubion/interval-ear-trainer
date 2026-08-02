@@ -334,15 +334,6 @@ button {
   line-height: 1.55;
 }
 
-.step-label {
-  margin: 0 0 0.4rem;
-  color: var(--accent-dark);
-  font-size: 0.72rem;
-  font-weight: 750;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-}
-
 .setting-group {
   margin: 0;
   padding: clamp(1.25rem, 4vw, 2.25rem);
