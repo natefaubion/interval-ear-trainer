@@ -212,7 +212,7 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
 
 phaseInstruction :: RecognitionPhase -> String
 phaseInstruction WaitingForFirst = "Sing the first note"
-phaseInstruction WaitingForRelease = "Release or move away from the first note"
+phaseInstruction WaitingForRelease = "Sing the second note"
 phaseInstruction WaitingForSecond = "Sing the second note"
 phaseInstruction RecognitionIncorrect = "Incorrect pitch"
 phaseInstruction RecognitionComplete = "Both notes accepted"
