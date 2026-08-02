@@ -7,6 +7,7 @@ import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..))
 import EarTrainer.Config
   ( AnswerCount(..)
+  , IntervalSystem(..)
   , QuizMode(..)
   , QuizProgression(..)
   , defaultConfig
@@ -19,12 +20,16 @@ import EarTrainer.Music
   ( Accidental(..)
   , Direction(..)
   , Interval(..)
+  , IntervalSize(..)
   , Letter(..)
   , OctavePolicy(..)
   , PlaybackMode(..)
+  , Pitch(..)
   , PitchClass(..)
   , VocalRangePreset(..)
   , allRootPitchClasses
+  , intervalBetween
+  , intervalNumber
   , allMajorKeyPresets
   , midiNumber
   , pitch
@@ -40,7 +45,7 @@ import EarTrainer.PitchDetection
   , relativeMidi
   , stepRecognition
   )
-import EarTrainer.Quiz (Event(..), Phase(..), makeChoices, makePrompt, transition)
+import EarTrainer.Quiz (Event(..), Phase(..), availableIntervalSizes, makeChoices, makePrompt, transition)
 import Effect (Effect)
 import Test.Assert (assertEqual)
 
@@ -117,6 +122,24 @@ main = do
     audiationConfig = descendingConfig { quizMode = Audiation }
     audiationPrompt = makePrompt 128 audiationConfig
     ascendingAudiationPrompt = makePrompt 128 (defaultConfig { quizMode = Audiation, playbackModes = [ MelodicAscending ] })
+    collectionConfig = defaultConfig
+      { availableIntervals = [ SizeThird ]
+      , intervalSystem = FromSelectedNotes
+      , playbackModes = [ MelodicAscending ]
+      }
+    collectionPrompts = map (flip makePrompt collectionConfig) (Array.range 0 80)
+    collectionChoices = makeChoices 24 collectionConfig (makePrompt 24 collectionConfig)
+    descendingCollectionConfig = collectionConfig { playbackModes = [ MelodicDescending ] }
+    descendingCollectionPrompts = map (flip makePrompt descendingCollectionConfig) (Array.range 0 40)
+    pitchClassOf (Pitch pitchClass _) = pitchClass
+    sparseCollectionConfig = collectionConfig
+      { availableIntervals = [ SizeSecond ]
+      , rootPitchClasses =
+          [ PitchClass C (Accidental 0)
+          , PitchClass E (Accidental 0)
+          , PitchClass G (Accidental 0)
+          ]
+      }
   assertEqual
     { actual: nearestMidi 440.0
     , expected: 69
@@ -190,6 +213,15 @@ main = do
     }
   assertEqual
     { actual:
+        [ Array.all (\prompt -> midiNumber prompt.target < midiNumber prompt.root) descendingCollectionPrompts
+        , Array.length collectionChoices == 4
+        , Array.length
+            (Array.filter (\choice -> choice.interval == (makePrompt 24 collectionConfig).interval) collectionChoices) == 1
+        ]
+    , expected: [ true, true, true ]
+    }
+  assertEqual
+    { actual:
         midiNumber generatedPrompt.root >= midiNumber generatedRange.low
           && midiNumber generatedPrompt.target >= midiNumber generatedRange.low
           && midiNumber generatedPrompt.root <= midiNumber generatedRange.high
@@ -250,6 +282,33 @@ main = do
   assertEqual
     { actual: defaultConfig.quizProgression == AutomaticProgression
     , expected: true
+    }
+  assertEqual
+    { actual:
+        Array.all
+          ( \prompt ->
+              intervalNumber prompt.interval == 3
+                && Array.elem (pitchClassOf prompt.root) collectionConfig.rootPitchClasses
+                && Array.elem (pitchClassOf prompt.target) collectionConfig.rootPitchClasses
+          )
+          collectionPrompts
+    , expected: true
+    }
+  assertEqual
+    { actual:
+        [ intervalBetween Ascending (pitch C (Accidental 0) 4) (pitch E (Accidental 0) 4) == Just MajorThird
+        , intervalBetween Ascending (pitch D (Accidental 0) 4) (pitch F (Accidental 0) 4) == Just MinorThird
+        , intervalBetween Ascending (pitch F (Accidental 0) 4) (pitch B (Accidental 0) 4) == Just AugmentedFourth
+        , intervalBetween Ascending (pitch B (Accidental 0) 4) (pitch F (Accidental 0) 5) == Just DiminishedFifth
+        ]
+    , expected: [ true, true, true, true ]
+    }
+  assertEqual
+    { actual:
+        [ Array.elem SizeThird (availableIntervalSizes collectionConfig)
+        , Array.elem SizeSecond (availableIntervalSizes sparseCollectionConfig)
+        ]
+    , expected: [ true, false ]
     }
   assertEqual
     { actual:

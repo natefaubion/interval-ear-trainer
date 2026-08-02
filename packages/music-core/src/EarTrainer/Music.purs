@@ -2,6 +2,7 @@ module EarTrainer.Music
   ( Accidental(..)
   , Direction(..)
   , Interval(..)
+  , IntervalSize(..)
   , Letter(..)
   , MajorKeyPreset
   , OctavePolicy(..)
@@ -11,6 +12,7 @@ module EarTrainer.Music
   , VocalRange(..)
   , VocalRangePreset(..)
   , allIntervals
+  , allIntervalSizes
   , allMajorKeyPresets
   , allPlaybackModes
   , allRootPitchClasses
@@ -19,7 +21,9 @@ module EarTrainer.Music
   , defaultIntervals
   , defaultRootPitchClasses
   , intervalName
+  , intervalBetween
   , intervalNumber
+  , intervalSizeName
   , intervalSemitones
   , midiNumber
   , pitch
@@ -36,6 +40,7 @@ module EarTrainer.Music
 import Prelude
 
 import Data.Array as Array
+import Data.Maybe (Maybe(..))
 import Data.String.CodeUnits as String
 
 data Letter = C | D | E | F | G | A | B
@@ -82,6 +87,19 @@ data Interval
 
 derive instance Eq Interval
 derive instance Ord Interval
+
+data IntervalSize
+  = SizeUnison
+  | SizeSecond
+  | SizeThird
+  | SizeFourth
+  | SizeFifth
+  | SizeSixth
+  | SizeSeventh
+  | SizeOctave
+
+derive instance Eq IntervalSize
+derive instance Ord IntervalSize
 
 data Direction = Ascending | Descending
 
@@ -139,6 +157,18 @@ allIntervals =
   , MinorSeventh
   , MajorSeventh
   , PerfectOctave
+  ]
+
+allIntervalSizes :: Array IntervalSize
+allIntervalSizes =
+  [ SizeUnison
+  , SizeSecond
+  , SizeThird
+  , SizeFourth
+  , SizeFifth
+  , SizeSixth
+  , SizeSeventh
+  , SizeOctave
   ]
 
 defaultIntervals :: Array Interval
@@ -340,6 +370,43 @@ intervalNumber MajorSixth = 6
 intervalNumber MinorSeventh = 7
 intervalNumber MajorSeventh = 7
 intervalNumber PerfectOctave = 8
+
+intervalSizeName :: IntervalSize -> String
+intervalSizeName SizeUnison = "Unison"
+intervalSizeName SizeSecond = "Second"
+intervalSizeName SizeThird = "Third"
+intervalSizeName SizeFourth = "Fourth"
+intervalSizeName SizeFifth = "Fifth"
+intervalSizeName SizeSixth = "Sixth"
+intervalSizeName SizeSeventh = "Seventh"
+intervalSizeName SizeOctave = "Octave"
+
+intervalBetween :: Direction -> Pitch -> Pitch -> Maybe Interval
+intervalBetween direction rootPitch@(Pitch (PitchClass rootLetter _) rootOctave) rootTarget@(Pitch (PitchClass targetLetter _) targetOctave) =
+  let
+    generic = case direction of
+      Ascending -> (targetOctave - rootOctave) * 7 + letterIndex targetLetter - letterIndex rootLetter + 1
+      Descending -> (rootOctave - targetOctave) * 7 + letterIndex rootLetter - letterIndex targetLetter + 1
+    semitones = case direction of
+      Ascending -> midiNumber rootTarget - midiNumber rootPitch
+      Descending -> midiNumber rootPitch - midiNumber rootTarget
+  in
+    case generic, semitones of
+      1, 0 -> Just PerfectUnison
+      2, 1 -> Just MinorSecond
+      2, 2 -> Just MajorSecond
+      3, 3 -> Just MinorThird
+      3, 4 -> Just MajorThird
+      4, 5 -> Just PerfectFourth
+      4, 6 -> Just AugmentedFourth
+      5, 6 -> Just DiminishedFifth
+      5, 7 -> Just PerfectFifth
+      6, 8 -> Just MinorSixth
+      6, 9 -> Just MajorSixth
+      7, 10 -> Just MinorSeventh
+      7, 11 -> Just MajorSeventh
+      8, 12 -> Just PerfectOctave
+      _, _ -> Nothing
 
 intervalName :: Interval -> String
 intervalName PerfectUnison = "Perfect unison"

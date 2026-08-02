@@ -12,6 +12,7 @@ import EarTrainer.Config
   , AnswerDisplay(..)
   , ExerciseConfig
   , GhostMode(..)
+  , IntervalSystem(..)
   , QuizMode(..)
   , QuizProgression(..)
   , defaultConfig
@@ -19,6 +20,7 @@ import EarTrainer.Config
 import EarTrainer.Music
   ( Accidental(..)
   , Interval(..)
+  , IntervalSize(..)
   , Letter(..)
   , OctavePolicy(..)
   , PitchClass(..)
@@ -37,10 +39,12 @@ type StoredPitchClass =
 type StoredSettings =
   { answerCount :: String
   , answerDisplay :: String
+  , availableIntervals :: Array String
   , customHighMidi :: Int
   , customLowMidi :: Int
   , ghostMode :: String
   , intervals :: Array String
+  , intervalSystem :: String
   , octavePolicy :: String
   , playbackModes :: Array String
   , showPitchTuner :: Boolean
@@ -66,9 +70,11 @@ load = do
       defaultConfig
         { answerCount = decodeAnswerCount value.answerCount
         , answerDisplay = decodeAnswerDisplay value.answerDisplay
+        , availableIntervals = Array.mapMaybe decodeIntervalSize value.availableIntervals
         , customRange = { low: pitchFromMidi value.customLowMidi, high: pitchFromMidi value.customHighMidi }
         , ghostMode = decodeGhostMode value.ghostMode
         , intervals = Array.mapMaybe decodeInterval value.intervals
+        , intervalSystem = decodeIntervalSystem value.intervalSystem
         , octavePolicy = decodeOctavePolicy value.octavePolicy
         , playbackModes = Array.mapMaybe decodePlaybackMode value.playbackModes
         , showPitchTuner = value.showPitchTuner
@@ -82,10 +88,12 @@ save :: ExerciseConfig -> Effect Unit
 save config = saveImpl
   { answerCount: encodeAnswerCount config.answerCount
   , answerDisplay: encodeAnswerDisplay config.answerDisplay
+  , availableIntervals: map encodeIntervalSize config.availableIntervals
   , customHighMidi: midiNumber config.customRange.high
   , customLowMidi: midiNumber config.customRange.low
   , ghostMode: encodeGhostMode config.ghostMode
   , intervals: map encodeInterval config.intervals
+  , intervalSystem: encodeIntervalSystem config.intervalSystem
   , octavePolicy: encodeOctavePolicy config.octavePolicy
   , playbackModes: map encodePlaybackMode config.playbackModes
   , showPitchTuner: config.showPitchTuner
@@ -142,6 +150,35 @@ decodeAnswerDisplay :: String -> AnswerDisplay
 decodeAnswerDisplay "name" = AnswerName
 decodeAnswerDisplay "both" = AnswerBoth
 decodeAnswerDisplay _ = AnswerNotation
+
+encodeIntervalSystem :: IntervalSystem -> String
+encodeIntervalSystem ExactIntervals = "exact"
+encodeIntervalSystem FromSelectedNotes = "from-selected-notes"
+
+decodeIntervalSystem :: String -> IntervalSystem
+decodeIntervalSystem "from-selected-notes" = FromSelectedNotes
+decodeIntervalSystem _ = ExactIntervals
+
+encodeIntervalSize :: IntervalSize -> String
+encodeIntervalSize SizeUnison = "unison"
+encodeIntervalSize SizeSecond = "second"
+encodeIntervalSize SizeThird = "third"
+encodeIntervalSize SizeFourth = "fourth"
+encodeIntervalSize SizeFifth = "fifth"
+encodeIntervalSize SizeSixth = "sixth"
+encodeIntervalSize SizeSeventh = "seventh"
+encodeIntervalSize SizeOctave = "octave"
+
+decodeIntervalSize :: String -> Maybe IntervalSize
+decodeIntervalSize "unison" = Just SizeUnison
+decodeIntervalSize "second" = Just SizeSecond
+decodeIntervalSize "third" = Just SizeThird
+decodeIntervalSize "fourth" = Just SizeFourth
+decodeIntervalSize "fifth" = Just SizeFifth
+decodeIntervalSize "sixth" = Just SizeSixth
+decodeIntervalSize "seventh" = Just SizeSeventh
+decodeIntervalSize "octave" = Just SizeOctave
+decodeIntervalSize _ = Nothing
 
 encodeInterval :: Interval -> String
 encodeInterval PerfectUnison = "perfect-unison"

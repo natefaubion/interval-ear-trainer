@@ -13,6 +13,7 @@ import EarTrainer.Config
   , AnswerDisplay(..)
   , ExerciseConfig
   , GhostMode(..)
+  , IntervalSystem(..)
   , QuizMode(..)
   , QuizProgression(..)
   , defaultConfig
@@ -20,23 +21,27 @@ import EarTrainer.Config
   , quizModeUsesRecognition
   , quizModeUsesSinging
   , toggleInterval
+  , toggleIntervalSize
   , togglePlaybackMode
   , toggleRootPitchClass
   )
 import EarTrainer.Music
   ( Accidental(..)
   , Interval
+  , IntervalSize
   , OctavePolicy(..)
   , Pitch(..)
   , PitchClass(..)
   , PlaybackMode(..)
   , VocalRangePreset(..)
   , allIntervals
+  , allIntervalSizes
   , allMajorKeyPresets
   , allPlaybackModes
   , allRootPitchClasses
   , allVocalRangePresets
   , intervalName
+  , intervalSizeName
   , midiNumber
   , pitchClassName
   , pitchFromMidiLike
@@ -169,8 +174,12 @@ type RootState =
 data RootAction
   = RootInitialize
   | RootToggleInterval Interval
+  | RootToggleIntervalSize IntervalSize
   | RootSelectAllIntervals
   | RootClearIntervals
+  | RootSelectAllIntervalSizes
+  | RootClearIntervalSizes
+  | RootSelectIntervalSystem IntervalSystem
   | RootTogglePlaybackMode PlaybackMode
   | RootToggleRoot PitchClass
   | RootSelectMajorKey String
@@ -267,6 +276,20 @@ rootComponent =
                   "Manual"
               ]
               Nothing
+          , rootSettingGroup
+              "Note selection"
+              "Choose which notes may begin an exercise, or use a major-key preset."
+              ( [ rootMajorKeySelector state.config ]
+                  <> map (rootRootButton state.config) allRootPitchClasses
+                  <>
+                    [ rootSelectionActions
+                        RootSelectAllRoots
+                        RootClearRoots
+                        (Array.length state.config.rootPitchClasses == Array.length allRootPitchClasses)
+                        (Array.null state.config.rootPitchClasses)
+                    ]
+              )
+              (if Array.null state.config.rootPitchClasses then Just "Select at least one note." else Nothing)
           , let
               availableOrientations =
                 if state.config.quizMode == Audiation then
@@ -280,18 +303,56 @@ rootComponent =
                 (map (rootModeButton state.config) availableOrientations)
                 (if Array.null selectedOrientations then Just "Select at least one interval orientation." else Nothing)
           , rootSettingGroup
-              "Intervals"
-              "Choose the intervals that may appear in an exercise."
-              ( map (rootIntervalButton state.config) allIntervals
-                  <>
-                    [ rootSelectionActions
-                        RootSelectAllIntervals
-                        RootClearIntervals
-                        (Array.length state.config.intervals == Array.length allIntervals)
-                        (Array.null state.config.intervals)
-                    ]
-              )
-              (if Array.null state.config.intervals then Just "Select at least one interval." else Nothing)
+              "Interval system"
+              "Choose exact interval qualities or derive their qualities from the selected notes."
+              [ rootChoiceButton
+                  (state.config.intervalSystem == ExactIntervals)
+                  (RootSelectIntervalSystem ExactIntervals)
+                  "Exact intervals"
+              , rootChoiceButton
+                  (state.config.intervalSystem == FromSelectedNotes)
+                  (RootSelectIntervalSystem FromSelectedNotes)
+                  "From selected notes"
+              ]
+              Nothing
+          , let
+              possibleSizes = Quiz.availableIntervalSizes state.config
+              selectedPossibleSizes = Array.filter (flip Array.elem possibleSizes) state.config.availableIntervals
+            in
+              rootSettingGroup
+                "Intervals"
+                ( if state.config.intervalSystem == ExactIntervals then
+                    "Choose the exact intervals that may appear in an exercise."
+                  else
+                    "Choose interval numbers; each quality is determined by the selected note pair."
+                )
+                ( if state.config.intervalSystem == ExactIntervals then
+                    map (rootIntervalButton state.config) allIntervals
+                      <>
+                        [ rootSelectionActions
+                            RootSelectAllIntervals
+                            RootClearIntervals
+                            (Array.length state.config.intervals == Array.length allIntervals)
+                            (Array.null state.config.intervals)
+                        ]
+                  else
+                    map (rootIntervalSizeButton state.config possibleSizes) allIntervalSizes
+                      <>
+                        [ rootSelectionActions
+                            RootSelectAllIntervalSizes
+                            RootClearIntervalSizes
+                            ( Array.length state.config.availableIntervals == Array.length possibleSizes
+                                && Array.all (flip Array.elem possibleSizes) state.config.availableIntervals
+                            )
+                            (Array.null state.config.availableIntervals)
+                        ]
+                )
+                ( if state.config.intervalSystem == ExactIntervals && Array.null state.config.intervals then
+                    Just "Select at least one interval."
+                  else if state.config.intervalSystem == FromSelectedNotes && Array.null selectedPossibleSizes then
+                    Just "Select at least one interval available from these notes."
+                  else Nothing
+                )
           , rootSettingGroup
               "Singing range"
               "Choose the written and playback register."
@@ -304,20 +365,6 @@ rootComponent =
                   Just "The lowest note must not be above the highest note."
                 else Nothing
               )
-          , rootSettingGroup
-              "Root notes"
-              "Choose individual root notes, or replace them with the notes of a major key."
-              ( [ rootMajorKeySelector state.config ]
-                  <> map (rootRootButton state.config) allRootPitchClasses
-                  <>
-                    [ rootSelectionActions
-                        RootSelectAllRoots
-                        RootClearRoots
-                        (Array.length state.config.rootPitchClasses == Array.length allRootPitchClasses)
-                        (Array.null state.config.rootPitchClasses)
-                    ]
-              )
-              (if Array.null state.config.rootPitchClasses then Just "Select at least one root note." else Nothing)
           , rootSettingGroup
               "Octave matching"
               "Choose whether the first sung note must match the written register. The second note must always form the written interval from it."
@@ -393,7 +440,7 @@ rootComponent =
           , HH.button
               [ HP.type_ HP.ButtonButton
               , HP.class_ (H.ClassName "primary-button")
-              , HP.disabled (not (isValid state.config) || isNothing state.sampler)
+              , HP.disabled (not (rootConfigValid state.config) || isNothing state.sampler)
               , HE.onClick \_ -> RootBeginPractice
               ]
               [ HH.text "Begin practice" ]
@@ -446,6 +493,18 @@ rootComponent =
   rootIntervalButton config interval =
     rootChoiceButton (Array.elem interval config.intervals) (RootToggleInterval interval) (intervalName interval)
 
+  rootIntervalSizeButton config possible interval =
+    HH.button
+      [ HP.type_ HP.ButtonButton
+      , HP.classes
+          if Array.elem interval config.availableIntervals then
+            [ H.ClassName "choice-chip", H.ClassName "selected" ]
+          else [ H.ClassName "choice-chip" ]
+      , HP.disabled (not (Array.elem interval possible))
+      , HE.onClick \_ -> RootToggleIntervalSize interval
+      ]
+      [ HH.text (intervalSizeName interval) ]
+
   rootRootButton config root =
     rootChoiceButton (Array.elem root config.rootPitchClasses) (RootToggleRoot root) (pitchClassName root)
 
@@ -471,6 +530,16 @@ rootComponent =
 
   samePitchClasses left right =
     Array.length left == Array.length right && Array.all (flip Array.elem right) left
+
+  rootConfigValid config =
+    isValid config
+      &&
+        ( config.intervalSystem == ExactIntervals
+            || not
+              ( Array.null
+                  (Array.filter (flip Array.elem (Quiz.availableIntervalSizes config)) config.availableIntervals)
+              )
+        )
 
   rootRangeButton config preset =
     let
@@ -533,8 +602,14 @@ rootComponent =
       sampler <- H.liftEffect Audio.createSampler
       H.modify_ _ { config = config, sampler = Just sampler }
     RootToggleInterval interval -> rootUpdateConfig (toggleInterval interval)
+    RootToggleIntervalSize interval -> rootUpdateConfig (toggleIntervalSize interval)
     RootSelectAllIntervals -> rootUpdateConfig (_ { intervals = allIntervals })
     RootClearIntervals -> rootUpdateConfig (_ { intervals = [] })
+    RootSelectAllIntervalSizes -> do
+      state <- H.get
+      rootUpdateConfig (_ { availableIntervals = Quiz.availableIntervalSizes state.config })
+    RootClearIntervalSizes -> rootUpdateConfig (_ { availableIntervals = [] })
+    RootSelectIntervalSystem system -> rootUpdateConfig (_ { intervalSystem = system })
     RootTogglePlaybackMode mode -> rootUpdateConfig (togglePlaybackMode mode)
     RootToggleRoot root -> rootUpdateConfig (toggleRootPitchClass root)
     RootSelectMajorKey presetId -> rootUpdateConfig (selectMajorKey presetId)
@@ -569,8 +644,14 @@ rootComponent =
 
   handleSetupAction = case _ of
     RootToggleInterval interval -> setupUpdateConfig (toggleInterval interval)
+    RootToggleIntervalSize interval -> setupUpdateConfig (toggleIntervalSize interval)
     RootSelectAllIntervals -> setupUpdateConfig (_ { intervals = allIntervals })
     RootClearIntervals -> setupUpdateConfig (_ { intervals = [] })
+    RootSelectAllIntervalSizes -> do
+      state <- H.get
+      setupUpdateConfig (_ { availableIntervals = Quiz.availableIntervalSizes state.config })
+    RootClearIntervalSizes -> setupUpdateConfig (_ { availableIntervals = [] })
+    RootSelectIntervalSystem system -> setupUpdateConfig (_ { intervalSystem = system })
     RootTogglePlaybackMode mode -> setupUpdateConfig (togglePlaybackMode mode)
     RootToggleRoot root -> setupUpdateConfig (toggleRootPitchClass root)
     RootSelectMajorKey presetId -> setupUpdateConfig (selectMajorKey presetId)

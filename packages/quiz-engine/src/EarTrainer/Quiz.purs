@@ -3,6 +3,7 @@ module EarTrainer.Quiz
   , IntervalChoice
   , Phase(..)
   , Prompt
+  , availableIntervalSizes
   , makeChoices
   , makePrompt
   , transition
@@ -13,16 +14,20 @@ import Prelude
 import Data.Array as Array
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Ord (abs)
-import EarTrainer.Config (AnswerCount(..), ExerciseConfig, QuizMode(..), exerciseRange)
+import EarTrainer.Config (AnswerCount(..), ExerciseConfig, IntervalSystem(..), QuizMode(..), exerciseRange)
 import EarTrainer.Music
   ( Accidental(..)
   , Direction(..)
   , Interval(..)
+  , IntervalSize(..)
   , Letter(..)
   , Pitch(..)
   , PitchClass(..)
   , PlaybackMode(..)
+  , VocalRange
   , midiNumber
+  , intervalBetween
+  , intervalNumber
   , transpose
   )
 
@@ -47,13 +52,16 @@ pick fallback seed values =
   fromMaybe fallback (Array.index values (abs seed `mod` max 1 (Array.length values)))
 
 makePrompt :: Int -> ExerciseConfig -> Prompt
-makePrompt seed config =
+makePrompt seed config = case config.intervalSystem of
+  ExactIntervals -> makeExactPrompt seed config
+  FromSelectedNotes -> makeDerivedPrompt seed config
+
+makeExactPrompt :: Int -> ExerciseConfig -> Prompt
+makeExactPrompt seed config =
   let
     interval = pick MinorThird seed config.intervals
-    availableModes =
-      if config.quizMode == Audiation then Array.filter (_ /= Harmonic) config.playbackModes
-      else config.playbackModes
-    mode = pick MelodicAscending (seed `div` 7) availableModes
+    modes = availableModes config
+    mode = pick MelodicAscending (seed `div` 7) modes
     direction = directionFor mode
     range = exerciseRange config
     Pitch _ lowOctave = range.low
@@ -64,27 +72,90 @@ makePrompt seed config =
       let
         candidateRoot = Pitch pitchClass octave
         target = transpose direction interval candidateRoot
-      if
-        midiNumber candidateRoot >= midiNumber range.low
-          && midiNumber candidateRoot <= midiNumber range.high
-          && midiNumber target >= midiNumber range.low
-          && midiNumber target <= midiNumber range.high then
-        pure candidateRoot
-      else
-        []
+      if pitchInRange range candidateRoot && pitchInRange range target then pure candidateRoot else []
     fallbackRoot = Pitch (PitchClass C (Accidental 0)) lowOctave
     root = pick fallbackRoot (seed `div` 13) roots
   in
-    { interval
-    , mode
-    , root
-    , target: transpose direction interval root
-    }
+    { interval, mode, root, target: transpose direction interval root }
+
+makeDerivedPrompt :: Int -> ExerciseConfig -> Prompt
+makeDerivedPrompt seed config =
+  let
+    range = exerciseRange config
+    Pitch _ lowOctave = range.low
+    fallbackRoot = Pitch (PitchClass C (Accidental 0)) lowOctave
+    fallback =
+      { interval: MinorThird
+      , mode: MelodicAscending
+      , root: fallbackRoot
+      , target: transpose Ascending MinorThird fallbackRoot
+      }
+    validSizes = Array.filter (flip Array.elem (availableIntervalSizes config)) config.availableIntervals
+    size = pick SizeThird seed validSizes
+    candidatesForSize = derivedCandidates config [ size ]
+    validModes = Array.filter (\candidateMode -> Array.any (\prompt -> prompt.mode == candidateMode) candidatesForSize) (availableModes config)
+    mode = pick MelodicAscending (seed `div` 7) validModes
+    candidates = Array.filter (\prompt -> prompt.mode == mode) candidatesForSize
+  in
+    pick fallback (seed `div` 13) candidates
+
+availableModes :: ExerciseConfig -> Array PlaybackMode
+availableModes config =
+  if config.quizMode == Audiation then Array.filter (_ /= Harmonic) config.playbackModes
+  else config.playbackModes
+
+derivedCandidates :: ExerciseConfig -> Array IntervalSize -> Array Prompt
+derivedCandidates config sizes = do
+  mode <- availableModes config
+  size <- sizes
+  let
+    direction = directionFor mode
+    range = exerciseRange config
+    Pitch _ lowOctave = range.low
+    Pitch _ highOctave = range.high
+  rootOctave <- Array.range (lowOctave - 1) (highOctave + 1)
+  rootClass <- config.rootPitchClasses
+  targetOctave <- [ rootOctave - 1, rootOctave, rootOctave + 1 ]
+  targetClass <- config.rootPitchClasses
+  let
+    root = Pitch rootClass rootOctave
+    target = Pitch targetClass targetOctave
+  case intervalBetween direction root target of
+    Just interval
+      | intervalNumber interval == intervalSizeNumber size
+          && pitchInRange range root
+          && pitchInRange range target ->
+          pure { interval, mode, root, target }
+    _ -> []
+
+availableIntervalSizes :: ExerciseConfig -> Array IntervalSize
+availableIntervalSizes config =
+  Array.filter
+    (\size -> not (Array.null (derivedCandidates config [ size ])))
+    [ SizeUnison, SizeSecond, SizeThird, SizeFourth, SizeFifth, SizeSixth, SizeSeventh, SizeOctave ]
+
+intervalSizeNumber :: IntervalSize -> Int
+intervalSizeNumber SizeUnison = 1
+intervalSizeNumber SizeSecond = 2
+intervalSizeNumber SizeThird = 3
+intervalSizeNumber SizeFourth = 4
+intervalSizeNumber SizeFifth = 5
+intervalSizeNumber SizeSixth = 6
+intervalSizeNumber SizeSeventh = 7
+intervalSizeNumber SizeOctave = 8
+
+pitchInRange :: VocalRange -> Pitch -> Boolean
+pitchInRange range pitch =
+  midiNumber pitch >= midiNumber range.low && midiNumber pitch <= midiNumber range.high
 
 makeChoices :: Int -> ExerciseConfig -> Prompt -> Array IntervalChoice
 makeChoices seed config prompt =
   let
-    distractorPool = Array.filter (_ /= prompt.interval) config.intervals
+    configuredIntervals = case config.intervalSystem of
+      ExactIntervals -> config.intervals
+      FromSelectedNotes ->
+        Array.nub (map _.interval (derivedCandidates config (availableIntervalSizes config)))
+    distractorPool = Array.filter (_ /= prompt.interval) configuredIntervals
     poolLength = Array.length distractorPool
     offset = abs (seed `div` 17) `mod` max 1 poolLength
     rotated = Array.drop offset distractorPool <> Array.take offset distractorPool
