@@ -149,10 +149,7 @@ component =
       [ HP.class_ (H.ClassName "setup-card") ]
       [ HH.div
           [ HP.class_ (H.ClassName "setup-heading") ]
-          [ HH.h2_ [ HH.text "Exercise setup" ]
-          , HH.p_
-              [ HH.text "Select at least one option in each group." ]
-          ]
+          [ HH.h2_ [ HH.text "Exercise setup" ] ]
       , HH.div
           [ HP.class_ (H.ClassName "setup-content") ]
           [ settingGroup
