@@ -149,7 +149,7 @@ component =
           [ HP.class_ (H.ClassName "setup-heading") ]
           [ HH.h2_ [ HH.text "Exercise setup" ]
           , HH.p_
-              [ HH.text "Select at least one option in each group. These settings stay editable between questions." ]
+              [ HH.text "Select at least one option in each group." ]
           ]
       , settingGroup
           "Playback"
@@ -157,11 +157,11 @@ component =
           (map (modeButton state.config) allPlaybackModes)
       , settingGroup
           "Intervals"
-          "The interval name is shown here only during setup. Quiz choices use notation."
+          "Choose the intervals that may appear in an exercise."
           (map (intervalButton state.config) allIntervals)
       , settingGroup
           "Singing range"
-          "A preset controls the written and playback register; octave-equivalent singing is accepted by default."
+          "Choose the written and playback register."
           (map (rangeButton state.config) allVocalRangePresets)
       , settingGroup
           "Root notes"
@@ -181,10 +181,10 @@ component =
           ]
       , settingGroup
           "Ghost note"
-          "Control whether detected pitches appear temporarily, remain visible, or stay hidden."
-          [ choiceButton (state.config.ghostMode == GhostOff) (SelectGhostMode GhostOff) "Off"
-          , choiceButton (state.config.ghostMode == GhostOn) (SelectGhostMode GhostOn) "On"
-          , choiceButton (state.config.ghostMode == GhostPersist) (SelectGhostMode GhostPersist) "Persist"
+          "The ghost note shows the pitch you are currently singing on the staff."
+          [ choiceButton (state.config.ghostMode == GhostOff) (SelectGhostMode GhostOff) "Hidden"
+          , choiceButton (state.config.ghostMode == GhostOn) (SelectGhostMode GhostOn) "Shown briefly"
+          , choiceButton (state.config.ghostMode == GhostPersist) (SelectGhostMode GhostPersist) "Kept visible"
           ]
       , settingGroup
           "Answer display"
