@@ -942,10 +942,17 @@ component =
               [ HH.h2_ [ HH.text (quizModeTitle state.config.quizMode) ] ]
           , HH.button
               [ HP.type_ HP.ButtonButton
-              , HP.class_ (H.ClassName "secondary-button")
+              , HP.classes [ H.ClassName "secondary-button", H.ClassName "icon-button" ]
+              , HP.attr (H.AttrName "aria-label") "Setup"
+              , HP.title "Setup"
               , HE.onClick \_ -> EditSetup
               ]
-              [ HH.text "Setup" ]
+              [ HH.span
+                  [ HP.class_ (H.ClassName "settings-icon")
+                  , HP.attr (H.AttrName "aria-hidden") "true"
+                  ]
+                  []
+              ]
           ]
       , HH.div
           [ HP.ref practiceContentRef
