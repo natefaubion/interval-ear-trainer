@@ -416,8 +416,32 @@ button:active:not(:disabled) {
   border-bottom: 1px solid var(--line);
 }
 
-.setting-group:last-child {
+.setting-group:last-of-type {
   border-bottom: 0;
+}
+
+.credits-section {
+  padding: clamp(1.25rem, 4vw, 2.25rem);
+  border-top: 1px solid #ded9d0;
+  color: #68716d;
+  background: #f3f0e9;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.credits-section h3 {
+  margin: 0 0 0.25rem;
+  color: #59635f;
+  font-size: 0.9rem;
+}
+
+.credits-section p {
+  margin: 0 0 0.2rem;
+}
+
+.credits-section a {
+  color: #536f67;
+  text-underline-offset: 0.14em;
 }
 
 .setting-group legend {

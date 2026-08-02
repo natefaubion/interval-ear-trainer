@@ -13,8 +13,10 @@
     "dev": "npm run build:purs && npm run build:backend && vite",
     "format": "purs-tidy format-in-place 'app/**/*.purs' 'packages/**/*.purs' 'test/**/*.purs'",
     "format:check": "purs-tidy check 'app/**/*.purs' 'packages/**/*.purs' 'test/**/*.purs'",
+    "licenses": "node scripts/generate-third-party-notices.js",
+    "licenses:check": "node scripts/generate-third-party-notices.js --check",
     "test": "spago test -p ear-trainer-quiz-engine",
-    "validate": "npm run format:check && npm run test && npm run build"
+    "validate": "npm run format:check && npm run test && npm run licenses:check && npm run build"
   },
   "dependencies": {
     "pitchy": "4.1.0",

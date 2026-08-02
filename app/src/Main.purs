@@ -427,6 +427,30 @@ rootComponent =
                 ]
                 Nothing
             else HH.text ""
+          , HH.aside
+              [ HP.class_ (H.ClassName "credits-section") ]
+              [ HH.h3_ [ HH.text "Credits" ]
+              , HH.p_
+                  [ HH.text "Piano samples: "
+                  , HH.a
+                      [ HP.href "https://archive.org/details/SalamanderGrandPianoV3"
+                      , HP.target "_blank"
+                      , HP.rel "noreferrer"
+                      ]
+                      [ HH.text "Salamander Grand Piano V3" ]
+                  , HH.text " by Alexander Holm, licensed under "
+                  , HH.a
+                      [ HP.href "https://creativecommons.org/licenses/by/3.0/"
+                      , HP.target "_blank"
+                      , HP.rel "noreferrer"
+                      ]
+                      [ HH.text "CC BY 3.0" ]
+                  , HH.text "."
+                  ]
+              , HH.a
+                  [ HP.href "third-party-notices.html" ]
+                  [ HH.text "Third-party software notices" ]
+              ]
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "setup-footer") ]

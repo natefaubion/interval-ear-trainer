@@ -24,6 +24,8 @@ Vite prints the development URL when it starts (normally <http://localhost:5173>
 
 - `npm run format` formats PureScript sources.
 - `npm run test` runs focused domain and state-machine tests.
+- `npm run licenses` regenerates the deployed third-party notices page.
+- `npm run licenses:check` verifies that the committed notices match the locked runtime dependencies.
 - `npm run build` generates the PureScript browser module with purs-backend-es, then creates the production site in `dist/` with Vite.
 - `npm run validate` checks formatting, tests, and the production build.
 
