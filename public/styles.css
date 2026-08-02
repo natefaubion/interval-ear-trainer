@@ -468,7 +468,6 @@ button:active:not(:disabled) {
 
 .major-key-preset select {
   width: 100%;
-  max-width: 18rem;
   height: 2.55rem;
   padding: 0 0.65rem;
   border: 1px solid var(--line);
