@@ -454,9 +454,14 @@ button:active:not(:disabled) {
   display: grid;
   flex: 0 0 100%;
   width: 100%;
+  max-width: 28rem;
   gap: 0.35rem;
-  margin-bottom: 0.25rem;
+  margin-top: 0.35rem;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
   color: #46524d;
+  background: #f8f5ee;
   font-size: 0.82rem;
   font-weight: 700;
 }

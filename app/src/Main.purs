@@ -279,14 +279,14 @@ rootComponent =
           , rootSettingGroup
               "Note selection"
               "Choose which notes may begin an exercise, or use a major-key preset."
-              ( [ rootMajorKeySelector state.config ]
-                  <> map (rootRootButton state.config) allRootPitchClasses
+              ( map (rootRootButton state.config) allRootPitchClasses
                   <>
                     [ rootSelectionActions
                         RootSelectAllRoots
                         RootClearRoots
                         (Array.length state.config.rootPitchClasses == Array.length allRootPitchClasses)
                         (Array.null state.config.rootPitchClasses)
+                    , rootMajorKeySelector state.config
                     ]
               )
               (if Array.null state.config.rootPitchClasses then Just "Select at least one note." else Nothing)
