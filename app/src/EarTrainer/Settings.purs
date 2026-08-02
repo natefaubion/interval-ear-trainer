@@ -7,7 +7,7 @@ import Prelude
 
 import Data.Array as Array
 import Data.Maybe (Maybe(..))
-import EarTrainer.Config (AnswerDisplay(..), ExerciseConfig, GhostMode(..), defaultConfig)
+import EarTrainer.Config (AnswerCount(..), AnswerDisplay(..), ExerciseConfig, GhostMode(..), defaultConfig)
 import EarTrainer.Music
   ( Accidental(..)
   , Interval(..)
@@ -25,7 +25,8 @@ type StoredPitchClass =
   }
 
 type StoredSettings =
-  { answerDisplay :: String
+  { answerCount :: String
+  , answerDisplay :: String
   , ghostMode :: String
   , intervals :: Array String
   , octavePolicy :: String
@@ -48,7 +49,8 @@ load = do
     Nothing -> defaultConfig
     Just value ->
       defaultConfig
-        { answerDisplay = decodeAnswerDisplay value.answerDisplay
+        { answerCount = decodeAnswerCount value.answerCount
+        , answerDisplay = decodeAnswerDisplay value.answerDisplay
         , ghostMode = decodeGhostMode value.ghostMode
         , intervals = Array.mapMaybe decodeInterval value.intervals
         , octavePolicy = decodeOctavePolicy value.octavePolicy
@@ -59,7 +61,8 @@ load = do
 
 save :: ExerciseConfig -> Effect Unit
 save config = saveImpl
-  { answerDisplay: encodeAnswerDisplay config.answerDisplay
+  { answerCount: encodeAnswerCount config.answerCount
+  , answerDisplay: encodeAnswerDisplay config.answerDisplay
   , ghostMode: encodeGhostMode config.ghostMode
   , intervals: map encodeInterval config.intervals
   , octavePolicy: encodeOctavePolicy config.octavePolicy
@@ -67,6 +70,14 @@ save config = saveImpl
   , rootPitchClasses: map encodePitchClass config.rootPitchClasses
   , vocalRange: encodeVocalRange config.vocalRange
   }
+
+encodeAnswerCount :: AnswerCount -> String
+encodeAnswerCount AFew = "few"
+encodeAnswerCount AllSelected = "all-selected"
+
+decodeAnswerCount :: String -> AnswerCount
+decodeAnswerCount "all-selected" = AllSelected
+decodeAnswerCount _ = AFew
 
 encodeGhostMode :: GhostMode -> String
 encodeGhostMode GhostOff = "off"

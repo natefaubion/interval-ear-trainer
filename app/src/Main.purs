@@ -9,7 +9,8 @@ import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
 import EarTrainer.Config
-  ( AnswerDisplay(..)
+  ( AnswerCount(..)
+  , AnswerDisplay(..)
   , ExerciseConfig
   , GhostMode(..)
   , defaultConfig
@@ -93,6 +94,7 @@ data Action
   | SelectRange VocalRangePreset
   | SelectOctavePolicy OctavePolicy
   | SelectGhostMode GhostMode
+  | SelectAnswerCount AnswerCount
   | SelectAnswerDisplay AnswerDisplay
   | BeginPractice
   | PlayPrompt
@@ -124,7 +126,7 @@ component =
   initialState =
     { answerCorrect: false
     , captureStatus: ReadyToPlay
-    , choices: Quiz.makeChoices 0 (Quiz.makePrompt 0 defaultConfig)
+    , choices: Quiz.makeChoices 0 defaultConfig (Quiz.makePrompt 0 defaultConfig)
     , config: defaultConfig
     , ghostMidi: Nothing
     , ghostRevision: 0
@@ -185,6 +187,15 @@ component =
           [ choiceButton (state.config.ghostMode == GhostOff) (SelectGhostMode GhostOff) "Hidden"
           , choiceButton (state.config.ghostMode == GhostOn) (SelectGhostMode GhostOn) "Shown briefly"
           , choiceButton (state.config.ghostMode == GhostPersist) (SelectGhostMode GhostPersist) "Kept visible"
+          ]
+      , settingGroup
+          "Available answers"
+          "Choose how many interval choices are shown for each question."
+          [ choiceButton (state.config.answerCount == AFew) (SelectAnswerCount AFew) "A few"
+          , choiceButton
+              (state.config.answerCount == AllSelected)
+              (SelectAnswerCount AllSelected)
+              "All selected choices"
           ]
       , settingGroup
           "Answer display"
@@ -474,6 +485,8 @@ component =
       updateConfig (_ { octavePolicy = policy })
     SelectGhostMode mode ->
       updateConfig (_ { ghostMode = mode })
+    SelectAnswerCount count ->
+      updateConfig (_ { answerCount = count })
     SelectAnswerDisplay display ->
       updateConfig (_ { answerDisplay = display })
     BeginPractice -> do
@@ -484,7 +497,7 @@ component =
         Nothing -> H.liftEffect Audio.createSampler
       let
         prompt = Quiz.makePrompt seed state.config
-        choices = Quiz.makeChoices seed prompt
+        choices = Quiz.makeChoices seed state.config prompt
       H.modify_ _
         { answerCorrect = false
         , captureStatus = ReadyToPlay
@@ -641,7 +654,7 @@ component =
       seed <- H.liftEffect (randomInt 0 2147483647)
       let
         prompt = Quiz.makePrompt seed state.config
-        choices = Quiz.makeChoices seed prompt
+        choices = Quiz.makeChoices seed state.config prompt
       H.modify_ _
         { answerCorrect = false
         , captureStatus = ReadyToPlay

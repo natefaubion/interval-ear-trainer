@@ -5,7 +5,7 @@ import Prelude
 import Data.Array as Array
 import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..))
-import EarTrainer.Config (defaultConfig, isValid, toggleInterval)
+import EarTrainer.Config (AnswerCount(..), defaultConfig, isValid, toggleInterval)
 import EarTrainer.Music
   ( Accidental(..)
   , Direction(..)
@@ -87,7 +87,9 @@ main = do
       (Array.replicate stableSamples unit)
     descendingConfig = defaultConfig { playbackModes = [ MelodicDescending ] }
     generatedPrompt = makePrompt 128 descendingConfig
-    generatedChoices = makeChoices 128 generatedPrompt
+    generatedChoices = makeChoices 128 descendingConfig generatedPrompt
+    allAnswersConfig = descendingConfig { answerCount = AllSelected }
+    allSelectedChoices = makeChoices 128 allAnswersConfig generatedPrompt
     generatedRange = presetRange descendingConfig.vocalRange
   assertEqual
     { actual: nearestMidi 440.0
@@ -140,6 +142,17 @@ main = do
   assertEqual
     { actual: Array.length (Array.filter (\choice -> choice.interval == generatedPrompt.interval) generatedChoices)
     , expected: 1
+    }
+  assertEqual
+    { actual: Array.length allSelectedChoices
+    , expected: Array.length allAnswersConfig.intervals
+    }
+  assertEqual
+    { actual:
+        Array.all
+          (\interval -> Array.elem interval (map _.interval allSelectedChoices))
+          allAnswersConfig.intervals
+    , expected: true
     }
   assertEqual
     { actual:

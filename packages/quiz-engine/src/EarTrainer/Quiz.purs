@@ -13,7 +13,7 @@ import Prelude
 import Data.Array as Array
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Ord (abs)
-import EarTrainer.Config (ExerciseConfig)
+import EarTrainer.Config (AnswerCount(..), ExerciseConfig)
 import EarTrainer.Music
   ( Accidental(..)
   , Direction(..)
@@ -22,7 +22,6 @@ import EarTrainer.Music
   , Pitch(..)
   , PitchClass(..)
   , PlaybackMode(..)
-  , allIntervals
   , midiNumber
   , presetRange
   , transpose
@@ -80,15 +79,17 @@ makePrompt seed config =
     , target: transpose direction interval root
     }
 
-makeChoices :: Int -> Prompt -> Array IntervalChoice
-makeChoices seed prompt =
+makeChoices :: Int -> ExerciseConfig -> Prompt -> Array IntervalChoice
+makeChoices seed config prompt =
   let
-    distractorPool = Array.filter (_ /= prompt.interval) allIntervals
+    distractorPool = Array.filter (_ /= prompt.interval) config.intervals
     poolLength = Array.length distractorPool
     offset = abs (seed `div` 17) `mod` max 1 poolLength
     rotated = Array.drop offset distractorPool <> Array.take offset distractorPool
-    intervals = Array.take 3 rotated
-    correctPosition = abs (seed `div` 31) `mod` 4
+    intervals = case config.answerCount of
+      AFew -> Array.take 3 rotated
+      AllSelected -> rotated
+    correctPosition = abs (seed `div` 31) `mod` (Array.length intervals + 1)
     withCorrect = fromMaybe intervals (Array.insertAt correctPosition prompt.interval intervals)
     direction = directionFor prompt.mode
   in

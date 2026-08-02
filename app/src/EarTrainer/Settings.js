@@ -24,6 +24,7 @@ export const loadImpl = (just) => (nothing) => () => {
     return isStoredSettings(value)
       ? just({
           ...value,
+          answerCount: typeof value.answerCount === "string" ? value.answerCount : "few",
           answerDisplay: typeof value.answerDisplay === "string" ? value.answerDisplay : "notation",
           ghostMode: typeof value.ghostMode === "string" ? value.ghostMode : "on",
         })

@@ -1,5 +1,6 @@
 module EarTrainer.Config
-  ( AnswerDisplay(..)
+  ( AnswerCount(..)
+  , AnswerDisplay(..)
   , ExerciseConfig
   , GhostMode(..)
   , defaultConfig
@@ -31,8 +32,13 @@ data AnswerDisplay = AnswerNotation | AnswerName | AnswerBoth
 
 derive instance Eq AnswerDisplay
 
+data AnswerCount = AFew | AllSelected
+
+derive instance Eq AnswerCount
+
 type ExerciseConfig =
-  { answerDisplay :: AnswerDisplay
+  { answerCount :: AnswerCount
+  , answerDisplay :: AnswerDisplay
   , ghostMode :: GhostMode
   , intervals :: Array Interval
   , octavePolicy :: OctavePolicy
@@ -43,7 +49,8 @@ type ExerciseConfig =
 
 defaultConfig :: ExerciseConfig
 defaultConfig =
-  { answerDisplay: AnswerNotation
+  { answerCount: AFew
+  , answerDisplay: AnswerNotation
   , ghostMode: GhostOn
   , intervals: defaultIntervals
   , octavePolicy: AnyOctave
