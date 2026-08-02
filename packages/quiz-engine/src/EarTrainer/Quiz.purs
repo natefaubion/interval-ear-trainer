@@ -151,11 +151,18 @@ pitchInRange range pitch =
 makeChoices :: Int -> ExerciseConfig -> Prompt -> Array IntervalChoice
 makeChoices seed config prompt =
   let
+    direction = directionFor prompt.mode
+    soundMidi interval = midiNumber (transpose direction interval prompt.root)
+    sameSound left right =
+      soundMidi left == soundMidi right
+    compareSound left right = compare (soundMidi left) (soundMidi right)
     configuredIntervals = case config.intervalSystem of
       ExactIntervals -> config.intervals
       FromSelectedNotes ->
         Array.nub (map _.interval (derivedCandidates config (availableIntervalSizes config)))
-    distractorPool = Array.filter (_ /= prompt.interval) configuredIntervals
+    distractorPool =
+      Array.nubBy compareSound
+        (Array.filter (not <<< sameSound prompt.interval) configuredIntervals)
     poolLength = Array.length distractorPool
     offset = abs (seed `div` 17) `mod` max 1 poolLength
     rotated = Array.drop offset distractorPool <> Array.take offset distractorPool
@@ -164,7 +171,6 @@ makeChoices seed config prompt =
       AllSelected -> rotated
     correctPosition = abs (seed `div` 31) `mod` (Array.length intervals + 1)
     withCorrect = fromMaybe intervals (Array.insertAt correctPosition prompt.interval intervals)
-    direction = directionFor prompt.mode
   in
     map
       (\interval -> { interval, target: transpose direction interval prompt.root })

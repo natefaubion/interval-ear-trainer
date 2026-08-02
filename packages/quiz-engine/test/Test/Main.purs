@@ -143,6 +143,26 @@ main = do
           , PitchClass G (Accidental 0)
           ]
       }
+    enharmonicConfig = defaultConfig
+      { answerCount = AllSelected
+      , intervalSystem = ExactIntervals
+      , intervals = [ AugmentedFourth, DiminishedFifth, PerfectFourth, PerfectFifth, MajorThird ]
+      , playbackModes = [ MelodicAscending ]
+      }
+    augmentedFourthPrompt =
+      { interval: AugmentedFourth
+      , mode: MelodicAscending
+      , root: c4
+      , target: transpose Ascending AugmentedFourth c4
+      }
+    diminishedFifthPrompt =
+      { interval: DiminishedFifth
+      , mode: MelodicAscending
+      , root: c4
+      , target: transpose Ascending DiminishedFifth c4
+      }
+    augmentedFourthChoices = makeChoices 17 enharmonicConfig augmentedFourthPrompt
+    diminishedFifthChoices = makeChoices 17 enharmonicConfig diminishedFifthPrompt
   assertEqual
     { actual: nearestMidi 440.0
     , expected: 69
@@ -198,6 +218,19 @@ main = do
   assertEqual
     { actual: Array.length generatedChoices
     , expected: 4
+    }
+  assertEqual
+    { actual:
+        [ Array.elem AugmentedFourth (map _.interval augmentedFourthChoices)
+        , Array.elem DiminishedFifth (map _.interval augmentedFourthChoices)
+        , Array.length (Array.nub (map (\choice -> midiNumber choice.target) augmentedFourthChoices))
+            == Array.length augmentedFourthChoices
+        , Array.elem DiminishedFifth (map _.interval diminishedFifthChoices)
+        , Array.elem AugmentedFourth (map _.interval diminishedFifthChoices)
+        , Array.length (Array.nub (map (\choice -> midiNumber choice.target) diminishedFifthChoices))
+            == Array.length diminishedFifthChoices
+        ]
+    , expected: [ true, false, true, true, false, true ]
     }
   assertEqual
     { actual: Array.length (Array.filter (\choice -> choice.interval == generatedPrompt.interval) generatedChoices)
