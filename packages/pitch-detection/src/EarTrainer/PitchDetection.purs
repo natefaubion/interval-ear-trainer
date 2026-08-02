@@ -211,11 +211,11 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
         | otherwise -> resetStable feedback recognition
 
 phaseInstruction :: RecognitionPhase -> String
-phaseInstruction WaitingForFirst = "Sing the first note"
-phaseInstruction WaitingForRelease = "Sing the second note"
-phaseInstruction WaitingForSecond = "Sing the second note"
-phaseInstruction RecognitionIncorrect = "Incorrect pitch"
-phaseInstruction RecognitionComplete = "Both notes accepted"
+phaseInstruction WaitingForFirst = "Sing the first note."
+phaseInstruction WaitingForRelease = "Sing the second note."
+phaseInstruction WaitingForSecond = "Sing the second note."
+phaseInstruction RecognitionIncorrect = "Incorrect pitch."
+phaseInstruction RecognitionComplete = "Both notes accepted."
 
 relativeMidi :: OctavePolicy -> Pitch -> Recognition -> Int -> Int
 relativeMidi WrittenOctave _ _ detectedMidi = detectedMidi
