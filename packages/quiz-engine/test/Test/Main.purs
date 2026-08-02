@@ -146,7 +146,7 @@ main = do
     enharmonicConfig = defaultConfig
       { answerCount = AllSelected
       , intervalSystem = ExactIntervals
-      , intervals = [ AugmentedFourth, DiminishedFifth, PerfectFourth, PerfectFifth, MajorThird ]
+      , intervals = [ AugmentedFourth, DiminishedFifth, PerfectFourth, PerfectFifth, AugmentedFifth, MinorSixth, MajorThird ]
       , playbackModes = [ MelodicAscending ]
       }
     augmentedFourthPrompt =
@@ -163,6 +163,13 @@ main = do
       }
     augmentedFourthChoices = makeChoices 17 enharmonicConfig augmentedFourthPrompt
     diminishedFifthChoices = makeChoices 17 enharmonicConfig diminishedFifthPrompt
+    augmentedFifthPrompt =
+      { interval: AugmentedFifth
+      , mode: MelodicAscending
+      , root: c4
+      , target: transpose Ascending AugmentedFifth c4
+      }
+    augmentedFifthChoices = makeChoices 17 enharmonicConfig augmentedFifthPrompt
   assertEqual
     { actual: nearestMidi 440.0
     , expected: 69
@@ -229,8 +236,12 @@ main = do
         , Array.elem AugmentedFourth (map _.interval diminishedFifthChoices)
         , Array.length (Array.nub (map (\choice -> midiNumber choice.target) diminishedFifthChoices))
             == Array.length diminishedFifthChoices
+        , Array.elem AugmentedFifth (map _.interval augmentedFifthChoices)
+        , Array.elem MinorSixth (map _.interval augmentedFifthChoices)
+        , Array.length (Array.nub (map (\choice -> midiNumber choice.target) augmentedFifthChoices))
+            == Array.length augmentedFifthChoices
         ]
-    , expected: [ true, false, true, true, false, true ]
+    , expected: [ true, false, true, true, false, true, true, false, true ]
     }
   assertEqual
     { actual: Array.length (Array.filter (\choice -> choice.interval == generatedPrompt.interval) generatedChoices)
@@ -285,6 +296,10 @@ main = do
     , expected: pitch G (Accidental (-1)) 4
     }
   assertEqual
+    { actual: transpose Ascending AugmentedFifth (pitch C (Accidental 0) 4)
+    , expected: pitch G (Accidental 1) 4
+    }
+  assertEqual
     { actual: Array.elem (PitchClass D (Accidental (-1))) allRootPitchClasses
     , expected: true
     }
@@ -336,8 +351,9 @@ main = do
         , intervalBetween Ascending (pitch D (Accidental 0) 4) (pitch F (Accidental 0) 4) == Just MinorThird
         , intervalBetween Ascending (pitch F (Accidental 0) 4) (pitch B (Accidental 0) 4) == Just AugmentedFourth
         , intervalBetween Ascending (pitch B (Accidental 0) 4) (pitch F (Accidental 0) 5) == Just DiminishedFifth
+        , intervalBetween Ascending (pitch C (Accidental 0) 4) (pitch G (Accidental 1) 4) == Just AugmentedFifth
         ]
-    , expected: [ true, true, true, true ]
+    , expected: [ true, true, true, true, true ]
     }
   assertEqual
     { actual:

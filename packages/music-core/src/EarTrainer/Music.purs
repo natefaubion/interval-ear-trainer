@@ -79,6 +79,7 @@ data Interval
   | AugmentedFourth
   | DiminishedFifth
   | PerfectFifth
+  | AugmentedFifth
   | MinorSixth
   | MajorSixth
   | MinorSeventh
@@ -152,6 +153,7 @@ allIntervals =
   , AugmentedFourth
   , DiminishedFifth
   , PerfectFifth
+  , AugmentedFifth
   , MinorSixth
   , MajorSixth
   , MinorSeventh
@@ -349,6 +351,7 @@ intervalSemitones PerfectFourth = 5
 intervalSemitones AugmentedFourth = 6
 intervalSemitones DiminishedFifth = 6
 intervalSemitones PerfectFifth = 7
+intervalSemitones AugmentedFifth = 8
 intervalSemitones MinorSixth = 8
 intervalSemitones MajorSixth = 9
 intervalSemitones MinorSeventh = 10
@@ -365,6 +368,7 @@ intervalNumber PerfectFourth = 4
 intervalNumber AugmentedFourth = 4
 intervalNumber DiminishedFifth = 5
 intervalNumber PerfectFifth = 5
+intervalNumber AugmentedFifth = 5
 intervalNumber MinorSixth = 6
 intervalNumber MajorSixth = 6
 intervalNumber MinorSeventh = 7
@@ -401,6 +405,7 @@ intervalBetween direction rootPitch@(Pitch (PitchClass rootLetter _) rootOctave)
       4, 6 -> Just AugmentedFourth
       5, 6 -> Just DiminishedFifth
       5, 7 -> Just PerfectFifth
+      5, 8 -> Just AugmentedFifth
       6, 8 -> Just MinorSixth
       6, 9 -> Just MajorSixth
       7, 10 -> Just MinorSeventh
@@ -418,6 +423,7 @@ intervalName PerfectFourth = "Perfect fourth"
 intervalName AugmentedFourth = "Augmented fourth"
 intervalName DiminishedFifth = "Diminished fifth"
 intervalName PerfectFifth = "Perfect fifth"
+intervalName AugmentedFifth = "Augmented fifth"
 intervalName MinorSixth = "Minor sixth"
 intervalName MajorSixth = "Major sixth"
 intervalName MinorSeventh = "Minor seventh"
