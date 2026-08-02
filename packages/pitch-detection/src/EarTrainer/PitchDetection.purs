@@ -69,7 +69,7 @@ defaultRecognitionSettings :: RecognitionSettings
 defaultRecognitionSettings =
   { clarityThreshold: 0.9
   , releaseFramesRequired: 5
-  , stableFramesRequired: 24
+  , stableFramesRequired: 36
   , toleranceCents: 35.0
   }
 

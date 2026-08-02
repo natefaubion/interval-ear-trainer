@@ -160,7 +160,8 @@ button {
 }
 
 .tuner-dot.in-range {
-  background: #2f7a4f;
+  border: 2px solid #0d713b;
+  background: #20a65a;
 }
 
 .answer-panel {
