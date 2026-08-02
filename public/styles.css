@@ -372,6 +372,7 @@ button {
 }
 
 .setup-heading > p {
+  min-width: 0;
   margin: 0;
   color: #64716b;
   line-height: 1.55;
@@ -448,8 +449,12 @@ button {
 }
 
 .setup-message {
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   color: #65716c;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .primary-button {
@@ -486,13 +491,25 @@ button {
 
 @media (max-width: 36rem) {
   .setup-heading {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1rem;
+    padding: 0.9rem;
+  }
+
+  .setup-heading h2 {
+    font-size: 1.25rem;
+    white-space: nowrap;
+  }
+
+  .setup-heading > p {
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .setup-footer {
-    align-items: stretch;
-    flex-direction: column;
+    padding: 0.9rem;
   }
 
   .practice-toolbar,
