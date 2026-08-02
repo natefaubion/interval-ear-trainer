@@ -158,6 +158,7 @@ encodeVocalRange Tenor = "tenor"
 encodeVocalRange Alto = "alto"
 encodeVocalRange MezzoSoprano = "mezzo-soprano"
 encodeVocalRange Soprano = "soprano"
+encodeVocalRange ExtraWide = "extra-wide"
 
 decodeVocalRange :: String -> VocalRangePreset
 decodeVocalRange "bass" = Bass
@@ -165,6 +166,7 @@ decodeVocalRange "baritone" = Baritone
 decodeVocalRange "alto" = Alto
 decodeVocalRange "mezzo-soprano" = MezzoSoprano
 decodeVocalRange "soprano" = Soprano
+decodeVocalRange "extra-wide" = ExtraWide
 decodeVocalRange _ = Tenor
 
 encodePitchClass :: PitchClass -> StoredPitchClass

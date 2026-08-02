@@ -104,6 +104,7 @@ data VocalRangePreset
   | Alto
   | MezzoSoprano
   | Soprano
+  | ExtraWide
 
 derive instance Eq VocalRangePreset
 derive instance Ord VocalRangePreset
@@ -168,7 +169,7 @@ defaultRootPitchClasses :: Array PitchClass
 defaultRootPitchClasses = allRootPitchClasses
 
 allVocalRangePresets :: Array VocalRangePreset
-allVocalRangePresets = [ Bass, Baritone, Tenor, Alto, MezzoSoprano, Soprano ]
+allVocalRangePresets = [ Bass, Baritone, Tenor, Alto, MezzoSoprano, Soprano, ExtraWide ]
 
 pitch :: Letter -> Accidental -> Int -> Pitch
 pitch letter accidental octave = Pitch (PitchClass letter accidental) octave
@@ -343,6 +344,7 @@ presetName Tenor = "Tenor"
 presetName Alto = "Alto"
 presetName MezzoSoprano = "Mezzo-soprano"
 presetName Soprano = "Soprano"
+presetName ExtraWide = "Extra wide"
 
 presetRange :: VocalRangePreset -> VocalRange
 presetRange Bass = { low: pitch E (Accidental 0) 2, high: pitch E (Accidental 0) 4 }
@@ -351,3 +353,4 @@ presetRange Tenor = { low: pitch C (Accidental 0) 3, high: pitch C (Accidental 0
 presetRange Alto = { low: pitch F (Accidental 0) 3, high: pitch F (Accidental 0) 5 }
 presetRange MezzoSoprano = { low: pitch A (Accidental 0) 3, high: pitch A (Accidental 0) 5 }
 presetRange Soprano = { low: pitch C (Accidental 0) 4, high: pitch C (Accidental 0) 6 }
+presetRange ExtraWide = { low: pitch C (Accidental 0) 1, high: pitch C (Accidental 0) 7 }

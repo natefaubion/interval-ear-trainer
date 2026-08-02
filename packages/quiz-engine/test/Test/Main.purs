@@ -14,6 +14,7 @@ import EarTrainer.Music
   , OctavePolicy(..)
   , PlaybackMode(..)
   , PitchClass(..)
+  , VocalRangePreset(..)
   , allRootPitchClasses
   , midiNumber
   , pitch
@@ -185,6 +186,10 @@ main = do
   assertEqual
     { actual: Array.elem (PitchClass D (Accidental (-1))) allRootPitchClasses
     , expected: true
+    }
+  assertEqual
+    { actual: presetRange ExtraWide
+    , expected: { low: pitch C (Accidental 0) 1, high: pitch C (Accidental 0) 7 }
     }
   assertEqual
     { actual: transpose Ascending MinorThird (pitch D (Accidental (-1)) 4)
