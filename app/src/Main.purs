@@ -156,18 +156,22 @@ component =
               "Playback"
               "How the interval is played before the microphone begins listening."
               (map (modeButton state.config) allPlaybackModes)
+              (if Array.null state.config.playbackModes then Just "Select at least one playback mode." else Nothing)
           , settingGroup
               "Intervals"
               "Choose the intervals that may appear in an exercise."
               (map (intervalButton state.config) allIntervals)
+              (if Array.null state.config.intervals then Just "Select at least one interval." else Nothing)
           , settingGroup
               "Singing range"
               "Choose the written and playback register."
               (map (rangeButton state.config) allVocalRangePresets)
+              Nothing
           , settingGroup
               "Root notes"
               "Choose the individual pitch classes that may begin an exercise."
               (map (rootButton state.config) allRootPitchClasses)
+              (if Array.null state.config.rootPitchClasses then Just "Select at least one root note." else Nothing)
           , settingGroup
               "Octave matching"
               "Choose whether the detected pitch must be in the written octave."
@@ -180,6 +184,7 @@ component =
                   (SelectOctavePolicy WrittenOctave)
                   "Written octave only"
               ]
+              Nothing
           , settingGroup
               "Ghost note"
               "The ghost note shows the pitch you are currently singing on the staff."
@@ -187,6 +192,7 @@ component =
               , choiceButton (state.config.ghostMode == GhostOn) (SelectGhostMode GhostOn) "Shown briefly"
               , choiceButton (state.config.ghostMode == GhostPersist) (SelectGhostMode GhostPersist) "Kept visible"
               ]
+              Nothing
           , settingGroup
               "Available answers"
               "Choose how many interval choices are shown for each question."
@@ -196,6 +202,7 @@ component =
                   (SelectAnswerCount AllSelected)
                   "All selected choices"
               ]
+              Nothing
           , settingGroup
               "Answer display"
               "Choose how interval answers are presented."
@@ -212,16 +219,11 @@ component =
                   (SelectAnswerDisplay AnswerBoth)
                   "Both"
               ]
+              Nothing
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "setup-footer") ]
-          [ if isValid state.config then
-              HH.text ""
-            else
-              HH.p
-                [ HP.class_ (H.ClassName "setup-message") ]
-                [ HH.text "Select at least one playback mode, interval, and root note." ]
-          , HH.button
+          [ HH.button
               [ HP.type_ HP.ButtonButton
               , HP.class_ (H.ClassName "primary-button")
               , HP.disabled (not (isValid state.config))
@@ -385,7 +387,7 @@ component =
     | footerButtonLabel state == "Next interval" = "→"
     | otherwise = "▶"
 
-  settingGroup title description controls =
+  settingGroup title description controls validation =
     HH.fieldset
       [ HP.class_ (H.ClassName "setting-group") ]
       [ HH.legend_ [ HH.text title ]
@@ -395,6 +397,12 @@ component =
       , HH.div
           [ HP.class_ (H.ClassName "choice-grid") ]
           controls
+      , case validation of
+          Nothing -> HH.text ""
+          Just message ->
+            HH.p
+              [ HP.class_ (H.ClassName "setting-error") ]
+              [ HH.text message ]
       ]
 
   choiceButton selected action label =

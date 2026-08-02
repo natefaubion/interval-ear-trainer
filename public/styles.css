@@ -398,6 +398,13 @@ button {
   line-height: 1.5;
 }
 
+.setting-error {
+  margin: 0.65rem 0 0;
+  color: #9b352f;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
 .choice-grid {
   display: flex;
   flex-wrap: wrap;
@@ -438,15 +445,6 @@ button {
   padding: clamp(1.25rem, 4vw, 2.25rem);
   border-top: 1px solid var(--line);
   background: var(--paper);
-}
-
-.setup-message {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  color: #65716c;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .primary-button {
