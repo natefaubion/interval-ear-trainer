@@ -355,7 +355,9 @@ component =
 
   renderIntervalChoices state
     | state.config.quizMode == SingingOnly = HH.text ""
-    | state.captureStatus /= ChoosingAnswer && state.captureStatus /= AnswerComplete = HH.text ""
+    | state.captureStatus /= ChoosingAnswer
+        && state.captureStatus /= AnswerComplete
+        && not (state.captureStatus == PlayingAudio && state.resumeAnswersAfterPlayback) = HH.text ""
     | otherwise =
         HH.section
           [ HP.class_ (H.ClassName "answer-panel") ]
@@ -390,7 +392,7 @@ component =
                   )
                 <> resultClasses
             )
-        , HP.disabled state.answerCorrect
+        , HP.disabled (state.answerCorrect || state.captureStatus == PlayingAudio)
         , HE.onClick \_ -> ChooseInterval choice.interval
         ]
         [ if revealed then
