@@ -34,6 +34,11 @@ button {
   padding-block: clamp(2rem, 8vw, 6rem);
 }
 
+.app-shell.practice-shell {
+  height: 100dvh;
+  padding-block: clamp(0.75rem, 2vw, 1.5rem);
+}
+
 .setup-card {
   margin-top: 0;
   border: 1px solid var(--line);
@@ -43,6 +48,9 @@ button {
 }
 
 .practice-card {
+  display: grid;
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   margin-top: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -61,7 +69,9 @@ button {
 }
 
 .practice-toolbar {
+  z-index: 1;
   border-bottom: 1px solid var(--line);
+  background: var(--paper);
 }
 
 .practice-toolbar h2 {
@@ -87,6 +97,12 @@ button {
   background:
     linear-gradient(rgb(255 253 247 / 88%), rgb(255 253 247 / 88%)),
     repeating-linear-gradient(to bottom, transparent 0 1.45rem, rgb(29 41 37 / 10%) 1.5rem 1.55rem);
+}
+
+.practice-content {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .notation-canvas {
@@ -297,7 +313,9 @@ button {
 }
 
 .practice-actions {
+  z-index: 1;
   border-top: 1px solid var(--line);
+  background: var(--paper);
 }
 
 .play-button {

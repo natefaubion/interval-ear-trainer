@@ -141,7 +141,11 @@ component =
   render :: State -> H.ComponentHTML Action () m
   render state =
     HH.main
-      [ HP.class_ (H.ClassName "app-shell") ]
+      [ HP.classes
+          ( [ H.ClassName "app-shell" ]
+              <> if state.screen == Practice then [ H.ClassName "practice-shell" ] else []
+          )
+      ]
       [ if state.screen == Setup then renderSetup state else renderPractice state ]
 
   renderSetup state =
@@ -246,14 +250,17 @@ component =
               [ HH.text "Edit setup" ]
           ]
       , HH.div
-          [ HP.class_ (H.ClassName "notation-panel") ]
+          [ HP.class_ (H.ClassName "practice-content") ]
           [ HH.div
-              [ HP.ref notationRef
-              , HP.class_ (H.ClassName "notation-canvas")
+              [ HP.class_ (H.ClassName "notation-panel") ]
+              [ HH.div
+                  [ HP.ref notationRef
+                  , HP.class_ (H.ClassName "notation-canvas")
+                  ]
+                  []
+              , renderPitchMeter state
+              , renderIntervalChoices state
               ]
-              []
-          , renderPitchMeter state
-          , renderIntervalChoices state
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "practice-actions") ]
