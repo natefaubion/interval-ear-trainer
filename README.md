@@ -20,6 +20,15 @@ npm run dev
 
 Vite prints the development URL when it starts (normally <http://localhost:5173>).
 
+## Installation and offline use
+
+The production site is an installable Progressive Web App. After the first complete online load, the application and piano samples are cached for offline practice.
+
+- On iPhone or iPad, open the deployed site, use the Share menu, and choose **Add to Home Screen**.
+- On Android or desktop Chromium browsers, use the browser's **Install** action when available.
+
+Microphone access must still be granted on each browser or installed-app environment. Application updates are downloaded in the background and take effect after all open instances of the previous version have been closed.
+
 ## Commands
 
 - `npm run format` formats PureScript sources.
