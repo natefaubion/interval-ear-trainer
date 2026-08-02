@@ -1196,7 +1196,7 @@ component =
         "Choose the matching interval."
       else
         "Not quite. Compare the choices and try again."
-    AnswerComplete -> "Correct."
+    AnswerComplete -> "Correct!"
 
   feedbackName = case _ of
     Nothing -> "—"
