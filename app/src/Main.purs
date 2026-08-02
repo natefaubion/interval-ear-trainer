@@ -89,8 +89,12 @@ type State =
 data Action
   = Initialize
   | ToggleInterval Interval
+  | SelectAllIntervals
+  | ClearIntervals
   | TogglePlaybackMode PlaybackMode
   | ToggleRoot PitchClass
+  | SelectAllRoots
+  | ClearRoots
   | SelectRange VocalRangePreset
   | SelectOctavePolicy OctavePolicy
   | SelectGhostMode GhostMode
@@ -160,7 +164,15 @@ component =
           , settingGroup
               "Intervals"
               "Choose the intervals that may appear in an exercise."
-              (map (intervalButton state.config) allIntervals)
+              ( map (intervalButton state.config) allIntervals
+                  <>
+                    [ selectionActions
+                        SelectAllIntervals
+                        ClearIntervals
+                        (Array.length state.config.intervals == Array.length allIntervals)
+                        (Array.null state.config.intervals)
+                    ]
+              )
               (if Array.null state.config.intervals then Just "Select at least one interval." else Nothing)
           , settingGroup
               "Singing range"
@@ -170,7 +182,15 @@ component =
           , settingGroup
               "Root notes"
               "Choose the individual pitch classes that may begin an exercise."
-              (map (rootButton state.config) allRootPitchClasses)
+              ( map (rootButton state.config) allRootPitchClasses
+                  <>
+                    [ selectionActions
+                        SelectAllRoots
+                        ClearRoots
+                        (Array.length state.config.rootPitchClasses == Array.length allRootPitchClasses)
+                        (Array.null state.config.rootPitchClasses)
+                    ]
+              )
               (if Array.null state.config.rootPitchClasses then Just "Select at least one root note." else Nothing)
           , settingGroup
               "Octave matching"
@@ -417,6 +437,25 @@ component =
       ]
       [ HH.text label ]
 
+  selectionActions selectAction clearAction selectDisabled clearDisabled =
+    HH.div
+      [ HP.class_ (H.ClassName "selection-actions") ]
+      [ HH.button
+          [ HP.type_ HP.ButtonButton
+          , HP.class_ (H.ClassName "small-text-button")
+          , HP.disabled selectDisabled
+          , HE.onClick \_ -> selectAction
+          ]
+          [ HH.text "Select All" ]
+      , HH.button
+          [ HP.type_ HP.ButtonButton
+          , HP.class_ (H.ClassName "small-text-button")
+          , HP.disabled clearDisabled
+          , HE.onClick \_ -> clearAction
+          ]
+          [ HH.text "Clear" ]
+      ]
+
   modeButton config mode =
     choiceButton
       (Array.elem mode config.playbackModes)
@@ -486,10 +525,18 @@ component =
       H.modify_ _ { config = config }
     ToggleInterval interval ->
       updateConfig (toggleInterval interval)
+    SelectAllIntervals ->
+      updateConfig (_ { intervals = allIntervals })
+    ClearIntervals ->
+      updateConfig (_ { intervals = [] })
     TogglePlaybackMode mode ->
       updateConfig (togglePlaybackMode mode)
     ToggleRoot root ->
       updateConfig (toggleRootPitchClass root)
+    SelectAllRoots ->
+      updateConfig (_ { rootPitchClasses = allRootPitchClasses })
+    ClearRoots ->
+      updateConfig (_ { rootPitchClasses = [] })
     SelectRange preset ->
       updateConfig (_ { vocalRange = preset })
     SelectOctavePolicy policy ->

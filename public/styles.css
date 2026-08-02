@@ -411,6 +411,31 @@ button {
   gap: 0.55rem;
 }
 
+.selection-actions {
+  display: flex;
+  flex-basis: 100%;
+  gap: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.small-text-button {
+  padding: 0.2rem 0;
+  border: 0;
+  color: #587a70;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.small-text-button:disabled {
+  color: #aaa298;
+  cursor: default;
+  text-decoration: none;
+}
+
 .choice-chip {
   min-height: 2.55rem;
   padding: 0.55rem 0.9rem;
