@@ -1510,7 +1510,7 @@ component =
 
   shouldShowIntervalName state =
     state.config.quizMode == Audiation
-      || state.config.quizMode == SingingOnly
+      || (state.config.quizMode == SingingOnly && state.captureStatus == AnswerComplete)
 
   promptIntervalLabel state =
     intervalName state.prompt.interval
