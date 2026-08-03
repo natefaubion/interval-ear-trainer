@@ -816,6 +816,10 @@ button:active:not(:disabled) {
     grid-template-columns: 1fr;
   }
 
+  .preset-dialog {
+    transform: translateY(-3rem);
+  }
+
   .app-shell {
     width: 100%;
     padding-block: 0;
