@@ -358,6 +358,37 @@ rootComponent =
                   "Manual"
               ]
               Nothing
+          , if quizModeUsesRecognition state.config.quizMode then
+              rootSettingGroup
+                "Number of available answers"
+                "Choose how many interval choices are shown."
+                [ rootChoiceButton (state.config.answerCount == AFew) (RootSelectAnswerCount AFew) "A few"
+                , rootChoiceButton
+                    (state.config.answerCount == AllSelected)
+                    (RootSelectAnswerCount AllSelected)
+                    "All selected intervals"
+                ]
+                Nothing
+            else HH.text ""
+          , if quizModeUsesRecognition state.config.quizMode then
+              rootSettingGroup
+                "Answer display"
+                "Choose how interval choices are presented."
+                [ rootChoiceButton
+                    (state.config.answerDisplay == AnswerNotation)
+                    (RootSelectAnswerDisplay AnswerNotation)
+                    "Notation"
+                , rootChoiceButton
+                    (state.config.answerDisplay == AnswerName)
+                    (RootSelectAnswerDisplay AnswerName)
+                    "Interval name"
+                , rootChoiceButton
+                    (state.config.answerDisplay == AnswerBoth)
+                    (RootSelectAnswerDisplay AnswerBoth)
+                    "Both"
+                ]
+                Nothing
+            else HH.text ""
           , rootSettingGroup
               "Note selection"
               "Choose which notes may begin an exercise, or use a major-key preset."
@@ -372,18 +403,6 @@ rootComponent =
                     ]
               )
               (if Array.null state.config.rootPitchClasses then Just "Select at least one note." else Nothing)
-          , let
-              availableOrientations =
-                if state.config.quizMode == Audiation then
-                  Array.filter (_ /= Harmonic) allPlaybackModes
-                else allPlaybackModes
-              selectedOrientations = Array.filter (flip Array.elem state.config.playbackModes) availableOrientations
-            in
-              rootSettingGroup
-                "Interval orientation"
-                "Choose the directions or forms intervals may take."
-                (map (rootModeButton state.config) availableOrientations)
-                (if Array.null selectedOrientations then Just "Select at least one interval orientation." else Nothing)
           , rootSettingGroup
               "Interval system"
               "Choose exact interval qualities or derive their qualities from the selected notes."
@@ -408,7 +427,7 @@ rootComponent =
                 ( if state.config.intervalSystem == ExactIntervals then
                     "Choose the exact intervals that may appear in an exercise."
                   else
-                    "Choose interval numbers; each quality is determined by the selected note pair."
+                    "Choose the basic intervals that may appear in an exercise. Each exact quality is determined by the selected note pair."
                 )
                 ( if state.config.intervalSystem == ExactIntervals then
                     map (rootIntervalButton state.config possibleExactIntervals) allIntervals
@@ -439,6 +458,18 @@ rootComponent =
                     Just "Select at least one interval available from these notes."
                   else Nothing
                 )
+          , let
+              availableOrientations =
+                if state.config.quizMode == Audiation then
+                  Array.filter (_ /= Harmonic) allPlaybackModes
+                else allPlaybackModes
+              selectedOrientations = Array.filter (flip Array.elem state.config.playbackModes) availableOrientations
+            in
+              rootSettingGroup
+                "Interval orientation"
+                "Choose the directions or forms intervals may take."
+                (map (rootModeButton state.config) availableOrientations)
+                (if Array.null selectedOrientations then Just "Select at least one interval orientation." else Nothing)
           , rootSettingGroup
               "Playback range"
               "Choose the written and playback register."
@@ -482,37 +513,7 @@ rootComponent =
               , rootChoiceButton (not state.config.showPitchTuner) (RootSelectPitchTuner false) "Hidden"
               ]
               Nothing
-          , if quizModeUsesRecognition state.config.quizMode then
-              rootSettingGroup
-                "Number of available answers"
-                "Choose how many interval choices are shown."
-                [ rootChoiceButton (state.config.answerCount == AFew) (RootSelectAnswerCount AFew) "A few"
-                , rootChoiceButton
-                    (state.config.answerCount == AllSelected)
-                    (RootSelectAnswerCount AllSelected)
-                    "All selected choices"
-                ]
-                Nothing
-            else HH.text ""
-          , if quizModeUsesRecognition state.config.quizMode then
-              rootSettingGroup
-                "Answer display"
-                "Choose how interval choices are presented."
-                [ rootChoiceButton
-                    (state.config.answerDisplay == AnswerNotation)
-                    (RootSelectAnswerDisplay AnswerNotation)
-                    "Notation"
-                , rootChoiceButton
-                    (state.config.answerDisplay == AnswerName)
-                    (RootSelectAnswerDisplay AnswerName)
-                    "Interval name"
-                , rootChoiceButton
-                    (state.config.answerDisplay == AnswerBoth)
-                    (RootSelectAnswerDisplay AnswerBoth)
-                    "Both"
-                ]
-                Nothing
-            else HH.text ""
+
           , HH.aside
               [ HP.class_ (H.ClassName "credits-section") ]
               [ HH.h3_ [ HH.text "Credits" ]
