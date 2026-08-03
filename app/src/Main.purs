@@ -1719,12 +1719,7 @@ component =
         when completed do
           stopMonitor state.monitor
           H.modify_ _ { monitor = Nothing }
-          if state.config.ghostMode == GhostOn then
-            void $ H.fork do
-              H.liftAff (delay (Milliseconds 700.0))
-              handleAction (FinishSinging revision)
-          else
-            handleAction (FinishSinging revision)
+          handleAction (FinishSinging revision)
         when incorrect do
           stopMonitor state.monitor
           H.modify_ _
