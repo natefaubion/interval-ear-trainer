@@ -14,13 +14,16 @@
             "ear-trainer-pitch-detection",
             "ear-trainer-quiz-engine",
             "effect",
+            "either",
             "foldable-traversable",
             "halogen",
             "integers",
             "maybe",
             "prelude",
             "random",
-            "web-html"
+            "strings",
+            "web-html",
+            "web-uievents"
           ]
         },
         "test": {

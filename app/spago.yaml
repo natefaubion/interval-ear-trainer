@@ -12,8 +12,11 @@ package:
     - foldable-traversable
     - halogen
     - datetime
+    - either
     - maybe
     - integers
     - prelude
     - random
+    - strings
     - web-html
+    - web-uievents

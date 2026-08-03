@@ -3,9 +3,11 @@ module Main where
 import Prelude
 
 import Data.Array as Array
+import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe, isNothing)
+import Data.String.Common as String
 import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
 import EarTrainer.Config
@@ -56,7 +58,7 @@ import EarTrainer.PitchDetection as Detection
 import EarTrainer.Quiz as Quiz
 import EarTrainer.Settings as Settings
 import Effect (Effect)
-import Effect.Aff (delay)
+import Effect.Aff (attempt, delay)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Random (randomInt)
 import Halogen as H
@@ -69,6 +71,8 @@ import Halogen.VDom.Driver (runUI)
 import Type.Proxy (Proxy(..))
 import Web.DOM.Element as Element
 import Web.HTML.HTMLElement as HTMLElement
+import Web.HTML.HTMLDialogElement as HTMLDialogElement
+import Web.UIEvent.KeyboardEvent as KeyboardEvent
 
 data Screen = Setup | Practice
 
@@ -141,6 +145,12 @@ data Action
 notationRef :: H.RefLabel
 notationRef = H.RefLabel "prompt-notation"
 
+savePresetDialogRef :: H.RefLabel
+savePresetDialogRef = H.RefLabel "save-preset-dialog"
+
+deletePresetDialogRef :: H.RefLabel
+deletePresetDialogRef = H.RefLabel "delete-preset-dialog"
+
 practiceContentRef :: H.RefLabel
 practiceContentRef = H.RefLabel "practice-content"
 
@@ -159,16 +169,30 @@ data PracticeQuery :: Type -> Type
 data PracticeQuery a
 
 data SetupOutput
-  = SetupConfigChanged ExerciseConfig
+  = SetupDataChanged Settings.AppData
   | SetupBeginRequested
+  | SetupPersistenceRequested
 
 data SetupQuery :: Type -> Type
 data SetupQuery a
 
 type RootState =
-  { config :: ExerciseConfig
+  { activePresetId :: Maybe String
+  , config :: ExerciseConfig
   , practice :: Maybe PracticeInput
+  , presets :: Array Settings.Preset
   , sampler :: Maybe Audio.Sampler
+  , storageError :: Maybe String
+  }
+
+type SetupState =
+  { activePresetId :: Maybe String
+  , config :: ExerciseConfig
+  , presetName :: String
+  , presetNameError :: Maybe String
+  , presets :: Array Settings.Preset
+  , sampler :: Maybe Audio.Sampler
+  , storageError :: Maybe String
   }
 
 data RootAction
@@ -197,6 +221,15 @@ data RootAction
   | RootSelectAnswerDisplay AnswerDisplay
   | RootSelectQuizMode QuizMode
   | RootSelectQuizProgression QuizProgression
+  | RootOpenSavePreset
+  | RootCloseSavePreset
+  | RootSetPresetName String
+  | RootPresetKeyDown String
+  | RootSavePreset
+  | RootSelectPreset String
+  | RootOpenDeletePreset
+  | RootCloseDeletePreset
+  | RootConfirmDeletePreset
   | RootResetDefaults
   | RootBeginPractice
   | RootPracticeOutput PracticeOutput
@@ -217,7 +250,14 @@ setupSlot = Proxy
 rootComponent :: forall query input output m. MonadAff m => H.Component query input output m
 rootComponent =
   H.mkComponent
-    { initialState: const { config: defaultConfig, practice: Nothing, sampler: Nothing }
+    { initialState: const
+        { activePresetId: Nothing
+        , config: defaultConfig
+        , practice: Nothing
+        , presets: []
+        , sampler: Nothing
+        , storageError: Nothing
+        }
     , render: renderRoot
     , eval: H.mkEval H.defaultEval { handleAction = handleRootAction, initialize = Just RootInitialize }
     }
@@ -234,7 +274,15 @@ rootComponent =
   setupComponent :: H.Component SetupQuery RootState SetupOutput m
   setupComponent =
     H.mkComponent
-      { initialState: identity
+      { initialState: \input ->
+          { activePresetId: input.activePresetId
+          , config: input.config
+          , presetName: ""
+          , presetNameError: Nothing
+          , presets: input.presets
+          , sampler: input.sampler
+          , storageError: input.storageError
+          }
       , render: renderRootSetup
       , eval:
           H.mkEval H.defaultEval
@@ -243,15 +291,49 @@ rootComponent =
             }
       }
 
+  renderRootSetup :: SetupState -> H.ComponentHTML RootAction () m
   renderRootSetup state =
     HH.section
       [ HP.class_ (H.ClassName "setup-card") ]
       [ HH.div
           [ HP.class_ (H.ClassName "setup-heading") ]
-          [ HH.h2_ [ HH.text "Exercise setup" ] ]
+          [ HH.h2_ [ HH.text "Exercise setup" ]
+          , HH.button
+              [ HP.type_ HP.ButtonButton
+              , HP.classes [ H.ClassName "secondary-button", H.ClassName "save-preset-button" ]
+              , HE.onClick \_ -> RootOpenSavePreset
+              ]
+              [ HH.text "Save preset" ]
+          ]
       , HH.div
           [ HP.class_ (H.ClassName "setup-content") ]
-          [ rootSettingGroup
+          [ case state.storageError of
+              Nothing -> HH.text ""
+              Just message -> HH.p [ HP.class_ (H.ClassName "storage-error") ] [ HH.text message ]
+          , if Array.null state.presets then HH.text ""
+            else
+              rootSettingGroup
+                "Presets"
+                "Apply a saved exercise setup."
+                ( [ rootChoiceButton (isNothing state.activePresetId) (RootSelectPreset "") "Custom" ]
+                    <> map
+                      (\preset -> rootChoiceButton (state.activePresetId == Just preset.id) (RootSelectPreset preset.id) preset.name)
+                      state.presets
+                    <>
+                      [ HH.div
+                          [ HP.class_ (H.ClassName "selection-actions") ]
+                          [ HH.button
+                              [ HP.type_ HP.ButtonButton
+                              , HP.class_ (H.ClassName "small-text-button")
+                              , HP.disabled (isNothing state.activePresetId)
+                              , HE.onClick \_ -> RootOpenDeletePreset
+                              ]
+                              [ HH.text "Delete preset" ]
+                          ]
+                      ]
+                )
+                Nothing
+          , rootSettingGroup
               "Quiz mode"
               "Choose which parts of the exercise to practice."
               [ rootChoiceButton
@@ -474,7 +556,84 @@ rootComponent =
               ]
               [ HH.text "Begin practice" ]
           ]
+      , renderSavePresetDialog state
+      , renderDeletePresetDialog state
       ]
+
+  renderSavePresetDialog state =
+    HH.dialog
+      [ HP.ref savePresetDialogRef
+      , HP.class_ (H.ClassName "preset-dialog")
+      , HP.attr (H.AttrName "aria-labelledby") "save-preset-title"
+      ]
+      [ HH.h3 [ HP.id "save-preset-title" ] [ HH.text "Save preset" ]
+      , HH.p [ HP.class_ (H.ClassName "dialog-description") ] [ HH.text "Save the current exercise setup for later." ]
+      , HH.label
+          [ HP.class_ (H.ClassName "dialog-field") ]
+          [ HH.span_ [ HH.text "Preset name" ]
+          , HH.input
+              [ HP.type_ HP.InputText
+              , HP.value state.presetName
+              , HP.autofocus true
+              , HP.required true
+              , HE.onValueInput RootSetPresetName
+              , HE.onKeyDown (RootPresetKeyDown <<< KeyboardEvent.key)
+              ]
+          ]
+      , case state.presetNameError of
+          Nothing -> HH.text ""
+          Just message -> HH.p [ HP.class_ (H.ClassName "setting-error") ] [ HH.text message ]
+      , HH.div
+          [ HP.class_ (H.ClassName "dialog-actions") ]
+          [ HH.button
+              [ HP.type_ HP.ButtonButton
+              , HP.class_ (H.ClassName "secondary-button")
+              , HE.onClick \_ -> RootCloseSavePreset
+              ]
+              [ HH.text "Cancel" ]
+          , HH.button
+              [ HP.type_ HP.ButtonButton
+              , HP.class_ (H.ClassName "primary-button")
+              , HE.onClick \_ -> RootSavePreset
+              ]
+              [ HH.text "Save" ]
+          ]
+      ]
+
+  renderDeletePresetDialog state =
+    HH.dialog
+      [ HP.ref deletePresetDialogRef
+      , HP.class_ (H.ClassName "preset-dialog")
+      , HP.attr (H.AttrName "aria-labelledby") "delete-preset-title"
+      ]
+      [ HH.h3 [ HP.id "delete-preset-title" ] [ HH.text "Delete preset?" ]
+      , HH.p
+          [ HP.class_ (H.ClassName "dialog-description") ]
+          [ HH.text case activePreset state of
+              Nothing -> "This preset is no longer available."
+              Just preset -> "Delete “" <> preset.name <> "”? This cannot be undone."
+          ]
+      , HH.div
+          [ HP.class_ (H.ClassName "dialog-actions") ]
+          [ HH.button
+              [ HP.type_ HP.ButtonButton
+              , HP.class_ (H.ClassName "secondary-button")
+              , HE.onClick \_ -> RootCloseDeletePreset
+              ]
+              [ HH.text "Cancel" ]
+          , HH.button
+              [ HP.type_ HP.ButtonButton
+              , HP.classes [ H.ClassName "primary-button", H.ClassName "danger-button" ]
+              , HP.disabled (isNothing state.activePresetId)
+              , HE.onClick \_ -> RootConfirmDeletePreset
+              ]
+              [ HH.text "Delete" ]
+          ]
+      ]
+
+  activePreset state = case state.activePresetId of
+    Nothing -> Nothing
+    Just id -> Array.find (\preset -> preset.id == id) state.presets
 
   rootSettingGroup title description controls validation =
     HH.fieldset
@@ -630,9 +789,22 @@ rootComponent =
 
   handleRootAction = case _ of
     RootInitialize -> do
-      config <- H.liftEffect Settings.load
+      loaded <- H.liftAff (attempt Settings.load)
+      let
+        appData = case loaded of
+          Left _ -> { activePresetId: Nothing, config: defaultConfig, presets: [] }
+          Right value -> value
+        storageError = case loaded of
+          Left _ -> Just "Saved settings could not be loaded on this device."
+          Right _ -> Nothing
       sampler <- H.liftEffect Audio.createSampler
-      H.modify_ _ { config = config, sampler = Just sampler }
+      H.modify_ _
+        { activePresetId = appData.activePresetId
+        , config = appData.config
+        , presets = appData.presets
+        , sampler = Just sampler
+        , storageError = storageError
+        }
     RootToggleInterval interval -> rootUpdateConfig (toggleInterval interval)
     RootToggleIntervalSize interval -> rootUpdateConfig (toggleIntervalSize interval)
     RootSelectAllIntervals -> rootUpdateConfig (_ { intervals = allIntervals })
@@ -668,11 +840,26 @@ rootComponent =
           seed <- H.liftEffect (randomInt 0 2147483647)
           H.modify_ _ { practice = Just { config: state.config, sampler, seed } }
     RootPracticeOutput BackToSetup -> H.modify_ _ { practice = Nothing }
-    RootSetupOutput (SetupConfigChanged config) -> do
-      H.modify_ _ { config = config }
-      H.liftEffect (Settings.save config)
+    RootSetupOutput (SetupDataChanged appData) -> do
+      H.modify_ _
+        { activePresetId = appData.activePresetId
+        , config = appData.config
+        , presets = appData.presets
+        }
+      persistRootData
     RootSetupOutput SetupBeginRequested -> handleRootAction RootBeginPractice
+    RootSetupOutput SetupPersistenceRequested -> void $ H.fork do
+      void $ H.liftAff Settings.requestPersistence
     RootReceiveSetup _ -> pure unit
+    RootOpenSavePreset -> pure unit
+    RootCloseSavePreset -> pure unit
+    RootSetPresetName _ -> pure unit
+    RootPresetKeyDown _ -> pure unit
+    RootSavePreset -> pure unit
+    RootSelectPreset _ -> pure unit
+    RootOpenDeletePreset -> pure unit
+    RootCloseDeletePreset -> pure unit
+    RootConfirmDeletePreset -> pure unit
 
   handleSetupAction = case _ of
     RootToggleInterval interval -> setupUpdateConfig (toggleInterval interval)
@@ -701,22 +888,99 @@ rootComponent =
     RootSelectAnswerDisplay display -> setupUpdateConfig (_ { answerDisplay = display })
     RootSelectQuizMode mode -> setupUpdateConfig (_ { quizMode = mode })
     RootSelectQuizProgression progression -> setupUpdateConfig (_ { quizProgression = progression })
+    RootOpenSavePreset -> do
+      H.modify_ _ { presetName = "", presetNameError = Nothing }
+      showDialog savePresetDialogRef
+    RootCloseSavePreset -> closeDialog savePresetDialogRef
+    RootSetPresetName name -> H.modify_ _ { presetName = name, presetNameError = Nothing }
+    RootPresetKeyDown key -> when (key == "Enter") (handleSetupAction RootSavePreset)
+    RootSavePreset -> do
+      state <- H.get
+      let
+        name = String.trim state.presetName
+        duplicate = Array.any (\preset -> String.toLower preset.name == String.toLower name) state.presets
+      if name == "" then
+        H.modify_ _ { presetNameError = Just "Enter a preset name." }
+      else if duplicate then
+        H.modify_ _ { presetNameError = Just "A preset with this name already exists." }
+      else do
+        id <- H.liftEffect Settings.newPresetId
+        let
+          preset = { config: state.config, id, name }
+          appData = { activePresetId: Just id, config: state.config, presets: Array.snoc state.presets preset }
+        H.modify_ _
+          { activePresetId = appData.activePresetId
+          , presets = appData.presets
+          , presetNameError = Nothing
+          }
+        closeDialog savePresetDialogRef
+        H.raise (SetupDataChanged appData)
+        H.raise SetupPersistenceRequested
+    RootSelectPreset id -> do
+      state <- H.get
+      if id == "" then do
+        H.modify_ _ { activePresetId = Nothing }
+        H.raise (SetupDataChanged { activePresetId: Nothing, config: state.config, presets: state.presets })
+      else case Array.find (\preset -> preset.id == id) state.presets of
+        Nothing -> pure unit
+        Just preset -> do
+          H.modify_ _ { activePresetId = Just id, config = preset.config }
+          H.raise (SetupDataChanged { activePresetId: Just id, config: preset.config, presets: state.presets })
+    RootOpenDeletePreset -> showDialog deletePresetDialogRef
+    RootCloseDeletePreset -> closeDialog deletePresetDialogRef
+    RootConfirmDeletePreset -> do
+      state <- H.get
+      case state.activePresetId of
+        Nothing -> closeDialog deletePresetDialogRef
+        Just id -> do
+          let
+            presets = Array.filter (\preset -> preset.id /= id) state.presets
+            appData = { activePresetId: Nothing, config: state.config, presets }
+          H.modify_ _ { activePresetId = Nothing, presets = presets }
+          closeDialog deletePresetDialogRef
+          H.raise (SetupDataChanged appData)
     RootResetDefaults -> setupUpdateConfig (const defaultConfig)
     RootBeginPractice -> H.raise SetupBeginRequested
-    RootReceiveSetup input -> H.put input
+    RootReceiveSetup input -> H.modify_ _
+      { activePresetId = input.activePresetId
+      , config = input.config
+      , presets = input.presets
+      , sampler = input.sampler
+      , storageError = input.storageError
+      }
     RootInitialize -> pure unit
     RootPracticeOutput _ -> pure unit
     RootSetupOutput _ -> pure unit
 
   setupUpdateConfig update = do
-    H.modify_ \state -> state { config = update state.config }
+    H.modify_ \state -> state { activePresetId = Nothing, config = update state.config }
     state <- H.get
-    H.raise (SetupConfigChanged state.config)
+    H.raise (SetupDataChanged { activePresetId: Nothing, config: state.config, presets: state.presets })
 
   rootUpdateConfig update = do
-    H.modify_ \state -> state { config = update state.config }
+    H.modify_ \state -> state { activePresetId = Nothing, config = update state.config }
+    persistRootData
+
+  persistRootData = do
     state <- H.get
-    H.liftEffect (Settings.save state.config)
+    result <- H.liftAff $ attempt $ Settings.save
+      { activePresetId: state.activePresetId
+      , config: state.config
+      , presets: state.presets
+      }
+    case result of
+      Left _ -> H.modify_ _ { storageError = Just "Changes could not be saved on this device." }
+      Right _ -> H.modify_ _ { storageError = Nothing }
+
+  showDialog ref = do
+    maybeElement <- H.getHTMLElementRef ref
+    for_ (maybeElement >>= HTMLDialogElement.fromHTMLElement) \dialog ->
+      H.liftEffect (HTMLDialogElement.showModal dialog)
+
+  closeDialog ref = do
+    maybeElement <- H.getHTMLElementRef ref
+    for_ (maybeElement >>= HTMLDialogElement.fromHTMLElement) \dialog ->
+      H.liftEffect (HTMLDialogElement.close Nothing dialog)
 
   setCustomLowClass pitchClass config =
     let
@@ -1579,8 +1843,6 @@ component =
 
   updateConfig update = do
     H.modify_ \state -> state { config = update state.config }
-    state <- H.get
-    H.liftEffect (Settings.save state.config)
 
   scheduleAutomaticAdvance state =
     when (state.config.quizProgression == AutomaticProgression) do

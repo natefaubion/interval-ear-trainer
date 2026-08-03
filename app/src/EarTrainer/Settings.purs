@@ -1,5 +1,9 @@
 module EarTrainer.Settings
-  ( load
+  ( AppData
+  , Preset
+  , load
+  , newPresetId
+  , requestPersistence
   , save
   ) where
 
@@ -30,6 +34,20 @@ import EarTrainer.Music
   , VocalRangePreset(..)
   )
 import Effect (Effect)
+import Effect.Aff (Aff)
+import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
+
+type Preset =
+  { config :: ExerciseConfig
+  , id :: String
+  , name :: String
+  }
+
+type AppData =
+  { activePresetId :: Maybe String
+  , config :: ExerciseConfig
+  , presets :: Array Preset
+  }
 
 type StoredPitchClass =
   { accidental :: Int
@@ -54,38 +72,60 @@ type StoredSettings =
   , vocalRange :: String
   }
 
+type StoredPreset =
+  { id :: String
+  , name :: String
+  , settings :: StoredSettings
+  }
+
+type StoredAppData =
+  { activePresetId :: String
+  , presets :: Array StoredPreset
+  , settings :: StoredSettings
+  }
+
 foreign import loadImpl
-  :: (StoredSettings -> Maybe StoredSettings)
-  -> Maybe StoredSettings
-  -> Effect (Maybe StoredSettings)
+  :: (StoredAppData -> Maybe StoredAppData)
+  -> Maybe StoredAppData
+  -> EffectFnAff (Maybe StoredAppData)
 
-foreign import saveImpl :: StoredSettings -> Effect Unit
+foreign import saveImpl :: StoredAppData -> EffectFnAff Unit
+foreign import newPresetId :: Effect String
+foreign import requestPersistenceImpl :: EffectFnAff Boolean
 
-load :: Effect ExerciseConfig
+load :: Aff AppData
 load = do
-  stored <- loadImpl Just Nothing
+  stored <- fromEffectFnAff (loadImpl Just Nothing)
   pure case stored of
-    Nothing -> defaultConfig
+    Nothing -> { activePresetId: Nothing, config: defaultConfig, presets: [] }
     Just value ->
-      defaultConfig
-        { answerCount = decodeAnswerCount value.answerCount
-        , answerDisplay = decodeAnswerDisplay value.answerDisplay
-        , availableIntervals = Array.mapMaybe decodeIntervalSize value.availableIntervals
-        , customRange = { low: pitchFromMidi value.customLowMidi, high: pitchFromMidi value.customHighMidi }
-        , ghostMode = decodeGhostMode value.ghostMode
-        , intervals = Array.mapMaybe decodeInterval value.intervals
-        , intervalSystem = decodeIntervalSystem value.intervalSystem
-        , octavePolicy = decodeOctavePolicy value.octavePolicy
-        , playbackModes = Array.mapMaybe decodePlaybackMode value.playbackModes
-        , showPitchTuner = value.showPitchTuner
-        , quizMode = decodeQuizMode value.quizMode
-        , quizProgression = decodeQuizProgression value.quizProgression
-        , rootPitchClasses = map decodePitchClass value.rootPitchClasses
-        , vocalRange = decodeVocalRange value.vocalRange
-        }
+      { activePresetId: if value.activePresetId == "" then Nothing else Just value.activePresetId
+      , config: decodeSettings value.settings
+      , presets: map decodePreset value.presets
+      }
 
-save :: ExerciseConfig -> Effect Unit
-save config = saveImpl
+save :: AppData -> Aff Unit
+save value = fromEffectFnAff
+  ( saveImpl
+      { activePresetId: case value.activePresetId of
+          Nothing -> ""
+          Just id -> id
+      , presets: map encodePreset value.presets
+      , settings: encodeSettings value.config
+      }
+  )
+
+requestPersistence :: Aff Boolean
+requestPersistence = fromEffectFnAff requestPersistenceImpl
+
+encodePreset :: Preset -> StoredPreset
+encodePreset preset = { id: preset.id, name: preset.name, settings: encodeSettings preset.config }
+
+decodePreset :: StoredPreset -> Preset
+decodePreset preset = { id: preset.id, name: preset.name, config: decodeSettings preset.settings }
+
+encodeSettings :: ExerciseConfig -> StoredSettings
+encodeSettings config =
   { answerCount: encodeAnswerCount config.answerCount
   , answerDisplay: encodeAnswerDisplay config.answerDisplay
   , availableIntervals: map encodeIntervalSize config.availableIntervals
@@ -102,6 +142,25 @@ save config = saveImpl
   , rootPitchClasses: map encodePitchClass config.rootPitchClasses
   , vocalRange: encodeVocalRange config.vocalRange
   }
+
+decodeSettings :: StoredSettings -> ExerciseConfig
+decodeSettings value =
+  defaultConfig
+    { answerCount = decodeAnswerCount value.answerCount
+    , answerDisplay = decodeAnswerDisplay value.answerDisplay
+    , availableIntervals = Array.mapMaybe decodeIntervalSize value.availableIntervals
+    , customRange = { low: pitchFromMidi value.customLowMidi, high: pitchFromMidi value.customHighMidi }
+    , ghostMode = decodeGhostMode value.ghostMode
+    , intervals = Array.mapMaybe decodeInterval value.intervals
+    , intervalSystem = decodeIntervalSystem value.intervalSystem
+    , octavePolicy = decodeOctavePolicy value.octavePolicy
+    , playbackModes = Array.mapMaybe decodePlaybackMode value.playbackModes
+    , showPitchTuner = value.showPitchTuner
+    , quizMode = decodeQuizMode value.quizMode
+    , quizProgression = decodeQuizProgression value.quizProgression
+    , rootPitchClasses = map decodePitchClass value.rootPitchClasses
+    , vocalRange = decodeVocalRange value.vocalRange
+    }
 
 encodeQuizMode :: QuizMode -> String
 encodeQuizMode SingingOnly = "singing"
