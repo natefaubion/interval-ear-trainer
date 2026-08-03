@@ -1,10 +1,10 @@
-# @audio-samples/piano-velocity8
+# @audio-samples/piano-mp3-velocity8
 
-Salamander Grand Piano V3 OGG samples
+Salamander Grand Piano V3 MP3 samples
 
 ## Usage
 
-`npm install @audio-samples/piano-velocity8` or CDN [https://unpkg.com/@audio-samples/piano-velocity8@1.0.5/audio/](https://unpkg.com/@audio-samples/piano-velocity8@1.0.5/audio/)
+`npm install @audio-samples/piano-mp3-velocity8` or CDN [https://unpkg.com/@audio-samples/piano-mp3-velocity8@1.0.5/audio/](https://unpkg.com/@audio-samples/piano-mp3-velocity8@1.0.5/audio/)
 
 Note: the hash/sharp sign (#) needs to be escaped (%23) when used in URL. See also [encodeURIComponent](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent).
 
@@ -19,37 +19,37 @@ Note: the hash/sharp sign (#) needs to be escaped (%23) when used in URL. See al
 
 ## Total size
 
-4.85MB
+5.4MB
 
 ## Files
 
-- A0v8.ogg
-- A1v8.ogg
-- A2v8.ogg
-- A3v8.ogg
-- A4v8.ogg
-- A5v8.ogg
-- A6v8.ogg
-- A7v8.ogg
-- C1v8.ogg
-- C2v8.ogg
-- C3v8.ogg
-- C4v8.ogg
-- C5v8.ogg
-- C6v8.ogg
-- C7v8.ogg
-- C8v8.ogg
-- D#1v8.ogg
-- D#2v8.ogg
-- D#3v8.ogg
-- D#4v8.ogg
-- D#5v8.ogg
-- D#6v8.ogg
-- D#7v8.ogg
-- F#1v8.ogg
-- F#2v8.ogg
-- F#3v8.ogg
-- F#4v8.ogg
-- F#5v8.ogg
-- F#6v8.ogg
-- F#7v8.ogg
+- A0v8.mp3
+- A1v8.mp3
+- A2v8.mp3
+- A3v8.mp3
+- A4v8.mp3
+- A5v8.mp3
+- A6v8.mp3
+- A7v8.mp3
+- C1v8.mp3
+- C2v8.mp3
+- C3v8.mp3
+- C4v8.mp3
+- C5v8.mp3
+- C6v8.mp3
+- C7v8.mp3
+- C8v8.mp3
+- Ds1v8.mp3
+- Ds2v8.mp3
+- Ds3v8.mp3
+- Ds4v8.mp3
+- Ds5v8.mp3
+- Ds6v8.mp3
+- Ds7v8.mp3
+- Fs1v8.mp3
+- Fs2v8.mp3
+- Fs3v8.mp3
+- Fs4v8.mp3
+- Fs5v8.mp3
+- Fs6v8.mp3
+- Fs7v8.mp3

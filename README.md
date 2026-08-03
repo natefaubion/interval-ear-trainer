@@ -44,7 +44,7 @@ The Spago monorepo contains the Halogen application and separate packages for mu
 
 ## Audio samples
 
-Piano playback uses the locally hosted Salamander Grand Piano V3 samples by Alexander Holm. The vendored velocity-8 OGG set and its CC BY 3.0 attribution are in `public/audio/salamander/`.
+Piano playback uses the locally hosted Salamander Grand Piano V3 samples by Alexander Holm. The vendored velocity-8 MP3 set and its CC BY 3.0 attribution are in `public/audio/salamander/`.
 
 ## License
 

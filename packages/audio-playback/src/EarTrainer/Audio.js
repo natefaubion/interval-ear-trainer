@@ -1,36 +1,36 @@
 import * as Tone from "tone";
 
 const sampleUrls = {
-  A0: "A0v8.ogg",
-  A1: "A1v8.ogg",
-  A2: "A2v8.ogg",
-  A3: "A3v8.ogg",
-  A4: "A4v8.ogg",
-  A5: "A5v8.ogg",
-  A6: "A6v8.ogg",
-  A7: "A7v8.ogg",
-  C1: "C1v8.ogg",
-  C2: "C2v8.ogg",
-  C3: "C3v8.ogg",
-  C4: "C4v8.ogg",
-  C5: "C5v8.ogg",
-  C6: "C6v8.ogg",
-  C7: "C7v8.ogg",
-  C8: "C8v8.ogg",
-  "D#1": "Ds1v8.ogg",
-  "D#2": "Ds2v8.ogg",
-  "D#3": "Ds3v8.ogg",
-  "D#4": "Ds4v8.ogg",
-  "D#5": "Ds5v8.ogg",
-  "D#6": "Ds6v8.ogg",
-  "D#7": "Ds7v8.ogg",
-  "F#1": "Fs1v8.ogg",
-  "F#2": "Fs2v8.ogg",
-  "F#3": "Fs3v8.ogg",
-  "F#4": "Fs4v8.ogg",
-  "F#5": "Fs5v8.ogg",
-  "F#6": "Fs6v8.ogg",
-  "F#7": "Fs7v8.ogg",
+  A0: "A0v8.mp3",
+  A1: "A1v8.mp3",
+  A2: "A2v8.mp3",
+  A3: "A3v8.mp3",
+  A4: "A4v8.mp3",
+  A5: "A5v8.mp3",
+  A6: "A6v8.mp3",
+  A7: "A7v8.mp3",
+  C1: "C1v8.mp3",
+  C2: "C2v8.mp3",
+  C3: "C3v8.mp3",
+  C4: "C4v8.mp3",
+  C5: "C5v8.mp3",
+  C6: "C6v8.mp3",
+  C7: "C7v8.mp3",
+  C8: "C8v8.mp3",
+  "D#1": "Ds1v8.mp3",
+  "D#2": "Ds2v8.mp3",
+  "D#3": "Ds3v8.mp3",
+  "D#4": "Ds4v8.mp3",
+  "D#5": "Ds5v8.mp3",
+  "D#6": "Ds6v8.mp3",
+  "D#7": "Ds7v8.mp3",
+  "F#1": "Fs1v8.mp3",
+  "F#2": "Fs2v8.mp3",
+  "F#3": "Fs3v8.mp3",
+  "F#4": "Fs4v8.mp3",
+  "F#5": "Fs5v8.mp3",
+  "F#6": "Fs6v8.mp3",
+  "F#7": "Fs7v8.mp3",
 };
 
 const sampleBaseUrl = new URL("./audio/salamander/", document.baseURI).href;
@@ -72,14 +72,23 @@ export const createSampler = () => {
   }
 
   let markReady;
-  const ready = new Promise((resolve) => {
+  let markFailed;
+  const ready = new Promise((resolve, reject) => {
     markReady = resolve;
+    markFailed = reject;
   });
+  void ready.catch(() => {});
   const sampler = new Tone.Sampler({
     urls: sampleUrls,
     baseUrl: sampleBaseUrl,
     release: 0.7,
     onload: markReady,
+    onerror: (error) =>
+      markFailed(
+        error instanceof Error
+          ? error
+          : new Error("Piano samples could not be loaded."),
+      ),
   }).toDestination();
   samplerReady.set(sampler, ready);
   playbackState.set(sampler, { generation: 0, timers: [] });

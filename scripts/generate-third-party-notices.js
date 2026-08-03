@@ -139,7 +139,7 @@ const html = `<!doctype html>
     <p>This application includes open-source software and audio made available under the licenses below.</p>
     <section>
       <h2>Audio samples</h2>
-      <p><a href="https://archive.org/details/SalamanderGrandPianoV3">Salamander Grand Piano V3</a> by Alexander Holm is licensed under <a href="https://creativecommons.org/licenses/by/3.0/">Creative Commons Attribution 3.0</a>. The application includes the velocity-8 OGG sample set.</p>
+      <p><a href="https://archive.org/details/SalamanderGrandPianoV3">Salamander Grand Piano V3</a> by Alexander Holm is licensed under <a href="https://creativecommons.org/licenses/by/3.0/">Creative Commons Attribution 3.0</a>. The application includes the velocity-8 MP3 sample set.</p>
     </section>
     ${renderGroups("JavaScript packages", npmPackages())}
     ${renderGroups("PureScript packages", spagoPackages())}
