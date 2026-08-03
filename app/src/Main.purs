@@ -1281,6 +1281,7 @@ component =
     | state.config.quizMode == RecognitionOnly = HH.text ""
     | not state.config.showPitchTuner = HH.text ""
     | state.captureStatus == IntervalError = HH.text ""
+    | state.captureStatus == PlayingAudio && state.resumeAnswersAfterPlayback = HH.text ""
     | state.captureStatus == ChoosingAnswer || state.captureStatus == AnswerComplete = HH.text ""
     | otherwise =
         HH.div_
