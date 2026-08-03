@@ -8,6 +8,7 @@
   --paper: #fffdf7;
   --accent: #bc4b2c;
   --accent-dark: #8d321b;
+  --content-surface: #faf7f0;
   --line: #d8d0c2;
 }
 
@@ -121,13 +122,13 @@ button:active:not(:disabled) {
 }
 
 .notation-panel {
+  --practice-padding-block: clamp(1.5rem, 5vw, 3rem);
+  --practice-padding-inline: clamp(1.5rem, 5vw, 3rem);
   width: 100%;
   min-width: 0;
-  padding: clamp(1.5rem, 5vw, 3rem);
+  padding: var(--practice-padding-block) var(--practice-padding-inline);
   text-align: center;
-  background:
-    linear-gradient(rgb(255 253 247 / 88%), rgb(255 253 247 / 88%)),
-    repeating-linear-gradient(to bottom, transparent 0 1.45rem, rgb(29 41 37 / 10%) 1.5rem 1.55rem);
+  background: var(--content-surface);
 }
 
 .practice-content {
@@ -136,7 +137,7 @@ button:active:not(:disabled) {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: var(--paper);
+  background: var(--content-surface);
 }
 
 .notation-canvas {
@@ -227,7 +228,8 @@ button:active:not(:disabled) {
 .answer-panel {
   min-width: 0;
   margin-top: 2.25rem;
-  padding-top: 2rem;
+  margin-inline: calc(-1 * var(--practice-padding-inline));
+  padding: 2rem var(--practice-padding-inline) 0;
   border-top: 1px solid var(--line);
 }
 
@@ -319,7 +321,7 @@ button:active:not(:disabled) {
   height: 1.7rem;
   place-items: center;
   border-radius: 50%;
-  box-shadow: 0 0 0 3px var(--paper);
+  box-shadow: 0 0 0 3px var(--content-surface);
   transform: translate(-35%, -35%);
 }
 
@@ -398,7 +400,7 @@ button:active:not(:disabled) {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: #faf7f0;
+  background: var(--content-surface);
 }
 
 .setup-heading h2 {
@@ -495,7 +497,7 @@ button:active:not(:disabled) {
   padding: clamp(1.25rem, 4vw, 2.25rem);
   border: 0;
   border-bottom: 1px solid var(--line);
-  background: #faf7f0;
+  background: var(--content-surface);
 }
 
 .setting-group:last-of-type {
@@ -954,7 +956,8 @@ button:active:not(:disabled) {
   }
 
   .notation-panel {
-    padding: 0.7rem 1rem;
+    --practice-padding-block: 0.7rem;
+    --practice-padding-inline: 1rem;
   }
 
   .notation-canvas {
