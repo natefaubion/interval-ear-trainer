@@ -21,6 +21,7 @@ export default defineConfig({
         start_url: "./",
         scope: "./",
         display: "standalone",
+        orientation: "portrait-primary",
         background_color: "#f4efe5",
         theme_color: "#f4efe5",
         categories: [ "education", "music" ],

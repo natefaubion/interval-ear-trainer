@@ -890,3 +890,90 @@ button:active:not(:disabled) {
     font-size: 0.92rem;
   }
 }
+
+@media (orientation: landscape) and (max-height: 32rem) {
+  .app-shell {
+    width: 100%;
+    padding-block: 0;
+  }
+
+  .setup-card,
+  .practice-card {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .setup-heading,
+  .practice-toolbar {
+    height: calc(3.25rem + env(safe-area-inset-top));
+    gap: 0.65rem;
+    padding:
+      env(safe-area-inset-top)
+      calc(0.9rem + env(safe-area-inset-right))
+      0
+      calc(0.9rem + env(safe-area-inset-left));
+  }
+
+  .setup-heading h2,
+  .practice-toolbar h2 {
+    font-size: 1.2rem;
+  }
+
+  .setup-footer,
+  .practice-actions {
+    gap: 0.65rem;
+    padding:
+      0.6rem
+      calc(0.9rem + env(safe-area-inset-right))
+      calc(0.6rem + env(safe-area-inset-bottom))
+      calc(0.9rem + env(safe-area-inset-left));
+  }
+
+  .primary-button,
+  .secondary-button {
+    min-height: 2.35rem;
+    padding-inline: 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  .icon-button {
+    width: 2.35rem;
+    padding: 0;
+  }
+
+  .setting-group,
+  .credits-section {
+    padding: 0.9rem calc(0.9rem + env(safe-area-inset-right)) 0.9rem calc(0.9rem + env(safe-area-inset-left));
+  }
+
+  .choice-chip {
+    min-height: 2.3rem;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.9rem;
+  }
+
+  .notation-panel {
+    padding: 0.7rem 1rem;
+  }
+
+  .notation-canvas {
+    max-width: 16rem;
+    min-height: 8.5rem;
+  }
+
+  .notation-panel .completed-interval-name,
+  .pitch-feedback {
+    margin-top: 0.35rem;
+  }
+
+  .answer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .preset-dialog {
+    max-height: calc(100dvh - 1rem);
+    overflow-y: auto;
+    padding: 1.1rem;
+  }
+}
