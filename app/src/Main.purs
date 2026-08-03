@@ -1487,7 +1487,7 @@ component =
       if Array.null state.revealedChoices then
         "Choose the matching interval."
       else
-        "Not quite. Compare the choices and try again."
+        "Not quite. Try Again."
     AnswerComplete -> "Correct!"
 
   feedbackName = case _ of
