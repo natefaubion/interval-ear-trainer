@@ -567,7 +567,6 @@ rootComponent =
       , HP.attr (H.AttrName "aria-labelledby") "save-preset-title"
       ]
       [ HH.h3 [ HP.id "save-preset-title" ] [ HH.text "Save preset" ]
-      , HH.p [ HP.class_ (H.ClassName "dialog-description") ] [ HH.text "Save the current exercise setup for later." ]
       , HH.label
           [ HP.class_ (H.ClassName "dialog-field") ]
           [ HH.span_ [ HH.text "Preset name" ]
@@ -606,12 +605,11 @@ rootComponent =
       , HP.class_ (H.ClassName "preset-dialog")
       , HP.attr (H.AttrName "aria-labelledby") "delete-preset-title"
       ]
-      [ HH.h3 [ HP.id "delete-preset-title" ] [ HH.text "Delete preset?" ]
-      , HH.p
-          [ HP.class_ (H.ClassName "dialog-description") ]
+      [ HH.h3
+          [ HP.id "delete-preset-title" ]
           [ HH.text case activePreset state of
-              Nothing -> "This preset is no longer available."
-              Just preset -> "Delete “" <> preset.name <> "”? This cannot be undone."
+              Nothing -> "Delete preset?"
+              Just preset -> "Delete “" <> preset.name <> "”?"
           ]
       , HH.div
           [ HP.class_ (H.ClassName "dialog-actions") ]
