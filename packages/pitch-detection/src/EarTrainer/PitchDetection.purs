@@ -21,8 +21,8 @@ import Prelude
 import Data.Int as Int
 import Data.Maybe (Maybe(..))
 import Data.Number as Math
-import Effect (Effect)
 import EarTrainer.Music (OctavePolicy(..), Pitch, midiNumber)
+import Effect (Effect)
 
 type PitchSample =
   { clarity :: Number

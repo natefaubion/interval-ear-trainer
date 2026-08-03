@@ -10,8 +10,8 @@ module EarTrainer.Audio
 
 import Prelude
 
-import Effect (Effect)
 import EarTrainer.Music (Pitch, PlaybackMode(..), midiNumber)
+import Effect (Effect)
 
 foreign import data Sampler :: Type
 

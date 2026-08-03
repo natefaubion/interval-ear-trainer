@@ -36,8 +36,8 @@ import EarTrainer.Music
   , PitchClass(..)
   , PlaybackMode(..)
   , VocalRangePreset(..)
-  , allIntervals
   , allIntervalSizes
+  , allIntervals
   , allMajorKeyPresets
   , allPlaybackModes
   , allRootPitchClasses
@@ -46,8 +46,8 @@ import EarTrainer.Music
   , intervalSizeName
   , midiNumber
   , pitchClassName
-  , pitchFromMidiLike
   , pitchFromMidi
+  , pitchFromMidiLike
   , pitchName
   , playbackModeName
   , presetName
@@ -70,8 +70,8 @@ import Halogen.Subscription as HS
 import Halogen.VDom.Driver (runUI)
 import Type.Proxy (Proxy(..))
 import Web.DOM.Element as Element
-import Web.HTML.HTMLElement as HTMLElement
 import Web.HTML.HTMLDialogElement as HTMLDialogElement
+import Web.HTML.HTMLElement as HTMLElement
 import Web.UIEvent.KeyboardEvent as KeyboardEvent
 
 data Screen = Setup | Practice

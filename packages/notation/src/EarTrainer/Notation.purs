@@ -10,8 +10,8 @@ module EarTrainer.Notation
 import Prelude
 
 import Data.Array as Array
-import Effect (Effect)
 import EarTrainer.Music (Accidental(..), Letter(..), Pitch(..), PitchClass(..), midiNumber)
+import Effect (Effect)
 import Web.DOM.Element (Element)
 
 type EngravedNote =

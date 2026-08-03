@@ -27,9 +27,9 @@ import EarTrainer.Music
   , PlaybackMode(..)
   , VocalRange
   , allIntervals
-  , midiNumber
   , intervalBetween
   , intervalNumber
+  , midiNumber
   , transpose
   )
 

@@ -21,19 +21,19 @@ import Prelude
 
 import Data.Array as Array
 import EarTrainer.Music
-  ( Interval
+  ( Accidental(..)
+  , Interval
   , IntervalSize(..)
+  , Letter(..)
   , OctavePolicy(..)
   , PitchClass
   , PlaybackMode(..)
-  , VocalRangePreset(..)
   , VocalRange
+  , VocalRangePreset(..)
   , defaultIntervals
   , defaultRootPitchClasses
   , midiNumber
   , pitch
-  , Letter(..)
-  , Accidental(..)
   , presetRange
   )
 

@@ -23,14 +23,14 @@ import EarTrainer.Music
   , IntervalSize(..)
   , Letter(..)
   , OctavePolicy(..)
-  , PlaybackMode(..)
   , Pitch(..)
   , PitchClass(..)
+  , PlaybackMode(..)
   , VocalRangePreset(..)
+  , allMajorKeyPresets
   , allRootPitchClasses
   , intervalBetween
   , intervalNumber
-  , allMajorKeyPresets
   , midiNumber
   , pitch
   , pitchFromMidiLike

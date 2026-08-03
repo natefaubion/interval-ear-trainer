@@ -29,9 +29,9 @@ import EarTrainer.Music
   , OctavePolicy(..)
   , PitchClass(..)
   , PlaybackMode(..)
+  , VocalRangePreset(..)
   , midiNumber
   , pitchFromMidi
-  , VocalRangePreset(..)
   )
 import Effect (Effect)
 import Effect.Aff (Aff)
