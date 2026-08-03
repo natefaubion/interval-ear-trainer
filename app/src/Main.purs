@@ -398,7 +398,9 @@ rootComponent =
               ]
               Nothing
           , let
+              possibleExactIntervals = Quiz.availableExactIntervals state.config
               possibleSizes = Quiz.availableIntervalSizes state.config
+              selectedPossibleExactIntervals = Array.filter (flip Array.elem possibleExactIntervals) state.config.intervals
               selectedPossibleSizes = Array.filter (flip Array.elem possibleSizes) state.config.availableIntervals
             in
               rootSettingGroup
@@ -409,12 +411,14 @@ rootComponent =
                     "Choose interval numbers; each quality is determined by the selected note pair."
                 )
                 ( if state.config.intervalSystem == ExactIntervals then
-                    map (rootIntervalButton state.config) allIntervals
+                    map (rootIntervalButton state.config possibleExactIntervals) allIntervals
                       <>
                         [ rootSelectionActions
                             RootSelectAllIntervals
                             RootClearIntervals
-                            (Array.length state.config.intervals == Array.length allIntervals)
+                            ( Array.length state.config.intervals == Array.length possibleExactIntervals
+                                && Array.all (flip Array.elem possibleExactIntervals) state.config.intervals
+                            )
                             (Array.null state.config.intervals)
                         ]
                   else
@@ -429,8 +433,8 @@ rootComponent =
                             (Array.null state.config.availableIntervals)
                         ]
                 )
-                ( if state.config.intervalSystem == ExactIntervals && Array.null state.config.intervals then
-                    Just "Select at least one interval."
+                ( if state.config.intervalSystem == ExactIntervals && Array.null selectedPossibleExactIntervals then
+                    Just "Select at least one interval available in this range."
                   else if state.config.intervalSystem == FromSelectedNotes && Array.null selectedPossibleSizes then
                     Just "Select at least one interval available from these notes."
                   else Nothing
@@ -676,8 +680,17 @@ rootComponent =
   rootModeButton config mode =
     rootChoiceButton (Array.elem mode config.playbackModes) (RootTogglePlaybackMode mode) (playbackModeName mode)
 
-  rootIntervalButton config interval =
-    rootChoiceButton (Array.elem interval config.intervals) (RootToggleInterval interval) (intervalName interval)
+  rootIntervalButton config possible interval =
+    HH.button
+      [ HP.type_ HP.ButtonButton
+      , HP.classes
+          if Array.elem interval config.intervals then
+            [ H.ClassName "choice-chip", H.ClassName "selected" ]
+          else [ H.ClassName "choice-chip" ]
+      , HP.disabled (not (Array.elem interval possible))
+      , HE.onClick \_ -> RootToggleInterval interval
+      ]
+      [ HH.text (intervalName interval) ]
 
   rootIntervalSizeButton config possible interval =
     HH.button
@@ -720,12 +733,16 @@ rootComponent =
   rootConfigValid config =
     isValid config
       &&
-        ( config.intervalSystem == ExactIntervals
-            || not
-              ( Array.null
-                  (Array.filter (flip Array.elem (Quiz.availableIntervalSizes config)) config.availableIntervals)
-              )
-        )
+        if config.intervalSystem == ExactIntervals then
+          not
+            ( Array.null
+                (Array.filter (flip Array.elem (Quiz.availableExactIntervals config)) config.intervals)
+            )
+        else
+          not
+            ( Array.null
+                (Array.filter (flip Array.elem (Quiz.availableIntervalSizes config)) config.availableIntervals)
+            )
 
   rootRangeButton config preset =
     let
@@ -805,7 +822,9 @@ rootComponent =
         }
     RootToggleInterval interval -> rootUpdateConfig (toggleInterval interval)
     RootToggleIntervalSize interval -> rootUpdateConfig (toggleIntervalSize interval)
-    RootSelectAllIntervals -> rootUpdateConfig (_ { intervals = allIntervals })
+    RootSelectAllIntervals -> do
+      state <- H.get
+      rootUpdateConfig (_ { intervals = Quiz.availableExactIntervals state.config })
     RootClearIntervals -> rootUpdateConfig (_ { intervals = [] })
     RootSelectAllIntervalSizes -> do
       state <- H.get
@@ -862,7 +881,9 @@ rootComponent =
   handleSetupAction = case _ of
     RootToggleInterval interval -> setupUpdateConfig (toggleInterval interval)
     RootToggleIntervalSize interval -> setupUpdateConfig (toggleIntervalSize interval)
-    RootSelectAllIntervals -> setupUpdateConfig (_ { intervals = allIntervals })
+    RootSelectAllIntervals -> do
+      state <- H.get
+      setupUpdateConfig (_ { intervals = Quiz.availableExactIntervals state.config })
     RootClearIntervals -> setupUpdateConfig (_ { intervals = [] })
     RootSelectAllIntervalSizes -> do
       state <- H.get

@@ -45,7 +45,7 @@ import EarTrainer.PitchDetection
   , relativeMidi
   , stepRecognition
   )
-import EarTrainer.Quiz (Event(..), Phase(..), availableIntervalSizes, makeChoices, makePrompt, transition)
+import EarTrainer.Quiz (Event(..), Phase(..), availableExactIntervals, availableIntervalSizes, makeChoices, makePrompt, transition)
 import Effect (Effect)
 import Test.Assert (assertEqual)
 
@@ -174,6 +174,15 @@ main = do
       , target: transpose Ascending AugmentedFifth c4
       }
     augmentedFifthChoices = makeChoices 17 enharmonicConfig augmentedFifthPrompt
+    narrowExactConfig = defaultConfig
+      { customRange = { low: pitch C (Accidental 0) 4, high: pitch B (Accidental 0) 4 }
+      , intervalSystem = ExactIntervals
+      , intervals = [ MajorSeventh, PerfectOctave ]
+      , playbackModes = [ MelodicAscending ]
+      , rootPitchClasses = [ PitchClass C (Accidental 0) ]
+      , vocalRange = Custom
+      }
+    narrowExactPrompt = makePrompt 0 narrowExactConfig
   assertEqual
     { actual: nearestMidi 440.0
     , expected: 69
@@ -229,6 +238,16 @@ main = do
   assertEqual
     { actual: Array.length generatedChoices
     , expected: 4
+    }
+  assertEqual
+    { actual:
+        [ Array.elem MajorSeventh (availableExactIntervals narrowExactConfig)
+        , Array.elem PerfectOctave (availableExactIntervals narrowExactConfig)
+        , narrowExactPrompt.interval == MajorSeventh
+        , midiNumber narrowExactPrompt.root >= midiNumber narrowExactConfig.customRange.low
+        , midiNumber narrowExactPrompt.target <= midiNumber narrowExactConfig.customRange.high
+        ]
+    , expected: [ true, false, true, true, true ]
     }
   assertEqual
     { actual:
