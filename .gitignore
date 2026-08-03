@@ -7,3 +7,4 @@ app.js
 app.js.map
 .cache/
 .DS_Store
+.psc-ide-port
