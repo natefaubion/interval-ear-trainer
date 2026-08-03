@@ -1797,7 +1797,9 @@ component =
           , captureStatus = if correct then AnswerComplete else ChoosingAnswer
           , revealedChoices = revealed
           }
-        when correct (scheduleAutomaticAdvance state)
+        when correct do
+          renderCompletedNotation state.prompt
+          scheduleAutomaticAdvance state
     NextPrompt -> do
       state <- H.get
       case state.sampler of
