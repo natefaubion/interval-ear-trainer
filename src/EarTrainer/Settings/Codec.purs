@@ -39,8 +39,10 @@ import EarTrainer.Music
   , pitchFromMidi
   )
 import EarTrainer.Settings.PresetId (PresetId, presetId, presetIdString)
-import Foreign (F, Foreign, ForeignError, readArray, readBoolean, readInt, readString, readUndefined, renderForeignError)
+import Foreign (F, Foreign, ForeignError(..), readArray, readBoolean, readInt, readString, readUndefined, renderForeignError)
+import Foreign as Foreign
 import Foreign.Index (readProp)
+import Foreign.Keys (keys)
 
 type Preset =
   { config :: ExerciseConfig
@@ -179,52 +181,60 @@ encodeSettings config =
 decodeSettings :: Foreign -> F ExerciseConfig
 decodeSettings value =
   do
-    intervals <- requiredProperty readStringArray "intervals" value
-    octavePolicy <- requiredProperty readString "octavePolicy" value
-    playbackModes <- requiredProperty readStringArray "playbackModes" value
+    intervals <- requiredProperty (readTagArray "interval" decodeInterval) "intervals" value
+    octavePolicy <- requiredProperty (readTag "octave policy" decodeOctavePolicy) "octavePolicy" value
+    playbackModes <- requiredProperty (readTagArray "playback mode" decodePlaybackMode) "playbackModes" value
     rootPitchClasses <- requiredProperty readPitchClassArray "rootPitchClasses" value
-    vocalRange <- requiredProperty readString "vocalRange" value
-    answerCount <- optionalProperty readString "answerCount" (encodeAnswerCount defaultConfig.answerCount) value
-    answerDisplay <- optionalProperty readString "answerDisplay" (encodeAnswerDisplay defaultConfig.answerDisplay) value
-    availableIntervals <- optionalProperty readStringArray "availableIntervals"
-      (map encodeIntervalSize defaultConfig.availableIntervals)
+    vocalRange <- requiredProperty (readTag "vocal range" decodeVocalRange) "vocalRange" value
+    answerCount <- optionalProperty (readTag "answer count" decodeAnswerCount) "answerCount" defaultConfig.answerCount value
+    answerDisplay <- optionalProperty (readTag "answer display" decodeAnswerDisplay) "answerDisplay" defaultConfig.answerDisplay value
+    availableIntervals <- optionalProperty (readTagArray "interval size" decodeIntervalSize) "availableIntervals"
+      defaultConfig.availableIntervals
       value
     customHighMidi <- optionalProperty readInt "customHighMidi" (midiNumber defaultConfig.customRange.high) value
     customLowMidi <- optionalProperty readInt "customLowMidi" (midiNumber defaultConfig.customRange.low) value
-    ghostMode <- optionalProperty readString "ghostMode" (encodeGhostMode defaultConfig.ghostMode) value
-    intervalSystem <- optionalProperty readString "intervalSystem" (encodeIntervalSystem defaultConfig.intervalSystem) value
+    ghostMode <- optionalProperty (readTag "ghost mode" decodeGhostMode) "ghostMode" defaultConfig.ghostMode value
+    intervalSystem <- optionalProperty (readTag "interval system" decodeIntervalSystem) "intervalSystem" defaultConfig.intervalSystem value
     showPitchTuner <- optionalProperty readBoolean "showPitchTuner" defaultConfig.showPitchTuner value
-    quizMode <- optionalProperty readString "quizMode" (encodeQuizMode defaultConfig.quizMode) value
-    quizProgression <- optionalProperty readString "quizProgression"
-      (encodeQuizProgression defaultConfig.quizProgression)
+    quizMode <- optionalProperty (readTag "quiz mode" decodeQuizMode) "quizMode" defaultConfig.quizMode value
+    quizProgression <- optionalProperty (readTag "quiz progression" decodeQuizProgression) "quizProgression"
+      defaultConfig.quizProgression
       value
     pure $ defaultConfig
-      { answerCount = decodeAnswerCount answerCount
-      , answerDisplay = decodeAnswerDisplay answerDisplay
-      , availableIntervals = Array.mapMaybe decodeIntervalSize availableIntervals
+      { answerCount = answerCount
+      , answerDisplay = answerDisplay
+      , availableIntervals = availableIntervals
       , customRange = { low: pitchFromMidi customLowMidi, high: pitchFromMidi customHighMidi }
-      , ghostMode = decodeGhostMode ghostMode
-      , intervals = Array.mapMaybe decodeInterval intervals
-      , intervalSystem = decodeIntervalSystem intervalSystem
-      , octavePolicy = decodeOctavePolicy octavePolicy
-      , playbackModes = Array.mapMaybe decodePlaybackMode playbackModes
+      , ghostMode = ghostMode
+      , intervals = intervals
+      , intervalSystem = intervalSystem
+      , octavePolicy = octavePolicy
+      , playbackModes = playbackModes
       , showPitchTuner = showPitchTuner
-      , quizMode = decodeQuizMode quizMode
-      , quizProgression = decodeQuizProgression quizProgression
+      , quizMode = quizMode
+      , quizProgression = quizProgression
       , rootPitchClasses = rootPitchClasses
-      , vocalRange = decodeVocalRange vocalRange
+      , vocalRange = vocalRange
       }
 
 requiredProperty :: forall a. (Foreign -> F a) -> String -> Foreign -> F a
 requiredProperty read name value = readProp name value >>= read
 
 optionalProperty :: forall a. (Foreign -> F a) -> String -> a -> Foreign -> F a
-optionalProperty read name fallback value = case runExcept (requiredProperty read name value) of
-  Left _ -> pure fallback
-  Right result -> pure result
+optionalProperty read name fallback value = do
+  properties <- keys value
+  if Array.elem name properties then requiredProperty read name value
+  else pure fallback
 
-readStringArray :: Foreign -> F (Array String)
-readStringArray value = readArray value >>= traverse readString
+readTag :: forall a. String -> (String -> Maybe a) -> Foreign -> F a
+readTag name decode value = do
+  tag <- readString value
+  case decode tag of
+    Nothing -> Foreign.fail (ForeignError ("Unknown " <> name <> " tag: " <> tag))
+    Just result -> pure result
+
+readTagArray :: forall a. String -> (String -> Maybe a) -> Foreign -> F (Array a)
+readTagArray name decode value = readArray value >>= traverse (readTag name decode)
 
 readPitchClassArray :: Foreign -> F (Array PitchClass)
 readPitchClassArray value = readArray value >>= traverse readPitchClass
@@ -232,8 +242,8 @@ readPitchClassArray value = readArray value >>= traverse readPitchClass
 readPitchClass :: Foreign -> F PitchClass
 readPitchClass value = do
   accidental <- requiredProperty readInt "accidental" value
-  letter <- requiredProperty readString "letter" value
-  pure (PitchClass (decodeLetter letter) (Accidental accidental))
+  letter <- requiredProperty (readTag "pitch letter" decodeLetter) "letter" value
+  pure (PitchClass letter (Accidental accidental))
 
 encodeQuizMode :: QuizMode -> String
 encodeQuizMode SingingOnly = "singing"
@@ -241,56 +251,61 @@ encodeQuizMode RecognitionOnly = "recognition"
 encodeQuizMode SingingAndRecognition = "singing-and-recognition"
 encodeQuizMode Audiation = "audiation"
 
-decodeQuizMode :: String -> QuizMode
-decodeQuizMode "singing" = SingingOnly
-decodeQuizMode "recognition" = RecognitionOnly
-decodeQuizMode "audiation" = Audiation
-decodeQuizMode _ = SingingAndRecognition
+decodeQuizMode :: String -> Maybe QuizMode
+decodeQuizMode "singing" = Just SingingOnly
+decodeQuizMode "recognition" = Just RecognitionOnly
+decodeQuizMode "singing-and-recognition" = Just SingingAndRecognition
+decodeQuizMode "audiation" = Just Audiation
+decodeQuizMode _ = Nothing
 
 encodeQuizProgression :: QuizProgression -> String
 encodeQuizProgression ManualProgression = "manual"
 encodeQuizProgression AutomaticProgression = "automatic"
 
-decodeQuizProgression :: String -> QuizProgression
-decodeQuizProgression "automatic" = AutomaticProgression
-decodeQuizProgression _ = ManualProgression
+decodeQuizProgression :: String -> Maybe QuizProgression
+decodeQuizProgression "manual" = Just ManualProgression
+decodeQuizProgression "automatic" = Just AutomaticProgression
+decodeQuizProgression _ = Nothing
 
 encodeAnswerCount :: AnswerCount -> String
 encodeAnswerCount AFew = "few"
 encodeAnswerCount AllSelected = "all-selected"
 
-decodeAnswerCount :: String -> AnswerCount
-decodeAnswerCount "all-selected" = AllSelected
-decodeAnswerCount _ = AFew
+decodeAnswerCount :: String -> Maybe AnswerCount
+decodeAnswerCount "few" = Just AFew
+decodeAnswerCount "all-selected" = Just AllSelected
+decodeAnswerCount _ = Nothing
 
 encodeGhostMode :: GhostMode -> String
 encodeGhostMode GhostOff = "off"
 encodeGhostMode GhostOn = "on"
 encodeGhostMode GhostPersist = "persist"
 
-decodeGhostMode :: String -> GhostMode
-decodeGhostMode "off" = GhostOff
-decodeGhostMode "persist" = GhostPersist
-decodeGhostMode _ = GhostOn
+decodeGhostMode :: String -> Maybe GhostMode
+decodeGhostMode "off" = Just GhostOff
+decodeGhostMode "on" = Just GhostOn
+decodeGhostMode "persist" = Just GhostPersist
+decodeGhostMode _ = Nothing
 
 encodeAnswerDisplay :: AnswerDisplay -> String
 encodeAnswerDisplay AnswerNotation = "notation"
 encodeAnswerDisplay AnswerName = "name"
 encodeAnswerDisplay AnswerBoth = "both"
 
-decodeAnswerDisplay :: String -> AnswerDisplay
-decodeAnswerDisplay "name" = AnswerName
-decodeAnswerDisplay "both" = AnswerBoth
-decodeAnswerDisplay _ = AnswerNotation
+decodeAnswerDisplay :: String -> Maybe AnswerDisplay
+decodeAnswerDisplay "notation" = Just AnswerNotation
+decodeAnswerDisplay "name" = Just AnswerName
+decodeAnswerDisplay "both" = Just AnswerBoth
+decodeAnswerDisplay _ = Nothing
 
 encodeIntervalSystem :: IntervalSystem -> String
 encodeIntervalSystem ExactIntervals = "exact"
 encodeIntervalSystem FromSelectedNotes = "from-selected-notes"
 
-decodeIntervalSystem :: String -> IntervalSystem
-decodeIntervalSystem "exact" = ExactIntervals
-decodeIntervalSystem "from-selected-notes" = FromSelectedNotes
-decodeIntervalSystem _ = FromSelectedNotes
+decodeIntervalSystem :: String -> Maybe IntervalSystem
+decodeIntervalSystem "exact" = Just ExactIntervals
+decodeIntervalSystem "from-selected-notes" = Just FromSelectedNotes
+decodeIntervalSystem _ = Nothing
 
 encodeIntervalSize :: IntervalSize -> String
 encodeIntervalSize SizeUnison = "unison"
@@ -363,9 +378,10 @@ encodeOctavePolicy :: OctavePolicy -> String
 encodeOctavePolicy AnyOctave = "any-octave"
 encodeOctavePolicy WrittenOctave = "written-octave"
 
-decodeOctavePolicy :: String -> OctavePolicy
-decodeOctavePolicy "written-octave" = WrittenOctave
-decodeOctavePolicy _ = AnyOctave
+decodeOctavePolicy :: String -> Maybe OctavePolicy
+decodeOctavePolicy "any-octave" = Just AnyOctave
+decodeOctavePolicy "written-octave" = Just WrittenOctave
+decodeOctavePolicy _ = Nothing
 
 encodeVocalRange :: VocalRangePreset -> String
 encodeVocalRange Bass = "bass"
@@ -377,15 +393,16 @@ encodeVocalRange Soprano = "soprano"
 encodeVocalRange ExtraWide = "extra-wide"
 encodeVocalRange Custom = "custom"
 
-decodeVocalRange :: String -> VocalRangePreset
-decodeVocalRange "bass" = Bass
-decodeVocalRange "baritone" = Baritone
-decodeVocalRange "alto" = Alto
-decodeVocalRange "mezzo-soprano" = MezzoSoprano
-decodeVocalRange "soprano" = Soprano
-decodeVocalRange "extra-wide" = ExtraWide
-decodeVocalRange "custom" = Custom
-decodeVocalRange _ = Tenor
+decodeVocalRange :: String -> Maybe VocalRangePreset
+decodeVocalRange "bass" = Just Bass
+decodeVocalRange "baritone" = Just Baritone
+decodeVocalRange "tenor" = Just Tenor
+decodeVocalRange "alto" = Just Alto
+decodeVocalRange "mezzo-soprano" = Just MezzoSoprano
+decodeVocalRange "soprano" = Just Soprano
+decodeVocalRange "extra-wide" = Just ExtraWide
+decodeVocalRange "custom" = Just Custom
+decodeVocalRange _ = Nothing
 
 encodePitchClass :: PitchClass -> StoredPitchClass
 encodePitchClass (PitchClass letter (Accidental accidental)) =
@@ -400,11 +417,12 @@ encodeLetter G = "G"
 encodeLetter A = "A"
 encodeLetter B = "B"
 
-decodeLetter :: String -> Letter
-decodeLetter "D" = D
-decodeLetter "E" = E
-decodeLetter "F" = F
-decodeLetter "G" = G
-decodeLetter "A" = A
-decodeLetter "B" = B
-decodeLetter _ = C
+decodeLetter :: String -> Maybe Letter
+decodeLetter "C" = Just C
+decodeLetter "D" = Just D
+decodeLetter "E" = Just E
+decodeLetter "F" = Just F
+decodeLetter "G" = Just G
+decodeLetter "A" = Just A
+decodeLetter "B" = Just B
+decodeLetter _ = Nothing

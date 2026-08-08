@@ -190,13 +190,15 @@ main = do
           , PitchClass G (Accidental 0)
           ]
       }
-    legacySettings = unsafeToForeign
-      { intervals: [ "major-third" ]
+    legacySettingsRecord =
+      { answerCount: "few"
+      , intervals: [ "major-third" ]
       , octavePolicy: "any-octave"
       , playbackModes: [ "melodic-ascending" ]
       , rootPitchClasses: [ { accidental: 0, letter: "C" } ]
       , vocalRange: "tenor"
       }
+    legacySettings = unsafeToForeign legacySettingsRecord
     validLegacyPreset = unsafeToForeign
       { id: "legacy-preset"
       , name: "Legacy preset"
@@ -211,6 +213,11 @@ main = do
       { activePresetId: ""
       , presets: [ unsafeToForeign "invalid preset" ]
       , settings: legacySettings
+      }
+    storedDataWith settings = unsafeToForeign
+      { activePresetId: ""
+      , presets: []
+      , settings
       }
     decodedLegacyData = case decodeStoredAppData legacyStoredData of
       Left _ -> [ false, false, false, false ]
@@ -229,6 +236,15 @@ main = do
     rejectsMalformedPreset = case decodeStoredAppData malformedPresetData of
       Left (MalformedStoredData _) -> true
       _ -> false
+    rejectsUnknownTags = map
+      ( case _ of
+          Left (MalformedStoredData _) -> true
+          _ -> false
+      )
+      [ decodeStoredAppData (storedDataWith (unsafeToForeign (legacySettingsRecord { vocalRange = "contralto" })))
+      , decodeStoredAppData (storedDataWith (unsafeToForeign (legacySettingsRecord { answerCount = "many" })))
+      , decodeStoredAppData (storedDataWith (unsafeToForeign (legacySettingsRecord { intervals = [ "mystery-interval" ] })))
+      ]
     rejectsMalformedVersion = case decodeStoredAppData (unsafeToForeign { version: "one" }) of
       Left (MalformedStoredData _) -> true
       _ -> false
@@ -542,8 +558,11 @@ main = do
     , expected: [ Just IntervalError, Just IntervalError, Just PlayingInterval ]
     }
   assertEqual
-    { actual: decodedLegacyData <> [ rejectsFutureData, rejectsMalformedData, rejectsMalformedPreset, rejectsMalformedVersion ]
-    , expected: [ true, true, true, true, true, true, true, true ]
+    { actual:
+        decodedLegacyData
+          <> [ rejectsFutureData, rejectsMalformedData, rejectsMalformedPreset, rejectsMalformedVersion ]
+          <> rejectsUnknownTags
+    , expected: [ true, true, true, true, true, true, true, true, true, true, true ]
     }
   assertEqual
     { actual:
