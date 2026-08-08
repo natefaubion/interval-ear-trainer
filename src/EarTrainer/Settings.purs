@@ -1,8 +1,8 @@
 module EarTrainer.Settings
   ( module Codec
   , module Preset
+  , module PresetId
   , load
-  , newPresetId
   , requestPersistence
   , save
   ) where
@@ -21,7 +21,7 @@ import EarTrainer.Settings.Codec
   , encodeStoredAppData
   ) as Codec
 import EarTrainer.Settings.Preset (NameError(..), PresetName, presetName, validatePresetName) as Preset
-import Effect (Effect)
+import EarTrainer.Settings.PresetId (PresetId, newPresetId, presetId, presetIdString) as PresetId
 import Effect.Aff (Aff)
 import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
 import Foreign (Foreign)
@@ -32,7 +32,6 @@ foreign import loadImpl
   -> EffectFnAff (Maybe Foreign)
 
 foreign import saveImpl :: Codec.StoredAppData -> EffectFnAff Unit
-foreign import newPresetId :: Effect String
 foreign import requestPersistenceImpl :: EffectFnAff Boolean
 
 load :: Aff (Either Codec.DecodeError Codec.AppData)

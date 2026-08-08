@@ -76,7 +76,7 @@ data Query :: Type -> Type
 data Query a
 
 type Input =
-  { activePresetId :: Maybe String
+  { activePresetId :: Maybe Settings.PresetId
   , config :: ExerciseConfig
   , presets :: Array Settings.Preset
   , samplerReady :: Boolean
@@ -84,7 +84,7 @@ type Input =
   }
 
 type State =
-  { activePresetId :: Maybe String
+  { activePresetId :: Maybe Settings.PresetId
   , config :: ExerciseConfig
   , presetName :: String
   , presetNameError :: Maybe String
@@ -123,7 +123,7 @@ data Action
   | RootSetPresetName String
   | RootPresetKeyDown String
   | RootSavePreset
-  | RootSelectPreset String
+  | RootSelectPreset (Maybe Settings.PresetId)
   | RootOpenDeletePreset
   | RootCloseDeletePreset
   | RootConfirmDeletePreset
@@ -185,9 +185,9 @@ component =
                 , title: "Presets"
                 , validation: Nothing
                 }
-                ( [ rootChoiceButton (isNothing state.activePresetId) (RootSelectPreset "") "Custom" ]
+                ( [ rootChoiceButton (isNothing state.activePresetId) (RootSelectPreset Nothing) "Custom" ]
                     <> map
-                      (\preset -> rootChoiceButton (state.activePresetId == Just preset.id) (RootSelectPreset preset.id) preset.name)
+                      (\preset -> rootChoiceButton (state.activePresetId == Just preset.id) (RootSelectPreset (Just preset.id)) preset.name)
                       state.presets
                     <>
                       [ HH.div
@@ -678,16 +678,17 @@ component =
           closeDialog savePresetDialogRef
           H.raise (DataChanged appData)
           H.raise PersistenceRequested
-    RootSelectPreset id -> do
+    RootSelectPreset selected -> do
       state <- H.get
-      if id == "" then do
-        H.modify_ _ { activePresetId = Nothing }
-        H.raise (DataChanged { activePresetId: Nothing, config: state.config, presets: state.presets })
-      else case Array.find (\preset -> preset.id == id) state.presets of
-        Nothing -> pure unit
-        Just preset -> do
-          H.modify_ _ { activePresetId = Just id, config = preset.config }
-          H.raise (DataChanged { activePresetId: Just id, config: preset.config, presets: state.presets })
+      case selected of
+        Nothing -> do
+          H.modify_ _ { activePresetId = Nothing }
+          H.raise (DataChanged { activePresetId: Nothing, config: state.config, presets: state.presets })
+        Just id -> case Array.find (\preset -> preset.id == id) state.presets of
+          Nothing -> pure unit
+          Just preset -> do
+            H.modify_ _ { activePresetId = Just id, config = preset.config }
+            H.raise (DataChanged { activePresetId: Just id, config: preset.config, presets: state.presets })
     RootOpenDeletePreset -> showDialog deletePresetDialogRef
     RootCloseDeletePreset -> closeDialog deletePresetDialogRef
     RootConfirmDeletePreset -> do

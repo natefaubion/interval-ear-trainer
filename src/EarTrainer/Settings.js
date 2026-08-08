@@ -68,6 +68,3 @@ export const requestPersistenceImpl = (onError, onSuccess) => {
     .catch(onError);
   return canceler;
 };
-
-export const newPresetId = () =>
-  globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;

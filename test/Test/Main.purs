@@ -57,7 +57,7 @@ import EarTrainer.Recognition
   , relativeMidi
   , stepRecognition
   )
-import EarTrainer.Settings (DecodeError(..), NameError(..), decodeStoredAppData, presetName, validatePresetName)
+import EarTrainer.Settings (DecodeError(..), NameError(..), decodeStoredAppData, presetId, presetName, validatePresetName)
 import Effect (Effect)
 import Effect.Exception (throw)
 import Foreign (unsafeToForeign)
@@ -88,7 +88,7 @@ main = do
     selectedGMajor = selectMajorKey "g" defaultConfig
     classAdjustedRange = setCustomPitchClass Lowest 1 defaultConfig
     octaveAdjustedRange = setCustomPitchOctave Highest 6 defaultConfig
-    existingPreset = { config: defaultConfig, id: "existing", name: "Warmup" }
+    existingPreset = { config: defaultConfig, id: presetId "existing", name: "Warmup" }
     b4 = pitch B (Accidental 0) 4
     c4Sample = { frequency: 261.625565, clarity: 0.98 }
     c3Sample = { frequency: 130.812783, clarity: 0.98 }
@@ -210,7 +210,7 @@ main = do
     decodedLegacyData = case decodeStoredAppData legacyStoredData of
       Left _ -> [ false, false, false, false ]
       Right value ->
-        [ value.activePresetId == Just "legacy-preset"
+        [ value.activePresetId == Just (presetId "legacy-preset")
         , value.config.answerCount == AFew
         , value.config.quizProgression == AutomaticProgression
         , Array.length value.presets == 1

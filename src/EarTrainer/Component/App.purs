@@ -19,7 +19,7 @@ import Halogen.HTML.Properties as HP
 import Type.Proxy (Proxy(..))
 
 type State =
-  { activePresetId :: Maybe String
+  { activePresetId :: Maybe Settings.PresetId
   , config :: ExerciseConfig
   , practice :: Maybe Practice.Input
   , presets :: Array Settings.Preset

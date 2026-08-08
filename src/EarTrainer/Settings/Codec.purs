@@ -38,17 +38,18 @@ import EarTrainer.Music
   , midiNumber
   , pitchFromMidi
   )
+import EarTrainer.Settings.PresetId (PresetId, presetId, presetIdString)
 import Foreign (F, Foreign, ForeignError, readArray, readBoolean, readInt, readString, readUndefined, renderForeignError)
 import Foreign.Index (readProp)
 
 type Preset =
   { config :: ExerciseConfig
-  , id :: String
+  , id :: PresetId
   , name :: String
   }
 
 type AppData =
-  { activePresetId :: Maybe String
+  { activePresetId :: Maybe PresetId
   , config :: ExerciseConfig
   , presets :: Array Preset
   }
@@ -107,7 +108,7 @@ encodeStoredAppData value =
   StoredAppData
     { activePresetId: case value.activePresetId of
         Nothing -> ""
-        Just id -> id
+        Just id -> presetIdString id
     , presets: map encodePreset value.presets
     , settings: encodeSettings value.config
     , version: currentStoredVersion
@@ -142,19 +143,19 @@ decodeAppData value = do
   storedActivePresetId <- optionalProperty readString "activePresetId" "" value
   let
     activePresetId =
-      if Array.any (\preset -> preset.id == storedActivePresetId) presets then Just storedActivePresetId
+      if Array.any (\preset -> presetIdString preset.id == storedActivePresetId) presets then Just (presetId storedActivePresetId)
       else Nothing
   pure { activePresetId, config, presets }
 
 encodePreset :: Preset -> StoredPreset
-encodePreset preset = { id: preset.id, name: preset.name, settings: encodeSettings preset.config }
+encodePreset preset = { id: presetIdString preset.id, name: preset.name, settings: encodeSettings preset.config }
 
 decodePreset :: Foreign -> F Preset
 decodePreset value = do
   id <- requiredProperty readString "id" value
   name <- requiredProperty readString "name" value
   config <- readProp "settings" value >>= decodeSettings
-  pure { id, name, config }
+  pure { id: presetId id, name, config }
 
 encodeSettings :: ExerciseConfig -> StoredSettings
 encodeSettings config =
