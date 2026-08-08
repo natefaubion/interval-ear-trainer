@@ -47,20 +47,28 @@ import Web.HTML.HTMLElement as HTMLElement
 
 data CaptureStatus
   = ReadyToPlay
-  | PlayingAudio
+  | PlayingAudio PlaybackDestination
   | Listening
   | CaptureFailed String
   | PlaybackFailed String
-  | IntervalError
-  | ChoosingAnswer
-  | AnswerComplete
+  | IntervalError Progression
+  | ChoosingAnswer (Array Interval)
+  | AnswerComplete (Array Interval) Progression
+
+data PlaybackDestination
+  = BeginSinging
+  | ResumeAnswers (Array Interval)
+
+data Progression
+  = AwaitingInput
+  | Scheduled
 
 derive instance Eq CaptureStatus
+derive instance Eq PlaybackDestination
+derive instance Eq Progression
 
 type State =
-  { answerCorrect :: Boolean
-  , activityRevision :: Int
-  , automaticAdvancePending :: Boolean
+  { activityRevision :: Int
   , captureStatus :: CaptureStatus
   , choices :: Array Quiz.IntervalChoice
   , config :: ExerciseConfig
@@ -70,8 +78,6 @@ type State =
   , prompt :: Quiz.Prompt
   , promptRevision :: Int
   , recognition :: Detection.Recognition
-  , revealedChoices :: Array Interval
-  , resumeAnswersAfterPlayback :: Boolean
   , sampler :: Audio.Sampler
   }
 
@@ -129,9 +135,7 @@ component =
     let
       prompt = Quiz.makePrompt input.seed input.config
     in
-      { answerCorrect: false
-      , activityRevision: 0
-      , automaticAdvancePending: false
+      { activityRevision: 0
       , captureStatus: ReadyToPlay
       , choices: Quiz.makeChoices input.seed input.config prompt
       , config: input.config
@@ -141,8 +145,6 @@ component =
       , prompt: prompt
       , promptRevision: 0
       , recognition: Detection.initialRecognition
-      , revealedChoices: []
-      , resumeAnswersAfterPlayback: false
       , sampler: input.sampler
       }
 
@@ -212,9 +214,9 @@ component =
   renderPitchMeter state
     | state.config.quizMode == RecognitionOnly = HH.text ""
     | not state.config.showPitchTuner = HH.text ""
-    | state.captureStatus == IntervalError = HH.text ""
-    | state.captureStatus == PlayingAudio && state.resumeAnswersAfterPlayback = HH.text ""
-    | state.captureStatus == ChoosingAnswer || state.captureStatus == AnswerComplete = HH.text ""
+    | isIntervalError state.captureStatus = HH.text ""
+    | isResumingAnswers state.captureStatus = HH.text ""
+    | isChoosingAnswer state.captureStatus || isAnswerComplete state.captureStatus = HH.text ""
     | otherwise =
         HH.div_
           [ HH.div
@@ -242,9 +244,9 @@ component =
 
   renderIntervalChoices state
     | not (quizModeUsesRecognition state.config.quizMode) = HH.text ""
-    | state.captureStatus /= ChoosingAnswer
-        && state.captureStatus /= AnswerComplete
-        && not (state.captureStatus == PlayingAudio && state.resumeAnswersAfterPlayback) = HH.text ""
+    | not (isChoosingAnswer state.captureStatus)
+        && not (isAnswerComplete state.captureStatus)
+        && not (isResumingAnswers state.captureStatus) = HH.text ""
     | otherwise =
         HH.section
           [ HP.class_ (H.ClassName "answer-panel") ]
@@ -255,7 +257,7 @@ component =
 
   renderIntervalChoice state index choice =
     let
-      revealed = Array.elem choice.interval state.revealedChoices
+      revealed = Array.elem choice.interval (revealedChoices state.captureStatus)
       correct = revealed && choice.interval == state.prompt.interval
       incorrect = revealed && not correct
       showNotation = state.config.answerDisplay /= AnswerName
@@ -279,7 +281,7 @@ component =
                   )
                 <> resultClasses
             )
-        , HP.disabled (state.answerCorrect || state.captureStatus == PlayingAudio)
+        , HP.disabled (isAnswerComplete state.captureStatus || isPlaying state.captureStatus)
         , HE.onClick \_ -> ChooseInterval choice.interval
         ]
         [ if revealed then
@@ -306,22 +308,22 @@ component =
         ]
 
   footerButtonAction state =
-    if state.captureStatus == AnswerComplete then NextPrompt else PlayPrompt
+    if isAnswerComplete state.captureStatus then NextPrompt else PlayPrompt
 
   footerButtonDisabled state =
-    state.automaticAdvancePending
-      || state.captureStatus == PlayingAudio
+    progressionScheduled state.captureStatus
+      || isPlaying state.captureStatus
       || (state.captureStatus == Listening && state.recognition.phase == Detection.RecognitionComplete)
 
   footerButtonLabel state
-    | state.captureStatus == PlayingAudio = "Playing…"
-    | state.captureStatus == AnswerComplete = "Next interval"
+    | isPlaying state.captureStatus = "Playing…"
+    | isAnswerComplete state.captureStatus = "Next interval"
     | state.captureStatus == Listening && state.recognition.phase == Detection.RecognitionComplete = "Next interval"
     | state.config.quizMode == Audiation = "Play root"
     | otherwise = "Play interval"
 
   footerButtonIcon state
-    | state.captureStatus == PlayingAudio = ""
+    | isPlaying state.captureStatus = ""
     | footerButtonLabel state == "Next interval" = "→"
     | otherwise = "▶"
 
@@ -333,17 +335,48 @@ component =
         "Listen to the interval, then sing."
       else
         "Listen to the interval, then choose."
-    PlayingAudio -> "Listen carefully."
+    PlayingAudio _ -> "Listen carefully."
     Listening -> Detection.phaseInstruction state.recognition.phase
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
-    IntervalError -> "Incorrect pitch."
-    ChoosingAnswer ->
-      if Array.null state.revealedChoices then
+    IntervalError _ -> "Incorrect pitch."
+    ChoosingAnswer revealed ->
+      if Array.null revealed then
         "Choose the matching interval."
       else
         "Not quite. Try Again."
-    AnswerComplete -> "Correct!"
+    AnswerComplete _ _ -> "Correct!"
+
+  isPlaying = case _ of
+    PlayingAudio _ -> true
+    _ -> false
+
+  isResumingAnswers = case _ of
+    PlayingAudio (ResumeAnswers _) -> true
+    _ -> false
+
+  isIntervalError = case _ of
+    IntervalError _ -> true
+    _ -> false
+
+  isChoosingAnswer = case _ of
+    ChoosingAnswer _ -> true
+    _ -> false
+
+  isAnswerComplete = case _ of
+    AnswerComplete _ _ -> true
+    _ -> false
+
+  revealedChoices = case _ of
+    ChoosingAnswer revealed -> revealed
+    AnswerComplete revealed _ -> revealed
+    PlayingAudio (ResumeAnswers revealed) -> revealed
+    _ -> []
+
+  progressionScheduled = case _ of
+    IntervalError Scheduled -> true
+    AnswerComplete _ Scheduled -> true
+    _ -> false
 
   feedbackName = case _ of
     Nothing -> "—"
@@ -367,7 +400,7 @@ component =
 
   shouldShowIntervalName state =
     state.config.quizMode == Audiation
-      || (state.config.quizMode == SingingOnly && state.captureStatus == AnswerComplete)
+      || (state.config.quizMode == SingingOnly && isAnswerComplete state.captureStatus)
 
   promptIntervalLabel state =
     intervalName state.prompt.interval
@@ -395,19 +428,21 @@ component =
     PlayPrompt -> do
       state <- H.get
       stopMonitor state.monitor
-      let activityRevision = state.activityRevision + 1
+      let
+        activityRevision = state.activityRevision + 1
+        destination = case state.captureStatus of
+          ChoosingAnswer revealed -> ResumeAnswers revealed
+          _ -> BeginSinging
       H.modify_ _
         { activityRevision = activityRevision
-        , automaticAdvancePending = false
-        , captureStatus = PlayingAudio
+        , captureStatus = PlayingAudio destination
         , ghostMidi = Nothing
         , ghostRevision = state.ghostRevision + 1
         , monitor = Nothing
         , recognition = Detection.initialRecognition
-        , resumeAnswersAfterPlayback = state.captureStatus == ChoosingAnswer
         }
       renderPromptNotation state.prompt
-        (state.captureStatus == ChoosingAnswer && quizModeUsesSinging state.config.quizMode)
+        (isChoosingAnswer state.captureStatus && quizModeUsesSinging state.config.quizMode)
       { emitter, listener } <- H.liftEffect HS.create
       void (H.subscribe emitter)
       if state.config.quizMode == Audiation then
@@ -421,7 +456,7 @@ component =
     PlaybackStarted activityRevision -> do
       state <- H.get
       when
-        ( state.captureStatus == PlayingAudio
+        ( isPlaying state.captureStatus
             && state.activityRevision == activityRevision
         )
         do
@@ -438,21 +473,23 @@ component =
         H.modify_ _ { captureStatus = PlaybackFailed message }
     StartListening activityRevision -> do
       state <- H.get
-      when
-        ( state.captureStatus == PlayingAudio
-            && state.activityRevision == activityRevision
-        )
-        do
-          if state.resumeAnswersAfterPlayback || not (quizModeUsesSinging state.config.quizMode) then do
-            H.modify_ _ { captureStatus = ChoosingAnswer, resumeAnswersAfterPlayback = false }
+      when (state.activityRevision == activityRevision) do
+        case state.captureStatus of
+          PlayingAudio (ResumeAnswers revealed) -> do
+            H.modify_ _ { captureStatus = ChoosingAnswer revealed }
             renderChoiceNotation state.prompt.root state.choices
-          else do
+          PlayingAudio BeginSinging
+            | not (quizModeUsesSinging state.config.quizMode) -> do
+                H.modify_ _ { captureStatus = ChoosingAnswer [] }
+                renderChoiceNotation state.prompt.root state.choices
+          PlayingAudio BeginSinging -> do
             { emitter, listener } <- H.liftEffect HS.create
             void (H.subscribe emitter)
             monitor <- H.liftEffect $ Detection.start
               (HS.notify listener <<< PitchDetected activityRevision)
               (HS.notify listener <<< MicrophoneFailed activityRevision)
             H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
+          _ -> pure unit
     PitchDetected activityRevision sample -> do
       state <- H.get
       when (state.captureStatus == Listening && state.activityRevision == activityRevision) do
@@ -511,7 +548,7 @@ component =
         when incorrect do
           stopMonitor state.monitor
           H.modify_ _
-            { captureStatus = IntervalError
+            { captureStatus = IntervalError AwaitingInput
             , monitor = Nothing
             , recognition = next
             }
@@ -552,12 +589,12 @@ component =
         do
           let persistGhost = state.config.ghostMode == GhostPersist
           if not (quizModeUsesRecognition state.config.quizMode) then do
-            H.modify_ _ { captureStatus = AnswerComplete, ghostMidi = Nothing }
+            H.modify_ _ { captureStatus = AnswerComplete [] AwaitingInput, ghostMidi = Nothing }
             renderCompletedNotation state.prompt
             scheduleAutomaticAdvance state
           else do
             H.modify_ _
-              { captureStatus = ChoosingAnswer
+              { captureStatus = ChoosingAnswer []
               , ghostMidi = if persistGhost then state.ghostMidi else Nothing
               }
             unless persistGhost (renderPromptNotation state.prompt true)
@@ -568,24 +605,27 @@ component =
         H.modify_ _ { captureStatus = CaptureFailed message, monitor = Nothing }
     ChooseInterval interval -> do
       state <- H.get
-      when (state.captureStatus == ChoosingAnswer && not (Array.elem interval state.revealedChoices)) do
-        case Array.find (\choice -> choice.interval == interval) state.choices of
-          Just choice ->
-            H.liftEffect $ Audio.playInterval state.sampler state.prompt.mode state.prompt.root choice.target
-              (pure unit)
-              (\_ -> pure unit)
-          Nothing -> pure unit
-        let
-          correct = interval == state.prompt.interval
-          revealed = Array.snoc state.revealedChoices interval
-        H.modify_ _
-          { answerCorrect = correct
-          , captureStatus = if correct then AnswerComplete else ChoosingAnswer
-          , revealedChoices = revealed
-          }
-        when correct do
-          renderCompletedNotation state.prompt
-          scheduleAutomaticAdvance state
+      case state.captureStatus of
+        ChoosingAnswer previous
+          | not (Array.elem interval previous) -> do
+              case Array.find (\choice -> choice.interval == interval) state.choices of
+                Just choice ->
+                  H.liftEffect $ Audio.playInterval state.sampler state.prompt.mode state.prompt.root choice.target
+                    (pure unit)
+                    (\_ -> pure unit)
+                Nothing -> pure unit
+              let
+                correct = interval == state.prompt.interval
+                revealed = Array.snoc previous interval
+              H.modify_ _
+                { captureStatus =
+                    if correct then AnswerComplete revealed AwaitingInput
+                    else ChoosingAnswer revealed
+                }
+              when correct do
+                renderCompletedNotation state.prompt
+                scheduleAutomaticAdvance state
+        _ -> pure unit
     NextPrompt -> do
       state <- H.get
       H.liftEffect (Audio.stop state.sampler)
@@ -594,9 +634,7 @@ component =
         prompt = Quiz.makePrompt seed state.config
         choices = Quiz.makeChoices seed state.config prompt
       H.modify_ _
-        { answerCorrect = false
-        , activityRevision = state.activityRevision + 1
-        , automaticAdvancePending = false
+        { activityRevision = state.activityRevision + 1
         , captureStatus = ReadyToPlay
         , choices = choices
         , ghostMidi = Nothing
@@ -604,17 +642,15 @@ component =
         , prompt = prompt
         , promptRevision = state.promptRevision + 1
         , recognition = Detection.initialRecognition
-        , revealedChoices = []
-        , resumeAnswersAfterPlayback = false
         }
       resetPracticeScroll
       renderPromptNotation prompt false
     AdvanceAutomatically revision -> do
       state <- H.get
       when
-        ( state.automaticAdvancePending
-            && state.promptRevision == revision
-            && state.captureStatus == AnswerComplete
+        ( state.promptRevision == revision
+            && progressionScheduled state.captureStatus
+            && isAnswerComplete state.captureStatus
         )
         do
           handleAction NextPrompt
@@ -622,9 +658,8 @@ component =
     RetryAutomatically revision -> do
       state <- H.get
       when
-        ( state.automaticAdvancePending
-            && state.promptRevision == revision
-            && state.captureStatus == IntervalError
+        ( state.promptRevision == revision
+            && state.captureStatus == IntervalError Scheduled
         )
         do
           handleAction PlayPrompt
@@ -643,7 +678,11 @@ component =
 
   scheduleAutomaticAdvance state =
     when (state.config.quizProgression == AutomaticProgression) do
-      H.modify_ _ { automaticAdvancePending = true }
+      H.modify_ \current -> current
+        { captureStatus = case current.captureStatus of
+            AnswerComplete revealed _ -> AnswerComplete revealed Scheduled
+            status -> status
+        }
       void $ H.fork do
         let
           waitMilliseconds =
@@ -654,7 +693,11 @@ component =
 
   scheduleAutomaticRetry state =
     when (state.config.quizProgression == AutomaticProgression) do
-      H.modify_ _ { automaticAdvancePending = true }
+      H.modify_ \current -> current
+        { captureStatus = case current.captureStatus of
+            IntervalError _ -> IntervalError Scheduled
+            status -> status
+        }
       void $ H.fork do
         H.liftAff (delay (Milliseconds 1200.0))
         handleAction (RetryAutomatically state.promptRevision)
