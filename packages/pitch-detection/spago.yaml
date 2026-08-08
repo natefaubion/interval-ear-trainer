@@ -1,9 +1,0 @@
-package:
-  name: ear-trainer-pitch-detection
-  dependencies:
-    - effect
-    - ear-trainer-music-core
-    - integers
-    - maybe
-    - numbers
-    - prelude

@@ -1,109 +1,31 @@
 {
   "workspace": {
     "packages": {
-      "ear-trainer-app": {
-        "path": "app",
+      "ear-trainer": {
+        "path": "./",
         "core": {
           "dependencies": [
             "aff",
             "arrays",
             "datetime",
-            "ear-trainer-audio-playback",
-            "ear-trainer-music-core",
-            "ear-trainer-notation",
-            "ear-trainer-pitch-detection",
-            "ear-trainer-quiz-engine",
             "effect",
             "either",
             "foldable-traversable",
             "halogen",
             "integers",
             "maybe",
+            "numbers",
             "prelude",
             "random",
             "strings",
+            "web-dom",
             "web-html",
             "web-uievents"
           ]
         },
         "test": {
-          "dependencies": []
-        }
-      },
-      "ear-trainer-audio-playback": {
-        "path": "packages/audio-playback",
-        "core": {
           "dependencies": [
-            "ear-trainer-music-core",
-            "effect",
-            "prelude"
-          ]
-        },
-        "test": {
-          "dependencies": []
-        }
-      },
-      "ear-trainer-music-core": {
-        "path": "packages/music-core",
-        "core": {
-          "dependencies": [
-            "arrays",
-            "prelude",
-            "strings"
-          ]
-        },
-        "test": {
-          "dependencies": []
-        }
-      },
-      "ear-trainer-notation": {
-        "path": "packages/notation",
-        "core": {
-          "dependencies": [
-            "arrays",
-            "ear-trainer-music-core",
-            "effect",
-            "prelude",
-            "web-dom"
-          ]
-        },
-        "test": {
-          "dependencies": []
-        }
-      },
-      "ear-trainer-pitch-detection": {
-        "path": "packages/pitch-detection",
-        "core": {
-          "dependencies": [
-            "ear-trainer-music-core",
-            "effect",
-            "integers",
-            "maybe",
-            "numbers",
-            "prelude"
-          ]
-        },
-        "test": {
-          "dependencies": []
-        }
-      },
-      "ear-trainer-quiz-engine": {
-        "path": "packages/quiz-engine",
-        "core": {
-          "dependencies": [
-            "arrays",
-            "ear-trainer-music-core",
-            "maybe",
-            "prelude"
-          ]
-        },
-        "test": {
-          "dependencies": [
-            "arrays",
-            "assert",
-            "ear-trainer-pitch-detection",
-            "effect",
-            "foldable-traversable"
+            "assert"
           ]
         }
       }

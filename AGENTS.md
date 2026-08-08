@@ -2,11 +2,11 @@
 
 This is a browser-based interval ear trainer written in PureScript with Halogen. Prefer precise domain models, small modules, and pure logic. JavaScript exists to bind JavaScript libraries and browser APIs; it is not the application's implementation language.
 
-## Direction of travel
+## Project structure
 
-The repository is being simplified from a Spago monorepo into one application package. Until that work is complete, some sources remain under `app/` and `packages/`. Do not add another Spago package. New application code should be designed for the eventual single-package layout under `src/`, and touched package modules should be moved there when doing so is a reasonably scoped part of the change.
+The repository is one Spago application package. PureScript sources live under `src/` and tests live under `test/`. Do not split application modules into separate packages merely to express module boundaries.
 
-Keep this file current with the repository. A change that completes part of the migration must update these instructions when paths, commands, or transitional constraints cease to be true. Once the single-package migration is complete, remove this transitional paragraph and describe the resulting layout directly.
+Keep this file current with the repository. Changes to paths, commands, architecture, or contributor expectations must update these instructions in the same change.
 
 The intended module boundaries are:
 

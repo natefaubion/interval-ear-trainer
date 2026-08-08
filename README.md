@@ -38,9 +38,9 @@ Microphone access must still be granted on each browser or installed-app environ
 - `npm run build` generates the PureScript browser module with purs-backend-es, then creates the production site in `dist/` with Vite.
 - `npm run validate` checks formatting, tests, and the production build.
 
-## Workspace
+## Source layout
 
-The Spago monorepo contains the Halogen application and separate packages for music theory, quiz state, notation, audio playback, and pitch detection.
+The project is a single Spago package. Application, domain, and browser-capability modules live under `src/`, with PureScript tests under `test/`.
 
 ## Audio samples
 

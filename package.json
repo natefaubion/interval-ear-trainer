@@ -9,15 +9,15 @@
   },
   "scripts": {
     "build": "npm run build:purs && npm run licenses:check && npm run build:backend && vite build --base ./",
-    "build:purs": "spago build -p ear-trainer-app",
+    "build:purs": "spago build",
     "build:backend": "purs-backend-es bundle-app --main Main --platform browser --to app.js --source-maps",
     "dev": "npm run build:purs && npm run build:backend && vite",
-    "format": "purs-tidy format-in-place 'app/**/*.purs' 'packages/**/*.purs' 'test/**/*.purs'",
-    "format:check": "purs-tidy check 'app/**/*.purs' 'packages/**/*.purs' 'test/**/*.purs'",
+    "format": "purs-tidy format-in-place 'src/**/*.purs' 'test/**/*.purs'",
+    "format:check": "purs-tidy check 'src/**/*.purs' 'test/**/*.purs'",
     "icons": "node scripts/generate-icons.js",
     "licenses": "node scripts/generate-third-party-notices.js",
     "licenses:check": "node scripts/generate-third-party-notices.js --check",
-    "test": "spago test -p ear-trainer-quiz-engine",
+    "test": "spago test",
     "validate": "npm run format:check && npm run test && npm run build"
   },
   "dependencies": {

@@ -71,7 +71,7 @@ const spagoPackages = () => {
     const dependencies = workspacePackage?.core.dependencies ?? lock.packages[name]?.dependencies ?? [];
     dependencies.forEach(visit);
   };
-  visit("ear-trainer-app");
+  visit("ear-trainer");
 
   return [...selected]
     .filter((name) => lock.packages[name]?.type === "registry")

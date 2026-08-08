@@ -1,8 +1,0 @@
-package:
-  name: ear-trainer-notation
-  dependencies:
-    - arrays
-    - effect
-    - ear-trainer-music-core
-    - prelude
-    - web-dom

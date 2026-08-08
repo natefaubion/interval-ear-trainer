@@ -2,3 +2,27 @@ workspace:
   packageSet:
     registry: 80.2.1
   extraPackages: {}
+
+package:
+  name: ear-trainer
+  dependencies:
+    - aff
+    - arrays
+    - datetime
+    - effect
+    - either
+    - foldable-traversable
+    - halogen
+    - integers
+    - maybe
+    - numbers
+    - prelude
+    - random
+    - strings
+    - web-dom
+    - web-html
+    - web-uievents
+  test:
+    main: Test.Main
+    dependencies:
+      - assert
