@@ -84,10 +84,12 @@ component =
       let
         appData = case loaded of
           Left _ -> { activePresetId: Nothing, config: defaultConfig, presets: [] }
-          Right value -> value
+          Right (Left _) -> { activePresetId: Nothing, config: defaultConfig, presets: [] }
+          Right (Right value) -> value
         storageError = case loaded of
           Left _ -> Just "Saved settings could not be loaded on this device."
-          Right _ -> Nothing
+          Right (Left _) -> Just "Saved settings use an unsupported or malformed format."
+          Right (Right _) -> Nothing
       sampler <- H.liftEffect Audio.createSampler
       H.modify_ _
         { activePresetId = appData.activePresetId

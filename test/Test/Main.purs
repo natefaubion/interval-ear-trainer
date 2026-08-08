@@ -3,6 +3,7 @@ module Test.Main where
 import Prelude
 
 import Data.Array as Array
+import Data.Either (Either(..))
 import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..))
 import EarTrainer.Config
@@ -46,7 +47,9 @@ import EarTrainer.PitchDetection
   , stepRecognition
   )
 import EarTrainer.Quiz (Event(..), Phase(..), availableExactIntervals, availableIntervalSizes, makeChoices, makePrompt, transition)
+import EarTrainer.Settings (DecodeError(..), decodeStoredAppData)
 import Effect (Effect)
+import Foreign (unsafeToForeign)
 import Test.Assert (assertEqual)
 
 main :: Effect Unit
@@ -147,6 +150,40 @@ main = do
           , PitchClass G (Accidental 0)
           ]
       }
+    legacySettings = unsafeToForeign
+      { intervals: [ "major-third" ]
+      , octavePolicy: "any-octave"
+      , playbackModes: [ "melodic-ascending" ]
+      , rootPitchClasses: [ { accidental: 0, letter: "C" } ]
+      , vocalRange: "tenor"
+      }
+    validLegacyPreset = unsafeToForeign
+      { id: "legacy-preset"
+      , name: "Legacy preset"
+      , settings: legacySettings
+      }
+    legacyStoredData = unsafeToForeign
+      { activePresetId: "legacy-preset"
+      , presets: [ validLegacyPreset, unsafeToForeign "invalid preset" ]
+      , settings: legacySettings
+      }
+    decodedLegacyData = case decodeStoredAppData legacyStoredData of
+      Left _ -> [ false, false, false, false ]
+      Right value ->
+        [ value.activePresetId == Just "legacy-preset"
+        , value.config.answerCount == AFew
+        , value.config.quizProgression == AutomaticProgression
+        , Array.length value.presets == 1
+        ]
+    rejectsFutureData = case decodeStoredAppData (unsafeToForeign { version: 2 }) of
+      Left (UnsupportedStoredVersion 2) -> true
+      _ -> false
+    rejectsMalformedData = case decodeStoredAppData (unsafeToForeign { version: 1, settings: "invalid" }) of
+      Left (MalformedStoredData _) -> true
+      _ -> false
+    rejectsMalformedVersion = case decodeStoredAppData (unsafeToForeign { version: "one" }) of
+      Left (MalformedStoredData _) -> true
+      _ -> false
     enharmonicConfig = defaultConfig
       { answerCount = AllSelected
       , intervalSystem = ExactIntervals
@@ -429,4 +466,8 @@ main = do
         , transition IntervalError Continue
         ]
     , expected: [ Just IntervalError, Just IntervalError, Just PlayingInterval ]
+    }
+  assertEqual
+    { actual: decodedLegacyData <> [ rejectsFutureData, rejectsMalformedData, rejectsMalformedVersion ]
+    , expected: [ true, true, true, true, true, true, true ]
     }

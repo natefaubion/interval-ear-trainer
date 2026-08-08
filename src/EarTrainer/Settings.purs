@@ -1,6 +1,8 @@
 module EarTrainer.Settings
   ( AppData
+  , DecodeError(..)
   , Preset
+  , decodeStoredAppData
   , load
   , newPresetId
   , requestPersistence
@@ -9,8 +11,12 @@ module EarTrainer.Settings
 
 import Prelude
 
+import Control.Monad.Except (runExcept)
 import Data.Array as Array
+import Data.Either (Either(..), hush)
+import Data.List.NonEmpty as NonEmptyList
 import Data.Maybe (Maybe(..))
+import Data.Traversable (traverse)
 import EarTrainer.Config
   ( AnswerCount(..)
   , AnswerDisplay(..)
@@ -36,6 +42,8 @@ import EarTrainer.Music
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
+import Foreign (F, Foreign, ForeignError, readArray, readBoolean, readInt, readString, readUndefined, renderForeignError)
+import Foreign.Index (readProp)
 
 type Preset =
   { config :: ExerciseConfig
@@ -48,6 +56,16 @@ type AppData =
   , config :: ExerciseConfig
   , presets :: Array Preset
   }
+
+data DecodeError
+  = MalformedStoredData (Array String)
+  | UnsupportedStoredVersion Int
+
+derive instance Eq DecodeError
+
+instance Show DecodeError where
+  show (MalformedStoredData errors) = "MalformedStoredData " <> show errors
+  show (UnsupportedStoredVersion version) = "UnsupportedStoredVersion " <> show version
 
 type StoredPitchClass =
   { accidental :: Int
@@ -82,27 +100,24 @@ type StoredAppData =
   { activePresetId :: String
   , presets :: Array StoredPreset
   , settings :: StoredSettings
+  , version :: Int
   }
 
 foreign import loadImpl
-  :: (StoredAppData -> Maybe StoredAppData)
-  -> Maybe StoredAppData
-  -> EffectFnAff (Maybe StoredAppData)
+  :: (Foreign -> Maybe Foreign)
+  -> Maybe Foreign
+  -> EffectFnAff (Maybe Foreign)
 
 foreign import saveImpl :: StoredAppData -> EffectFnAff Unit
 foreign import newPresetId :: Effect String
 foreign import requestPersistenceImpl :: EffectFnAff Boolean
 
-load :: Aff AppData
+load :: Aff (Either DecodeError AppData)
 load = do
   stored <- fromEffectFnAff (loadImpl Just Nothing)
   pure case stored of
-    Nothing -> { activePresetId: Nothing, config: defaultConfig, presets: [] }
-    Just value ->
-      { activePresetId: if value.activePresetId == "" then Nothing else Just value.activePresetId
-      , config: decodeSettings value.settings
-      , presets: map decodePreset value.presets
-      }
+    Nothing -> Right { activePresetId: Nothing, config: defaultConfig, presets: [] }
+    Just value -> decodeStoredAppData value
 
 save :: AppData -> Aff Unit
 save value = fromEffectFnAff
@@ -112,8 +127,42 @@ save value = fromEffectFnAff
           Just id -> id
       , presets: map encodePreset value.presets
       , settings: encodeSettings value.config
+      , version: currentStoredVersion
       }
   )
+
+currentStoredVersion :: Int
+currentStoredVersion = 1
+
+decodeStoredAppData :: Foreign -> Either DecodeError AppData
+decodeStoredAppData value = do
+  version <- mapDecodeErrors (runExcept (readStoredVersion value))
+  if version > currentStoredVersion then Left (UnsupportedStoredVersion version)
+  else mapDecodeErrors (runExcept (decodeAppData value))
+
+readStoredVersion :: Foreign -> F Int
+readStoredVersion value = do
+  storedVersion <- readProp "version" value >>= readUndefined
+  case storedVersion of
+    Nothing -> pure 0
+    Just version -> readInt version
+
+mapDecodeErrors :: forall a. Either (NonEmptyList.NonEmptyList ForeignError) a -> Either DecodeError a
+mapDecodeErrors = case _ of
+  Left errors -> Left (MalformedStoredData (map renderForeignError (Array.fromFoldable errors)))
+  Right value -> Right value
+
+decodeAppData :: Foreign -> F AppData
+decodeAppData value = do
+  config <- readProp "settings" value >>= decodeSettings
+  storedPresets <- readProp "presets" value >>= readArray
+  let presets = Array.mapMaybe (hush <<< runExcept <<< decodePreset) storedPresets
+  storedActivePresetId <- optionalProperty readString "activePresetId" "" value
+  let
+    activePresetId =
+      if Array.any (\preset -> preset.id == storedActivePresetId) presets then Just storedActivePresetId
+      else Nothing
+  pure { activePresetId, config, presets }
 
 requestPersistence :: Aff Boolean
 requestPersistence = fromEffectFnAff requestPersistenceImpl
@@ -121,8 +170,12 @@ requestPersistence = fromEffectFnAff requestPersistenceImpl
 encodePreset :: Preset -> StoredPreset
 encodePreset preset = { id: preset.id, name: preset.name, settings: encodeSettings preset.config }
 
-decodePreset :: StoredPreset -> Preset
-decodePreset preset = { id: preset.id, name: preset.name, config: decodeSettings preset.settings }
+decodePreset :: Foreign -> F Preset
+decodePreset value = do
+  id <- requiredProperty readString "id" value
+  name <- requiredProperty readString "name" value
+  config <- readProp "settings" value >>= decodeSettings
+  pure { id, name, config }
 
 encodeSettings :: ExerciseConfig -> StoredSettings
 encodeSettings config =
@@ -143,24 +196,64 @@ encodeSettings config =
   , vocalRange: encodeVocalRange config.vocalRange
   }
 
-decodeSettings :: StoredSettings -> ExerciseConfig
+decodeSettings :: Foreign -> F ExerciseConfig
 decodeSettings value =
-  defaultConfig
-    { answerCount = decodeAnswerCount value.answerCount
-    , answerDisplay = decodeAnswerDisplay value.answerDisplay
-    , availableIntervals = Array.mapMaybe decodeIntervalSize value.availableIntervals
-    , customRange = { low: pitchFromMidi value.customLowMidi, high: pitchFromMidi value.customHighMidi }
-    , ghostMode = decodeGhostMode value.ghostMode
-    , intervals = Array.mapMaybe decodeInterval value.intervals
-    , intervalSystem = decodeIntervalSystem value.intervalSystem
-    , octavePolicy = decodeOctavePolicy value.octavePolicy
-    , playbackModes = Array.mapMaybe decodePlaybackMode value.playbackModes
-    , showPitchTuner = value.showPitchTuner
-    , quizMode = decodeQuizMode value.quizMode
-    , quizProgression = decodeQuizProgression value.quizProgression
-    , rootPitchClasses = map decodePitchClass value.rootPitchClasses
-    , vocalRange = decodeVocalRange value.vocalRange
-    }
+  do
+    intervals <- requiredProperty readStringArray "intervals" value
+    octavePolicy <- requiredProperty readString "octavePolicy" value
+    playbackModes <- requiredProperty readStringArray "playbackModes" value
+    rootPitchClasses <- requiredProperty readPitchClassArray "rootPitchClasses" value
+    vocalRange <- requiredProperty readString "vocalRange" value
+    answerCount <- optionalProperty readString "answerCount" (encodeAnswerCount defaultConfig.answerCount) value
+    answerDisplay <- optionalProperty readString "answerDisplay" (encodeAnswerDisplay defaultConfig.answerDisplay) value
+    availableIntervals <- optionalProperty readStringArray "availableIntervals"
+      (map encodeIntervalSize defaultConfig.availableIntervals)
+      value
+    customHighMidi <- optionalProperty readInt "customHighMidi" (midiNumber defaultConfig.customRange.high) value
+    customLowMidi <- optionalProperty readInt "customLowMidi" (midiNumber defaultConfig.customRange.low) value
+    ghostMode <- optionalProperty readString "ghostMode" (encodeGhostMode defaultConfig.ghostMode) value
+    intervalSystem <- optionalProperty readString "intervalSystem" (encodeIntervalSystem defaultConfig.intervalSystem) value
+    showPitchTuner <- optionalProperty readBoolean "showPitchTuner" defaultConfig.showPitchTuner value
+    quizMode <- optionalProperty readString "quizMode" (encodeQuizMode defaultConfig.quizMode) value
+    quizProgression <- optionalProperty readString "quizProgression"
+      (encodeQuizProgression defaultConfig.quizProgression)
+      value
+    pure $ defaultConfig
+      { answerCount = decodeAnswerCount answerCount
+      , answerDisplay = decodeAnswerDisplay answerDisplay
+      , availableIntervals = Array.mapMaybe decodeIntervalSize availableIntervals
+      , customRange = { low: pitchFromMidi customLowMidi, high: pitchFromMidi customHighMidi }
+      , ghostMode = decodeGhostMode ghostMode
+      , intervals = Array.mapMaybe decodeInterval intervals
+      , intervalSystem = decodeIntervalSystem intervalSystem
+      , octavePolicy = decodeOctavePolicy octavePolicy
+      , playbackModes = Array.mapMaybe decodePlaybackMode playbackModes
+      , showPitchTuner = showPitchTuner
+      , quizMode = decodeQuizMode quizMode
+      , quizProgression = decodeQuizProgression quizProgression
+      , rootPitchClasses = rootPitchClasses
+      , vocalRange = decodeVocalRange vocalRange
+      }
+
+requiredProperty :: forall a. (Foreign -> F a) -> String -> Foreign -> F a
+requiredProperty read name value = readProp name value >>= read
+
+optionalProperty :: forall a. (Foreign -> F a) -> String -> a -> Foreign -> F a
+optionalProperty read name fallback value = case runExcept (requiredProperty read name value) of
+  Left _ -> pure fallback
+  Right result -> pure result
+
+readStringArray :: Foreign -> F (Array String)
+readStringArray value = readArray value >>= traverse readString
+
+readPitchClassArray :: Foreign -> F (Array PitchClass)
+readPitchClassArray value = readArray value >>= traverse readPitchClass
+
+readPitchClass :: Foreign -> F PitchClass
+readPitchClass value = do
+  accidental <- requiredProperty readInt "accidental" value
+  letter <- requiredProperty readString "letter" value
+  pure (PitchClass (decodeLetter letter) (Accidental accidental))
 
 encodeQuizMode :: QuizMode -> String
 encodeQuizMode SingingOnly = "singing"
@@ -317,9 +410,6 @@ decodeVocalRange _ = Tenor
 encodePitchClass :: PitchClass -> StoredPitchClass
 encodePitchClass (PitchClass letter (Accidental accidental)) =
   { accidental, letter: encodeLetter letter }
-
-decodePitchClass :: StoredPitchClass -> PitchClass
-decodePitchClass stored = PitchClass (decodeLetter stored.letter) (Accidental stored.accidental)
 
 encodeLetter :: Letter -> String
 encodeLetter C = "C"
