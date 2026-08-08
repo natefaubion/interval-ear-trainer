@@ -8,10 +8,10 @@ module EarTrainer.Component.Setup
 import Prelude
 
 import Data.Array as Array
+import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe, isNothing)
-import Data.String.Common as String
 import EarTrainer.Config
   ( AnswerCount(..)
   , AnswerDisplay(..)
@@ -660,26 +660,25 @@ component =
     RootPresetKeyDown key -> when (key == "Enter") (handleAction RootSavePreset)
     RootSavePreset -> do
       state <- H.get
-      let
-        name = String.trim state.presetName
-        duplicate = Array.any (\preset -> String.toLower preset.name == String.toLower name) state.presets
-      if name == "" then
-        H.modify_ _ { presetNameError = Just "Enter a preset name." }
-      else if duplicate then
-        H.modify_ _ { presetNameError = Just "A preset with this name already exists." }
-      else do
-        id <- H.liftEffect Settings.newPresetId
-        let
-          preset = { config: state.config, id, name }
-          appData = { activePresetId: Just id, config: state.config, presets: Array.snoc state.presets preset }
-        H.modify_ _
-          { activePresetId = appData.activePresetId
-          , presets = appData.presets
-          , presetNameError = Nothing
-          }
-        closeDialog savePresetDialogRef
-        H.raise (DataChanged appData)
-        H.raise PersistenceRequested
+      case Settings.validatePresetName state.presets state.presetName of
+        Left Settings.EmptyName ->
+          H.modify_ _ { presetNameError = Just "Enter a preset name." }
+        Left Settings.DuplicateName ->
+          H.modify_ _ { presetNameError = Just "A preset with this name already exists." }
+        Right validName -> do
+          let name = Settings.presetName validName
+          id <- H.liftEffect Settings.newPresetId
+          let
+            preset = { config: state.config, id, name }
+            appData = { activePresetId: Just id, config: state.config, presets: Array.snoc state.presets preset }
+          H.modify_ _
+            { activePresetId = appData.activePresetId
+            , presets = appData.presets
+            , presetNameError = Nothing
+            }
+          closeDialog savePresetDialogRef
+          H.raise (DataChanged appData)
+          H.raise PersistenceRequested
     RootSelectPreset id -> do
       state <- H.get
       if id == "" then do

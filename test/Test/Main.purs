@@ -57,7 +57,7 @@ import EarTrainer.Recognition
   , relativeMidi
   , stepRecognition
   )
-import EarTrainer.Settings (DecodeError(..), decodeStoredAppData)
+import EarTrainer.Settings (DecodeError(..), NameError(..), decodeStoredAppData, presetName, validatePresetName)
 import Effect (Effect)
 import Foreign (unsafeToForeign)
 import Test.Assert (assertEqual)
@@ -83,6 +83,7 @@ main = do
     selectedGMajor = selectMajorKey "g" defaultConfig
     classAdjustedRange = setCustomPitchClass Lowest 1 defaultConfig
     octaveAdjustedRange = setCustomPitchOctave Highest 6 defaultConfig
+    existingPreset = { config: defaultConfig, id: "existing", name: "Warmup" }
     b4 = pitch B (Accidental 0) 4
     c4Sample = { frequency: 261.625565, clarity: 0.98 }
     c3Sample = { frequency: 130.812783, clarity: 0.98 }
@@ -491,6 +492,14 @@ main = do
         , isPlayable narrowConfig
         ]
     , expected: [ true, true, true, true, true, false ]
+    }
+  assertEqual
+    { actual:
+        [ validatePresetName [] "   " == Left EmptyName
+        , validatePresetName [ existingPreset ] " warmUP " == Left DuplicateName
+        , map presetName (validatePresetName [ existingPreset ] "  Daily thirds  ") == Right "Daily thirds"
+        ]
+    , expected: [ true, true, true ]
     }
   assertEqual
     { actual: transition SingingFirstNote FirstPitchAccepted

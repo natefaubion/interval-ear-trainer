@@ -1,0 +1,36 @@
+module EarTrainer.Settings.Preset
+  ( NameError(..)
+  , PresetName
+  , presetName
+  , validatePresetName
+  ) where
+
+import Prelude
+
+import Data.Array as Array
+import Data.Either (Either(..))
+import Data.String.Common as String
+import EarTrainer.Settings.Codec (Preset)
+
+newtype PresetName = PresetName String
+
+derive instance Eq PresetName
+
+data NameError
+  = EmptyName
+  | DuplicateName
+
+derive instance Eq NameError
+
+presetName :: PresetName -> String
+presetName (PresetName name) = name
+
+validatePresetName :: Array Preset -> String -> Either NameError PresetName
+validatePresetName presets input =
+  let
+    name = String.trim input
+    duplicate = Array.any (\preset -> String.toLower preset.name == String.toLower name) presets
+  in
+    if name == "" then Left EmptyName
+    else if duplicate then Left DuplicateName
+    else Right (PresetName name)

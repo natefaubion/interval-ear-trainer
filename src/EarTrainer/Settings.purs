@@ -1,5 +1,6 @@
 module EarTrainer.Settings
   ( module Codec
+  , module Preset
   , load
   , newPresetId
   , requestPersistence
@@ -19,6 +20,7 @@ import EarTrainer.Settings.Codec
   , emptyAppData
   , encodeStoredAppData
   ) as Codec
+import EarTrainer.Settings.Preset (NameError(..), PresetName, presetName, validatePresetName) as Preset
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
