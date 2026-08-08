@@ -14,13 +14,12 @@ import Data.Maybe (Maybe(..))
 import EarTrainer.Settings.Codec
   ( AppData
   , DecodeError(..)
-  , Preset
   , StoredAppData
   , decodeStoredAppData
   , emptyAppData
   , encodeStoredAppData
   ) as Codec
-import EarTrainer.Settings.Preset (NameError(..), PresetName, presetName, validatePresetName) as Preset
+import EarTrainer.Settings.Preset (NameError(..), Preset, PresetName, presetName, validatePresetName) as Preset
 import EarTrainer.Settings.PresetId (PresetId, newPresetId, presetId, presetIdString) as PresetId
 import Effect.Aff (Aff)
 import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)

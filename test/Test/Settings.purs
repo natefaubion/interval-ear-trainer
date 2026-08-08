@@ -6,7 +6,15 @@ import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import EarTrainer.Config (AnswerCount(..), QuizProgression(..), defaultConfig)
-import EarTrainer.Settings (DecodeError(..), NameError(..), decodeStoredAppData, presetId, presetName, validatePresetName)
+import EarTrainer.Settings
+  ( DecodeError(..)
+  , NameError(..)
+  , decodeStoredAppData
+  , encodeStoredAppData
+  , presetId
+  , presetName
+  , validatePresetName
+  )
 import Effect (Effect)
 import Foreign (unsafeToForeign)
 import Test.Assert (assertEqual, assertTrue')
@@ -24,6 +32,16 @@ run = do
       , vocalRange: "tenor"
       }
     legacySettings = unsafeToForeign legacySettingsRecord
+    legacySettingsWithRange low high = unsafeToForeign
+      { answerCount: "few"
+      , customHighMidi: high
+      , customLowMidi: low
+      , intervals: [ "major-third" ]
+      , octavePolicy: "any-octave"
+      , playbackModes: [ "melodic-ascending" ]
+      , rootPitchClasses: [ { accidental: 0, letter: "C" } ]
+      , vocalRange: "tenor"
+      }
     validLegacyPreset = unsafeToForeign
       { id: "legacy-preset"
       , name: "Legacy preset"
@@ -72,6 +90,26 @@ run = do
     rejectsMalformedVersion = case decodeStoredAppData (unsafeToForeign { version: "one" }) of
       Left (MalformedStoredData _) -> true
       _ -> false
+    rejectsNegativeVersion = case decodeStoredAppData (unsafeToForeign { version: -1 }) of
+      Left (UnsupportedStoredVersion (-1)) -> true
+      _ -> false
+    rejectsIncompleteVersion1 = rejectsMalformed $ decodeStoredAppData $ unsafeToForeign
+      { activePresetId: ""
+      , presets: []
+      , settings: legacySettings
+      , version: 1
+      }
+    rejectsInvalidAccidental = rejectsMalformed $ decodeStoredAppData
+      (storedDataWith (unsafeToForeign (legacySettingsRecord { rootPitchClasses = [ { accidental: 3, letter: "C" } ] })))
+    rejectsLowMidi = rejectsMalformed $ decodeStoredAppData
+      (storedDataWith (legacySettingsWithRange (-1) 72))
+    rejectsHighMidi = rejectsMalformed $ decodeStoredAppData
+      (storedDataWith (legacySettingsWithRange 48 128))
+    currentData =
+      { activePresetId: Nothing
+      , config: defaultConfig
+      , presets: [ existingPreset ]
+      }
   assertTrue' "blank preset names are rejected" (validatePresetName [] "   " == Left EmptyName)
   assertTrue' "preset names are unique ignoring case"
     (validatePresetName [ existingPreset ] " warmUP " == Left DuplicateName)
@@ -85,11 +123,19 @@ run = do
       assertTrue' "missing progression receives its migration default"
         (value.config.quizProgression == AutomaticProgression)
       assertEqual { actual: Array.length value.presets, expected: 1 }
+  case decodeStoredAppData (unsafeToForeign (encodeStoredAppData currentData)) of
+    Left _ -> assertTrue' "current settings decode" false
+    Right value -> assertEqual { actual: Array.length value.presets, expected: 1 }
   assertTrue' "future versions are rejected" rejectsFutureData
   assertTrue' "malformed settings are rejected" rejectsMalformedData
   assertTrue' "malformed presets are rejected" rejectsMalformedPreset
   assertTrue' "malformed versions are rejected" rejectsMalformedVersion
+  assertTrue' "negative versions are rejected" rejectsNegativeVersion
+  assertTrue' "version 1 requires its complete schema" rejectsIncompleteVersion1
   assertTrue' "unknown vocal ranges are rejected" rejectsUnknownVocalRange
   assertTrue' "unknown answer counts are rejected" rejectsUnknownAnswerCount
   assertTrue' "unknown intervals are rejected" rejectsUnknownInterval
   assertTrue' "invalid exercise configurations are rejected" rejectsInvalidConfig
+  assertTrue' "out-of-range accidentals are rejected" rejectsInvalidAccidental
+  assertTrue' "MIDI notes below zero are rejected" rejectsLowMidi
+  assertTrue' "MIDI notes above 127 are rejected" rejectsHighMidi

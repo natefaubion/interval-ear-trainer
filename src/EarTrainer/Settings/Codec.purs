@@ -1,7 +1,6 @@
 module EarTrainer.Settings.Codec
   ( AppData
   , DecodeError(..)
-  , Preset
   , StoredAppData
   , decodeStoredAppData
   , emptyAppData
@@ -13,6 +12,7 @@ import Prelude
 import Control.Monad.Except (runExcept)
 import Data.Array as Array
 import Data.Either (Either(..))
+import Data.Foldable (traverse_)
 import Data.List.NonEmpty as NonEmptyList
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse)
@@ -39,17 +39,12 @@ import EarTrainer.Music
   , midiNumber
   , pitchFromMidi
   )
+import EarTrainer.Settings.Preset (Preset)
 import EarTrainer.Settings.PresetId (PresetId, presetId, presetIdString)
 import Foreign (F, Foreign, ForeignError(..), readArray, readBoolean, readInt, readString, readUndefined, renderForeignError)
 import Foreign as Foreign
 import Foreign.Index (readProp)
 import Foreign.Keys (keys)
-
-type Preset =
-  { config :: ExerciseConfig
-  , id :: PresetId
-  , name :: String
-  }
 
 type AppData =
   { activePresetId :: Maybe PresetId
@@ -120,11 +115,22 @@ encodeStoredAppData value =
 currentStoredVersion :: Int
 currentStoredVersion = 1
 
+newtype Version0AppData = Version0AppData
+  { activePresetId :: Maybe PresetId
+  , config :: ExerciseConfig
+  , presets :: Array Preset
+  }
+
 decodeStoredAppData :: Foreign -> Either DecodeError AppData
 decodeStoredAppData value = do
   version <- mapDecodeErrors (runExcept (readStoredVersion value))
-  if version > currentStoredVersion then Left (UnsupportedStoredVersion version)
-  else mapDecodeErrors (runExcept (decodeAppData value))
+  case version of
+    0 -> map migrateVersion0ToVersion1 $ mapDecodeErrors $ runExcept $ decodeVersion0 value
+    1 -> mapDecodeErrors $ runExcept $ decodeAppData decodeSettingsVersion1 value
+    unsupported -> Left (UnsupportedStoredVersion unsupported)
+
+decodeVersion0 :: Foreign -> F Version0AppData
+decodeVersion0 = map Version0AppData <<< decodeAppData decodeSettingsVersion0
 
 readStoredVersion :: Foreign -> F Int
 readStoredVersion value = do
@@ -138,11 +144,11 @@ mapDecodeErrors = case _ of
   Left errors -> Left (MalformedStoredData (map renderForeignError (Array.fromFoldable errors)))
   Right value -> Right value
 
-decodeAppData :: Foreign -> F AppData
-decodeAppData value = do
-  config <- readProp "settings" value >>= decodeSettings
+decodeAppData :: (Foreign -> F ExerciseConfig) -> Foreign -> F AppData
+decodeAppData decodeStoredSettings value = do
+  config <- readProp "settings" value >>= decodeStoredSettings
   storedPresets <- readProp "presets" value >>= readArray
-  presets <- traverse decodePreset storedPresets
+  presets <- traverse (decodePreset decodeStoredSettings) storedPresets
   storedActivePresetId <- optionalProperty readString "activePresetId" "" value
   let
     activePresetId =
@@ -150,14 +156,21 @@ decodeAppData value = do
       else Nothing
   pure { activePresetId, config, presets }
 
+migrateVersion0ToVersion1 :: Version0AppData -> AppData
+migrateVersion0ToVersion1 (Version0AppData legacy) =
+  { activePresetId: legacy.activePresetId
+  , config: legacy.config
+  , presets: legacy.presets
+  }
+
 encodePreset :: Preset -> StoredPreset
 encodePreset preset = { id: presetIdString preset.id, name: preset.name, settings: encodeSettings preset.config }
 
-decodePreset :: Foreign -> F Preset
-decodePreset value = do
+decodePreset :: (Foreign -> F ExerciseConfig) -> Foreign -> F Preset
+decodePreset decodeStoredSettings value = do
   id <- requiredProperty readString "id" value
   name <- requiredProperty readString "name" value
-  config <- readProp "settings" value >>= decodeSettings
+  config <- readProp "settings" value >>= decodeStoredSettings
   pure { id: presetId id, name, config }
 
 encodeSettings :: ExerciseConfig -> StoredSettings
@@ -179,6 +192,26 @@ encodeSettings config =
   , vocalRange: encodeVocalRange config.vocalRange
   }
 
+decodeSettingsVersion0 :: Foreign -> F ExerciseConfig
+decodeSettingsVersion0 = decodeSettings
+
+decodeSettingsVersion1 :: Foreign -> F ExerciseConfig
+decodeSettingsVersion1 value = do
+  requireProperties
+    [ "answerCount"
+    , "answerDisplay"
+    , "availableIntervals"
+    , "customHighMidi"
+    , "customLowMidi"
+    , "ghostMode"
+    , "intervalSystem"
+    , "quizMode"
+    , "quizProgression"
+    , "showPitchTuner"
+    ]
+    value
+  decodeSettings value
+
 decodeSettings :: Foreign -> F ExerciseConfig
 decodeSettings value =
   do
@@ -192,8 +225,8 @@ decodeSettings value =
     availableIntervals <- optionalProperty (readTagArray "interval size" decodeIntervalSize) "availableIntervals"
       defaultConfig.availableIntervals
       value
-    customHighMidi <- optionalProperty readInt "customHighMidi" (midiNumber defaultConfig.customRange.high) value
-    customLowMidi <- optionalProperty readInt "customLowMidi" (midiNumber defaultConfig.customRange.low) value
+    customHighMidi <- optionalProperty readMidi "customHighMidi" (midiNumber defaultConfig.customRange.high) value
+    customLowMidi <- optionalProperty readMidi "customLowMidi" (midiNumber defaultConfig.customRange.low) value
     ghostMode <- optionalProperty (readTag "ghost mode" decodeGhostMode) "ghostMode" defaultConfig.ghostMode value
     intervalSystem <- optionalProperty (readTag "interval system" decodeIntervalSystem) "intervalSystem" defaultConfig.intervalSystem value
     showPitchTuner <- optionalProperty readBoolean "showPitchTuner" defaultConfig.showPitchTuner value
@@ -223,6 +256,15 @@ validateExerciseConfig config
   | isValid config = pure config
   | otherwise = Foreign.fail (ForeignError "Invalid exercise configuration")
 
+requireProperties :: Array String -> Foreign -> F Unit
+requireProperties names value = do
+  properties <- keys value
+  traverse_ (requireProperty properties) names
+  where
+  requireProperty properties name
+    | Array.elem name properties = pure unit
+    | otherwise = Foreign.fail (ForeignError ("Missing required property: " <> name))
+
 requiredProperty :: forall a. (Foreign -> F a) -> String -> Foreign -> F a
 requiredProperty read name value = readProp name value >>= read
 
@@ -247,9 +289,18 @@ readPitchClassArray value = readArray value >>= traverse readPitchClass
 
 readPitchClass :: Foreign -> F PitchClass
 readPitchClass value = do
-  accidental <- requiredProperty readInt "accidental" value
+  accidental <- requiredProperty (readBoundedInt "accidental" (-2) 2) "accidental" value
   letter <- requiredProperty (readTag "pitch letter" decodeLetter) "letter" value
   pure (PitchClass letter (Accidental accidental))
+
+readMidi :: Foreign -> F Int
+readMidi = readBoundedInt "MIDI note" 0 127
+
+readBoundedInt :: String -> Int -> Int -> Foreign -> F Int
+readBoundedInt name lower upper value = do
+  number <- readInt value
+  if number >= lower && number <= upper then pure number
+  else Foreign.fail (ForeignError (name <> " must be between " <> show lower <> " and " <> show upper))
 
 encodeQuizMode :: QuizMode -> String
 encodeQuizMode SingingOnly = "singing"

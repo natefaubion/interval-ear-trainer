@@ -1,5 +1,6 @@
 module EarTrainer.Settings.Preset
   ( NameError(..)
+  , Preset
   , PresetName
   , presetName
   , validatePresetName
@@ -10,7 +11,14 @@ import Prelude
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.String.Common as String
-import EarTrainer.Settings.Codec (Preset)
+import EarTrainer.Config (ExerciseConfig)
+import EarTrainer.Settings.PresetId (PresetId)
+
+type Preset =
+  { config :: ExerciseConfig
+  , id :: PresetId
+  , name :: String
+  }
 
 newtype PresetName = PresetName String
 
