@@ -59,21 +59,16 @@ data CaptureStatus
   | Listening
   | CaptureFailed String
   | PlaybackFailed String
-  | IntervalError Progression
+  | IntervalError
   | ChoosingAnswer (Array Interval)
-  | AnswerComplete (Array Interval) Progression
+  | AnswerComplete (Array Interval)
 
 data PlaybackDestination
   = BeginSinging
   | ResumeAnswers (Array Interval)
 
-data Progression
-  = AwaitingInput
-  | Scheduled
-
 derive instance Eq CaptureStatus
 derive instance Eq PlaybackDestination
-derive instance Eq Progression
 
 type State =
   { captureFiber :: Maybe H.ForkId
@@ -334,7 +329,7 @@ component =
     if isAnswerComplete state.captureStatus then NextPrompt else PlayPrompt
 
   footerButtonDisabled state =
-    progressionScheduled state.captureStatus
+    hasFiber state.progressionFiber
       || isBusy state.captureStatus
       || (state.captureStatus == Listening && state.recognition.phase == Recognition.RecognitionComplete)
 
@@ -364,13 +359,13 @@ component =
     Listening -> Recognition.phaseInstruction state.recognition.phase
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
-    IntervalError _ -> "Incorrect pitch."
+    IntervalError -> "Incorrect pitch."
     ChoosingAnswer revealed ->
       if Array.null revealed then
         "Choose the matching interval."
       else
         "Not quite. Try Again."
-    AnswerComplete _ _ -> "Correct!"
+    AnswerComplete _ -> "Correct!"
 
   isPlaying = case _ of
     PlayingAudio _ -> true
@@ -386,7 +381,7 @@ component =
     _ -> false
 
   isIntervalError = case _ of
-    IntervalError _ -> true
+    IntervalError -> true
     _ -> false
 
   isChoosingAnswer = case _ of
@@ -394,18 +389,17 @@ component =
     _ -> false
 
   isAnswerComplete = case _ of
-    AnswerComplete _ _ -> true
+    AnswerComplete _ -> true
     _ -> false
 
   revealedChoices = case _ of
     ChoosingAnswer revealed -> revealed
-    AnswerComplete revealed _ -> revealed
+    AnswerComplete revealed -> revealed
     PlayingAudio (ResumeAnswers revealed) -> revealed
     _ -> []
 
-  progressionScheduled = case _ of
-    IntervalError Scheduled -> true
-    AnswerComplete _ Scheduled -> true
+  hasFiber = case _ of
+    Just _ -> true
     _ -> false
 
   feedbackName = case _ of
@@ -571,7 +565,7 @@ component =
               (Recognition.relativeMidi state.config.octavePolicy state.prompt.root next <<< _.midi)
               next.feedback
           H.modify_ _
-            { captureStatus = IntervalError AwaitingInput
+            { captureStatus = IntervalError
             , ghostFiber = Nothing
             , ghostMidi = incorrectMidi
             , monitor = Nothing
@@ -597,7 +591,7 @@ component =
         do
           let persistGhost = state.config.ghostMode == GhostPersist
           if not (quizModeUsesRecognition state.config.quizMode) then do
-            H.modify_ _ { captureStatus = AnswerComplete [] AwaitingInput, ghostMidi = Nothing }
+            H.modify_ _ { captureStatus = AnswerComplete [], ghostMidi = Nothing }
             scheduleAutomaticAdvance state
           else do
             H.modify_ _
@@ -639,7 +633,7 @@ component =
                 revealed = Array.snoc previous interval
               H.modify_ _
                 { captureStatus =
-                    if correct then AnswerComplete revealed AwaitingInput
+                    if correct then AnswerComplete revealed
                     else ChoosingAnswer revealed
                 }
               when correct do
@@ -670,20 +664,14 @@ component =
     AdvanceAutomatically -> do
       state <- H.get
       H.modify_ _ { progressionFiber = Nothing }
-      when
-        ( progressionScheduled state.captureStatus
-            && isAnswerComplete state.captureStatus
-        )
-        do
-          handleAction NextPrompt
-          handleAction PlayPrompt
+      when (isAnswerComplete state.captureStatus) do
+        handleAction NextPrompt
+        handleAction PlayPrompt
     RetryAutomatically -> do
       state <- H.get
       H.modify_ _ { progressionFiber = Nothing }
-      when
-        (state.captureStatus == IntervalError Scheduled)
-        do
-          handleAction PlayPrompt
+      when (state.captureStatus == IntervalError) do
+        handleAction PlayPrompt
     EditSetup -> do
       state <- H.get
       cancelTasks state
@@ -716,11 +704,6 @@ component =
     when (state.config.quizProgression == AutomaticProgression) do
       currentState <- H.get
       cancelFiber currentState.progressionFiber
-      H.modify_ \current -> current
-        { captureStatus = case current.captureStatus of
-            AnswerComplete revealed _ -> AnswerComplete revealed Scheduled
-            status -> status
-        }
       fiber <- H.fork do
         let
           waitMilliseconds =
@@ -734,11 +717,6 @@ component =
     when (state.config.quizProgression == AutomaticProgression) do
       currentState <- H.get
       cancelFiber currentState.progressionFiber
-      H.modify_ \current -> current
-        { captureStatus = case current.captureStatus of
-            IntervalError _ -> IntervalError Scheduled
-            status -> status
-        }
       fiber <- H.fork do
         H.liftAff (delay (Milliseconds 1200.0))
         handleAction RetryAutomatically
@@ -757,8 +735,8 @@ component =
         state.ghostMidi
     in
       case state.captureStatus, detected of
-        AnswerComplete _ _, _ -> Notation.completed state.prompt.root state.prompt.target
-        IntervalError _, Just pitch -> Notation.incorrect state.prompt.root state.prompt.target pitch rootAccepted
+        AnswerComplete _, _ -> Notation.completed state.prompt.root state.prompt.target
+        IntervalError, Just pitch -> Notation.incorrect state.prompt.root state.prompt.target pitch rootAccepted
         _, Just pitch -> Notation.ghost state.prompt.root state.prompt.target pitch rootAccepted
         _, Nothing -> Notation.prompt state.prompt.root state.prompt.target rootAccepted
 
