@@ -204,7 +204,12 @@ main = do
       }
     legacyStoredData = unsafeToForeign
       { activePresetId: "legacy-preset"
-      , presets: [ validLegacyPreset, unsafeToForeign "invalid preset" ]
+      , presets: [ validLegacyPreset ]
+      , settings: legacySettings
+      }
+    malformedPresetData = unsafeToForeign
+      { activePresetId: ""
+      , presets: [ unsafeToForeign "invalid preset" ]
       , settings: legacySettings
       }
     decodedLegacyData = case decodeStoredAppData legacyStoredData of
@@ -219,6 +224,9 @@ main = do
       Left (UnsupportedStoredVersion 2) -> true
       _ -> false
     rejectsMalformedData = case decodeStoredAppData (unsafeToForeign { version: 1, settings: "invalid" }) of
+      Left (MalformedStoredData _) -> true
+      _ -> false
+    rejectsMalformedPreset = case decodeStoredAppData malformedPresetData of
       Left (MalformedStoredData _) -> true
       _ -> false
     rejectsMalformedVersion = case decodeStoredAppData (unsafeToForeign { version: "one" }) of
@@ -534,8 +542,8 @@ main = do
     , expected: [ Just IntervalError, Just IntervalError, Just PlayingInterval ]
     }
   assertEqual
-    { actual: decodedLegacyData <> [ rejectsFutureData, rejectsMalformedData, rejectsMalformedVersion ]
-    , expected: [ true, true, true, true, true, true, true ]
+    { actual: decodedLegacyData <> [ rejectsFutureData, rejectsMalformedData, rejectsMalformedPreset, rejectsMalformedVersion ]
+    , expected: [ true, true, true, true, true, true, true, true ]
     }
   assertEqual
     { actual:

@@ -12,7 +12,7 @@ import Prelude
 
 import Control.Monad.Except (runExcept)
 import Data.Array as Array
-import Data.Either (Either(..), hush)
+import Data.Either (Either(..))
 import Data.List.NonEmpty as NonEmptyList
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse)
@@ -139,7 +139,7 @@ decodeAppData :: Foreign -> F AppData
 decodeAppData value = do
   config <- readProp "settings" value >>= decodeSettings
   storedPresets <- readProp "presets" value >>= readArray
-  let presets = Array.mapMaybe (hush <<< runExcept <<< decodePreset) storedPresets
+  presets <- traverse decodePreset storedPresets
   storedActivePresetId <- optionalProperty readString "activePresetId" "" value
   let
     activePresetId =
