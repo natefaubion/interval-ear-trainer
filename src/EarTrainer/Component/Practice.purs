@@ -86,6 +86,7 @@ type State =
   , observation :: Recognition.Observation
   , playbackFiber :: Maybe H.ForkId
   , prompt :: Quiz.Prompt
+  , prompts :: Quiz.PromptSet
   , progressionFiber :: Maybe H.ForkId
   , previewFiber :: Maybe H.ForkId
   , recognition :: Recognition.Recognition
@@ -129,6 +130,7 @@ notationSlot = Proxy
 
 type Input =
   { config :: ExerciseConfig
+  , prompts :: Quiz.PromptSet
   , sampler :: AudioCapability.Sampler
   , seed :: Int
   }
@@ -153,7 +155,7 @@ component =
   where
   initialState input =
     let
-      prompt = Quiz.makePrompt input.seed input.config
+      prompt = Quiz.makePrompt input.seed input.prompts
     in
       { captureFiber: Nothing
       , captureStatus: ReadyToPlay
@@ -165,6 +167,7 @@ component =
       , observation: Recognition.initialObservation
       , playbackFiber: Nothing
       , prompt: prompt
+      , prompts: input.prompts
       , progressionFiber: Nothing
       , previewFiber: Nothing
       , recognition: Recognition.initialRecognition
@@ -648,7 +651,7 @@ component =
       H.liftEffect (AudioCapability.stop state.sampler)
       seed <- H.liftEffect (randomInt 0 2147483647)
       let
-        prompt = Quiz.makePrompt seed state.config
+        prompt = Quiz.makePrompt seed state.prompts
         choices = Quiz.makeChoices seed state.config prompt
       H.modify_ _
         { captureFiber = Nothing

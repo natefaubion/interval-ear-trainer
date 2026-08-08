@@ -5,7 +5,7 @@ import Prelude
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Foldable (foldl)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import EarTrainer.Audio as Audio
 import EarTrainer.Config
   ( AnswerCount(..)
@@ -45,7 +45,7 @@ import EarTrainer.Music
   , transpose
   )
 import EarTrainer.Notation as Notation
-import EarTrainer.Quiz (Event(..), Phase(..), availableExactIntervals, availableIntervalSizes, isPlayable, makeChoices, makePrompt, transition)
+import EarTrainer.Quiz (Event(..), Phase(..), availableExactIntervals, availableIntervalSizes, isPlayable, makeChoices, makePrompt, promptSet, transition)
 import EarTrainer.Recognition
   ( RecognitionPhase(..)
   , defaultCaptureSettings
@@ -59,12 +59,17 @@ import EarTrainer.Recognition
   )
 import EarTrainer.Settings (DecodeError(..), NameError(..), decodeStoredAppData, presetName, validatePresetName)
 import Effect (Effect)
+import Effect.Exception (throw)
 import Foreign (unsafeToForeign)
 import Test.Assert (assertEqual)
 
 main :: Effect Unit
 main = do
+  defaultPrompts <- case promptSet defaultConfig of
+    Nothing -> throw "Default configuration must produce prompts."
+    Just prompts -> pure prompts
   let
+    promptsFor config = fromMaybe defaultPrompts (promptSet config)
     c4 = pitch C (Accidental 0) 4
     e4 = pitch E (Accidental 0) 4
     melodicPlan = Audio.intervalPlan MelodicAscending c4 e4
@@ -155,27 +160,27 @@ main = do
       { intervalSystem = ExactIntervals
       , playbackModes = [ MelodicDescending ]
       }
-    generatedPrompt = makePrompt 128 descendingConfig
+    generatedPrompt = makePrompt 128 (promptsFor descendingConfig)
     generatedChoices = makeChoices 128 descendingConfig generatedPrompt
     allAnswersConfig = descendingConfig { answerCount = AllSelected }
     allSelectedChoices = makeChoices 128 allAnswersConfig generatedPrompt
     generatedRange = presetRange descendingConfig.vocalRange
     audiationConfig = descendingConfig { quizMode = Audiation }
-    audiationPrompt = makePrompt 128 audiationConfig
-    ascendingAudiationPrompt = makePrompt 128 (defaultConfig { quizMode = Audiation, playbackModes = [ MelodicAscending ] })
+    audiationPrompt = makePrompt 128 (promptsFor audiationConfig)
+    ascendingAudiationPrompt = makePrompt 128 (promptsFor (defaultConfig { quizMode = Audiation, playbackModes = [ MelodicAscending ] }))
     collectionConfig = defaultConfig
       { availableIntervals = [ SizeThird ]
       , intervalSystem = FromSelectedNotes
       , playbackModes = [ MelodicAscending ]
       }
-    collectionPrompts = map (flip makePrompt collectionConfig) (Array.range 0 80)
-    collectionChoices = makeChoices 24 collectionConfig (makePrompt 24 collectionConfig)
+    collectionPrompts = map (flip makePrompt (promptsFor collectionConfig)) (Array.range 0 80)
+    collectionChoices = makeChoices 24 collectionConfig (makePrompt 24 (promptsFor collectionConfig))
     allCollectionChoices =
       makeChoices 24
         (collectionConfig { answerCount = AllSelected })
-        (makePrompt 24 collectionConfig)
+        (makePrompt 24 (promptsFor collectionConfig))
     descendingCollectionConfig = collectionConfig { playbackModes = [ MelodicDescending ] }
-    descendingCollectionPrompts = map (flip makePrompt descendingCollectionConfig) (Array.range 0 40)
+    descendingCollectionPrompts = map (flip makePrompt (promptsFor descendingCollectionConfig)) (Array.range 0 40)
     pitchClassOf (Pitch pitchClass _) = pitchClass
     sparseCollectionConfig = collectionConfig
       { availableIntervals = [ SizeSecond ]
@@ -254,7 +259,7 @@ main = do
       , rootPitchClasses = [ PitchClass C (Accidental 0) ]
       , vocalRange = Custom
       }
-    narrowExactPrompt = makePrompt 0 narrowExactConfig
+    narrowExactPrompt = makePrompt 0 (promptsFor narrowExactConfig)
   assertEqual
     { actual: nearestMidi 440.0
     , expected: 69
@@ -358,7 +363,7 @@ main = do
         [ Array.all (\prompt -> midiNumber prompt.target < midiNumber prompt.root) descendingCollectionPrompts
         , Array.length collectionChoices == 2
         , Array.length
-            (Array.filter (\choice -> choice.interval == (makePrompt 24 collectionConfig).interval) collectionChoices) == 1
+            (Array.filter (\choice -> choice.interval == (makePrompt 24 (promptsFor collectionConfig)).interval) collectionChoices) == 1
         , Array.all (\choice -> intervalNumber choice.interval == 3) allCollectionChoices
         ]
     , expected: [ true, true, true, true ]
@@ -492,6 +497,13 @@ main = do
         , isPlayable narrowConfig
         ]
     , expected: [ true, true, true, true, true, false ]
+    }
+  assertEqual
+    { actual:
+        map
+          (isJust <<< promptSet)
+          [ descendingConfig, audiationConfig, collectionConfig, descendingCollectionConfig, narrowExactConfig ]
+    , expected: [ true, true, true, true, true ]
     }
   assertEqual
     { actual:

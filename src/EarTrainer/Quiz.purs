@@ -3,28 +3,28 @@ module EarTrainer.Quiz
   , IntervalChoice
   , Phase(..)
   , Prompt
+  , PromptSet
   , availableExactIntervals
   , availableIntervalSizes
   , isPlayable
   , makeChoices
   , makePrompt
+  , promptSet
   , transition
   ) where
 
 import Prelude
 
 import Data.Array as Array
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Array.NonEmpty as NonEmptyArray
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.Ord (abs)
 import EarTrainer.Config (AnswerCount(..), ExerciseConfig, IntervalSystem(..), QuizMode(..), exerciseRange, isValid)
 import EarTrainer.Music
-  ( Accidental(..)
-  , Direction(..)
-  , Interval(..)
+  ( Direction(..)
+  , Interval
   , IntervalSize(..)
-  , Letter(..)
   , Pitch(..)
-  , PitchClass(..)
   , PlaybackMode(..)
   , VocalRange
   , allIntervals
@@ -46,12 +46,14 @@ type IntervalChoice =
   , target :: Pitch
   }
 
+newtype PromptSet = PromptSet (NonEmptyArray.NonEmptyArray Prompt)
+
+promptSet :: ExerciseConfig -> Maybe PromptSet
+promptSet = map PromptSet <<< NonEmptyArray.fromArray <<< promptCandidates
+
 isPlayable :: ExerciseConfig -> Boolean
 isPlayable config =
-  isValid config
-    && case config.intervalSystem of
-      ExactIntervals -> not (Array.null (Array.filter (flip Array.elem (availableExactIntervals config)) config.intervals))
-      FromSelectedNotes -> not (Array.null (Array.filter (flip Array.elem (availableIntervalSizes config)) config.availableIntervals))
+  isValid config && isJust (promptSet config)
 
 directionFor :: PlaybackMode -> Direction
 directionFor MelodicDescending = Descending
@@ -61,48 +63,18 @@ pick :: forall a. a -> Int -> Array a -> a
 pick fallback seed values =
   fromMaybe fallback (Array.index values (abs seed `mod` max 1 (Array.length values)))
 
-makePrompt :: Int -> ExerciseConfig -> Prompt
-makePrompt seed config = case config.intervalSystem of
-  ExactIntervals -> makeExactPrompt seed config
-  FromSelectedNotes -> makeDerivedPrompt seed config
+makePrompt :: Int -> PromptSet -> Prompt
+makePrompt seed (PromptSet prompts) =
+  pick (NonEmptyArray.head prompts) seed (NonEmptyArray.toArray prompts)
 
-makeExactPrompt :: Int -> ExerciseConfig -> Prompt
-makeExactPrompt seed config =
-  let
-    validIntervals = Array.filter (flip Array.elem (availableExactIntervals config)) config.intervals
-    interval = pick MinorThird seed validIntervals
-    range = exerciseRange config
-    Pitch _ lowOctave = range.low
-    fallbackRoot = Pitch (PitchClass C (Accidental 0)) lowOctave
-    fallback =
-      { interval
-      , mode: MelodicAscending
-      , root: fallbackRoot
-      , target: transpose Ascending interval fallbackRoot
-      }
-  in
-    pick fallback (seed `div` 13) (exactCandidates config interval)
-
-makeDerivedPrompt :: Int -> ExerciseConfig -> Prompt
-makeDerivedPrompt seed config =
-  let
-    range = exerciseRange config
-    Pitch _ lowOctave = range.low
-    fallbackRoot = Pitch (PitchClass C (Accidental 0)) lowOctave
-    fallback =
-      { interval: MinorThird
-      , mode: MelodicAscending
-      , root: fallbackRoot
-      , target: transpose Ascending MinorThird fallbackRoot
-      }
-    validSizes = Array.filter (flip Array.elem (availableIntervalSizes config)) config.availableIntervals
-    size = pick SizeThird seed validSizes
-    candidatesForSize = derivedCandidates config [ size ]
-    validModes = Array.filter (\candidateMode -> Array.any (\prompt -> prompt.mode == candidateMode) candidatesForSize) (availableModes config)
-    mode = pick MelodicAscending (seed `div` 7) validModes
-    candidates = Array.filter (\prompt -> prompt.mode == mode) candidatesForSize
-  in
-    pick fallback (seed `div` 13) candidates
+promptCandidates :: ExerciseConfig -> Array Prompt
+promptCandidates config = case config.intervalSystem of
+  ExactIntervals -> do
+    interval <- Array.filter (flip Array.elem (availableExactIntervals config)) config.intervals
+    exactCandidates config interval
+  FromSelectedNotes ->
+    derivedCandidates config
+      (Array.filter (flip Array.elem (availableIntervalSizes config)) config.availableIntervals)
 
 availableModes :: ExerciseConfig -> Array PlaybackMode
 availableModes config =

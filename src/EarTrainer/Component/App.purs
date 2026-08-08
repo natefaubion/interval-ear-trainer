@@ -8,6 +8,7 @@ import EarTrainer.Capability.Audio as Audio
 import EarTrainer.Component.Practice as Practice
 import EarTrainer.Component.Setup as Setup
 import EarTrainer.Config (ExerciseConfig, defaultConfig)
+import EarTrainer.Quiz as Quiz
 import EarTrainer.Settings as Settings
 import Effect.Aff (attempt)
 import Effect.Aff.Class (class MonadAff)
@@ -111,9 +112,11 @@ component =
       state <- H.get
       case state.sampler of
         Nothing -> pure unit
-        Just sampler -> do
-          seed <- H.liftEffect (randomInt 0 2147483647)
-          H.modify_ _ { practice = Just { config: state.config, sampler, seed } }
+        Just sampler -> case Quiz.promptSet state.config of
+          Nothing -> pure unit
+          Just prompts -> do
+            seed <- H.liftEffect (randomInt 0 2147483647)
+            H.modify_ _ { practice = Just { config: state.config, prompts, sampler, seed } }
     SetupOutput Setup.PersistenceRequested ->
       void $ H.fork do
         void $ H.liftAff Settings.requestPersistence
