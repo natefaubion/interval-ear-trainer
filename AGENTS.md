@@ -55,15 +55,16 @@ Keep the pure transition layer separate from effect interpretation where practic
 - `App` coordinates loading and navigation. `Setup` owns setup editing. `Practice` owns practice. Do not duplicate setup or practice behavior across components.
 - Child inputs and outputs should form small, explicit APIs. Avoid passing a root state wholesale when a smaller input record expresses the dependency.
 - A component that owns a foreign-rendered DOM node should also own the relevant ref and rendering lifecycle.
-- Avoid large local component definitions and application-sized `where` blocks. Extract a module once a definition represents an independent concept.
+- Keep a component's state, actions, rendering, and evaluation together in its component module. Do not split component internals merely because the module is long. Extract independently useful pure domain logic, reusable HTML constructors, or separately testable policies when they form a genuine API.
 
 ## PureScript style
 
 Write compact, idiomatic PureScript in the style established by Nathan Faubion's libraries:
 
 - Prefer `case _ of` for handlers and small eliminators.
+- Do not repeat a function name across equations to eliminate a sum type. Define the function once with `case _ of`. Single-equation newtype or record destructuring is fine.
 - Prefer pattern matching and guards to nested Boolean conditionals.
-- Use `do` with local `let` bindings when intermediate values feed subsequent effects.
+- Always use `do` with local `let` bindings instead of `let ... in ...`, including in pure code.
 - Prefer small total functions with explicit signatures.
 - Use qualified imports when they make ownership or provenance clearer.
 - Give modules explicit export lists.

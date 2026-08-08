@@ -59,8 +59,9 @@ data DecodeError
 derive instance Eq DecodeError
 
 instance Show DecodeError where
-  show (MalformedStoredData errors) = "MalformedStoredData " <> show errors
-  show (UnsupportedStoredVersion version) = "UnsupportedStoredVersion " <> show version
+  show = case _ of
+    MalformedStoredData errors -> "MalformedStoredData " <> show errors
+    UnsupportedStoredVersion version -> "UnsupportedStoredVersion " <> show version
 
 type StoredPitchClass =
   { accidental :: Int
@@ -303,183 +304,207 @@ readBoundedInt name lower upper value = do
   else Foreign.fail (ForeignError (name <> " must be between " <> show lower <> " and " <> show upper))
 
 encodeQuizMode :: QuizMode -> String
-encodeQuizMode SingingOnly = "singing"
-encodeQuizMode RecognitionOnly = "recognition"
-encodeQuizMode SingingAndRecognition = "singing-and-recognition"
-encodeQuizMode Audiation = "audiation"
+encodeQuizMode = case _ of
+  SingingOnly -> "singing"
+  RecognitionOnly -> "recognition"
+  SingingAndRecognition -> "singing-and-recognition"
+  Audiation -> "audiation"
 
 decodeQuizMode :: String -> Maybe QuizMode
-decodeQuizMode "singing" = Just SingingOnly
-decodeQuizMode "recognition" = Just RecognitionOnly
-decodeQuizMode "singing-and-recognition" = Just SingingAndRecognition
-decodeQuizMode "audiation" = Just Audiation
-decodeQuizMode _ = Nothing
+decodeQuizMode = case _ of
+  "singing" -> Just SingingOnly
+  "recognition" -> Just RecognitionOnly
+  "singing-and-recognition" -> Just SingingAndRecognition
+  "audiation" -> Just Audiation
+  _ -> Nothing
 
 encodeQuizProgression :: QuizProgression -> String
-encodeQuizProgression ManualProgression = "manual"
-encodeQuizProgression AutomaticProgression = "automatic"
+encodeQuizProgression = case _ of
+  ManualProgression -> "manual"
+  AutomaticProgression -> "automatic"
 
 decodeQuizProgression :: String -> Maybe QuizProgression
-decodeQuizProgression "manual" = Just ManualProgression
-decodeQuizProgression "automatic" = Just AutomaticProgression
-decodeQuizProgression _ = Nothing
+decodeQuizProgression = case _ of
+  "manual" -> Just ManualProgression
+  "automatic" -> Just AutomaticProgression
+  _ -> Nothing
 
 encodeAnswerCount :: AnswerCount -> String
-encodeAnswerCount AFew = "few"
-encodeAnswerCount AllSelected = "all-selected"
+encodeAnswerCount = case _ of
+  AFew -> "few"
+  AllSelected -> "all-selected"
 
 decodeAnswerCount :: String -> Maybe AnswerCount
-decodeAnswerCount "few" = Just AFew
-decodeAnswerCount "all-selected" = Just AllSelected
-decodeAnswerCount _ = Nothing
+decodeAnswerCount = case _ of
+  "few" -> Just AFew
+  "all-selected" -> Just AllSelected
+  _ -> Nothing
 
 encodeGhostMode :: GhostMode -> String
-encodeGhostMode GhostOff = "off"
-encodeGhostMode GhostOn = "on"
-encodeGhostMode GhostPersist = "persist"
+encodeGhostMode = case _ of
+  GhostOff -> "off"
+  GhostOn -> "on"
+  GhostPersist -> "persist"
 
 decodeGhostMode :: String -> Maybe GhostMode
-decodeGhostMode "off" = Just GhostOff
-decodeGhostMode "on" = Just GhostOn
-decodeGhostMode "persist" = Just GhostPersist
-decodeGhostMode _ = Nothing
+decodeGhostMode = case _ of
+  "off" -> Just GhostOff
+  "on" -> Just GhostOn
+  "persist" -> Just GhostPersist
+  _ -> Nothing
 
 encodeAnswerDisplay :: AnswerDisplay -> String
-encodeAnswerDisplay AnswerNotation = "notation"
-encodeAnswerDisplay AnswerName = "name"
-encodeAnswerDisplay AnswerBoth = "both"
+encodeAnswerDisplay = case _ of
+  AnswerNotation -> "notation"
+  AnswerName -> "name"
+  AnswerBoth -> "both"
 
 decodeAnswerDisplay :: String -> Maybe AnswerDisplay
-decodeAnswerDisplay "notation" = Just AnswerNotation
-decodeAnswerDisplay "name" = Just AnswerName
-decodeAnswerDisplay "both" = Just AnswerBoth
-decodeAnswerDisplay _ = Nothing
+decodeAnswerDisplay = case _ of
+  "notation" -> Just AnswerNotation
+  "name" -> Just AnswerName
+  "both" -> Just AnswerBoth
+  _ -> Nothing
 
 encodeIntervalSystem :: IntervalSystem -> String
-encodeIntervalSystem ExactIntervals = "exact"
-encodeIntervalSystem FromSelectedNotes = "from-selected-notes"
+encodeIntervalSystem = case _ of
+  ExactIntervals -> "exact"
+  FromSelectedNotes -> "from-selected-notes"
 
 decodeIntervalSystem :: String -> Maybe IntervalSystem
-decodeIntervalSystem "exact" = Just ExactIntervals
-decodeIntervalSystem "from-selected-notes" = Just FromSelectedNotes
-decodeIntervalSystem _ = Nothing
+decodeIntervalSystem = case _ of
+  "exact" -> Just ExactIntervals
+  "from-selected-notes" -> Just FromSelectedNotes
+  _ -> Nothing
 
 encodeIntervalSize :: IntervalSize -> String
-encodeIntervalSize SizeUnison = "unison"
-encodeIntervalSize SizeSecond = "second"
-encodeIntervalSize SizeThird = "third"
-encodeIntervalSize SizeFourth = "fourth"
-encodeIntervalSize SizeFifth = "fifth"
-encodeIntervalSize SizeSixth = "sixth"
-encodeIntervalSize SizeSeventh = "seventh"
-encodeIntervalSize SizeOctave = "octave"
+encodeIntervalSize = case _ of
+  SizeUnison -> "unison"
+  SizeSecond -> "second"
+  SizeThird -> "third"
+  SizeFourth -> "fourth"
+  SizeFifth -> "fifth"
+  SizeSixth -> "sixth"
+  SizeSeventh -> "seventh"
+  SizeOctave -> "octave"
 
 decodeIntervalSize :: String -> Maybe IntervalSize
-decodeIntervalSize "unison" = Just SizeUnison
-decodeIntervalSize "second" = Just SizeSecond
-decodeIntervalSize "third" = Just SizeThird
-decodeIntervalSize "fourth" = Just SizeFourth
-decodeIntervalSize "fifth" = Just SizeFifth
-decodeIntervalSize "sixth" = Just SizeSixth
-decodeIntervalSize "seventh" = Just SizeSeventh
-decodeIntervalSize "octave" = Just SizeOctave
-decodeIntervalSize _ = Nothing
+decodeIntervalSize = case _ of
+  "unison" -> Just SizeUnison
+  "second" -> Just SizeSecond
+  "third" -> Just SizeThird
+  "fourth" -> Just SizeFourth
+  "fifth" -> Just SizeFifth
+  "sixth" -> Just SizeSixth
+  "seventh" -> Just SizeSeventh
+  "octave" -> Just SizeOctave
+  _ -> Nothing
 
 encodeInterval :: Interval -> String
-encodeInterval PerfectUnison = "perfect-unison"
-encodeInterval MinorSecond = "minor-second"
-encodeInterval MajorSecond = "major-second"
-encodeInterval MinorThird = "minor-third"
-encodeInterval MajorThird = "major-third"
-encodeInterval PerfectFourth = "perfect-fourth"
-encodeInterval AugmentedFourth = "augmented-fourth"
-encodeInterval DiminishedFifth = "diminished-fifth"
-encodeInterval PerfectFifth = "perfect-fifth"
-encodeInterval AugmentedFifth = "augmented-fifth"
-encodeInterval MinorSixth = "minor-sixth"
-encodeInterval MajorSixth = "major-sixth"
-encodeInterval MinorSeventh = "minor-seventh"
-encodeInterval MajorSeventh = "major-seventh"
-encodeInterval PerfectOctave = "perfect-octave"
+encodeInterval = case _ of
+  PerfectUnison -> "perfect-unison"
+  MinorSecond -> "minor-second"
+  MajorSecond -> "major-second"
+  MinorThird -> "minor-third"
+  MajorThird -> "major-third"
+  PerfectFourth -> "perfect-fourth"
+  AugmentedFourth -> "augmented-fourth"
+  DiminishedFifth -> "diminished-fifth"
+  PerfectFifth -> "perfect-fifth"
+  AugmentedFifth -> "augmented-fifth"
+  MinorSixth -> "minor-sixth"
+  MajorSixth -> "major-sixth"
+  MinorSeventh -> "minor-seventh"
+  MajorSeventh -> "major-seventh"
+  PerfectOctave -> "perfect-octave"
 
 decodeInterval :: String -> Maybe Interval
-decodeInterval "perfect-unison" = Just PerfectUnison
-decodeInterval "minor-second" = Just MinorSecond
-decodeInterval "major-second" = Just MajorSecond
-decodeInterval "minor-third" = Just MinorThird
-decodeInterval "major-third" = Just MajorThird
-decodeInterval "perfect-fourth" = Just PerfectFourth
-decodeInterval "augmented-fourth" = Just AugmentedFourth
-decodeInterval "diminished-fifth" = Just DiminishedFifth
-decodeInterval "perfect-fifth" = Just PerfectFifth
-decodeInterval "augmented-fifth" = Just AugmentedFifth
-decodeInterval "minor-sixth" = Just MinorSixth
-decodeInterval "major-sixth" = Just MajorSixth
-decodeInterval "minor-seventh" = Just MinorSeventh
-decodeInterval "major-seventh" = Just MajorSeventh
-decodeInterval "perfect-octave" = Just PerfectOctave
-decodeInterval _ = Nothing
+decodeInterval = case _ of
+  "perfect-unison" -> Just PerfectUnison
+  "minor-second" -> Just MinorSecond
+  "major-second" -> Just MajorSecond
+  "minor-third" -> Just MinorThird
+  "major-third" -> Just MajorThird
+  "perfect-fourth" -> Just PerfectFourth
+  "augmented-fourth" -> Just AugmentedFourth
+  "diminished-fifth" -> Just DiminishedFifth
+  "perfect-fifth" -> Just PerfectFifth
+  "augmented-fifth" -> Just AugmentedFifth
+  "minor-sixth" -> Just MinorSixth
+  "major-sixth" -> Just MajorSixth
+  "minor-seventh" -> Just MinorSeventh
+  "major-seventh" -> Just MajorSeventh
+  "perfect-octave" -> Just PerfectOctave
+  _ -> Nothing
 
 encodePlaybackMode :: PlaybackMode -> String
-encodePlaybackMode MelodicAscending = "melodic-ascending"
-encodePlaybackMode MelodicDescending = "melodic-descending"
-encodePlaybackMode Harmonic = "harmonic"
+encodePlaybackMode = case _ of
+  MelodicAscending -> "melodic-ascending"
+  MelodicDescending -> "melodic-descending"
+  Harmonic -> "harmonic"
 
 decodePlaybackMode :: String -> Maybe PlaybackMode
-decodePlaybackMode "melodic-ascending" = Just MelodicAscending
-decodePlaybackMode "melodic-descending" = Just MelodicDescending
-decodePlaybackMode "harmonic" = Just Harmonic
-decodePlaybackMode _ = Nothing
+decodePlaybackMode = case _ of
+  "melodic-ascending" -> Just MelodicAscending
+  "melodic-descending" -> Just MelodicDescending
+  "harmonic" -> Just Harmonic
+  _ -> Nothing
 
 encodeOctavePolicy :: OctavePolicy -> String
-encodeOctavePolicy AnyOctave = "any-octave"
-encodeOctavePolicy WrittenOctave = "written-octave"
+encodeOctavePolicy = case _ of
+  AnyOctave -> "any-octave"
+  WrittenOctave -> "written-octave"
 
 decodeOctavePolicy :: String -> Maybe OctavePolicy
-decodeOctavePolicy "any-octave" = Just AnyOctave
-decodeOctavePolicy "written-octave" = Just WrittenOctave
-decodeOctavePolicy _ = Nothing
+decodeOctavePolicy = case _ of
+  "any-octave" -> Just AnyOctave
+  "written-octave" -> Just WrittenOctave
+  _ -> Nothing
 
 encodeVocalRange :: VocalRangePreset -> String
-encodeVocalRange Bass = "bass"
-encodeVocalRange Baritone = "baritone"
-encodeVocalRange Tenor = "tenor"
-encodeVocalRange Alto = "alto"
-encodeVocalRange MezzoSoprano = "mezzo-soprano"
-encodeVocalRange Soprano = "soprano"
-encodeVocalRange ExtraWide = "extra-wide"
-encodeVocalRange Custom = "custom"
+encodeVocalRange = case _ of
+  Bass -> "bass"
+  Baritone -> "baritone"
+  Tenor -> "tenor"
+  Alto -> "alto"
+  MezzoSoprano -> "mezzo-soprano"
+  Soprano -> "soprano"
+  ExtraWide -> "extra-wide"
+  Custom -> "custom"
 
 decodeVocalRange :: String -> Maybe VocalRangePreset
-decodeVocalRange "bass" = Just Bass
-decodeVocalRange "baritone" = Just Baritone
-decodeVocalRange "tenor" = Just Tenor
-decodeVocalRange "alto" = Just Alto
-decodeVocalRange "mezzo-soprano" = Just MezzoSoprano
-decodeVocalRange "soprano" = Just Soprano
-decodeVocalRange "extra-wide" = Just ExtraWide
-decodeVocalRange "custom" = Just Custom
-decodeVocalRange _ = Nothing
+decodeVocalRange = case _ of
+  "bass" -> Just Bass
+  "baritone" -> Just Baritone
+  "tenor" -> Just Tenor
+  "alto" -> Just Alto
+  "mezzo-soprano" -> Just MezzoSoprano
+  "soprano" -> Just Soprano
+  "extra-wide" -> Just ExtraWide
+  "custom" -> Just Custom
+  _ -> Nothing
 
 encodePitchClass :: PitchClass -> StoredPitchClass
 encodePitchClass (PitchClass letter (Accidental accidental)) =
   { accidental, letter: encodeLetter letter }
 
 encodeLetter :: Letter -> String
-encodeLetter C = "C"
-encodeLetter D = "D"
-encodeLetter E = "E"
-encodeLetter F = "F"
-encodeLetter G = "G"
-encodeLetter A = "A"
-encodeLetter B = "B"
+encodeLetter = case _ of
+  C -> "C"
+  D -> "D"
+  E -> "E"
+  F -> "F"
+  G -> "G"
+  A -> "A"
+  B -> "B"
 
 decodeLetter :: String -> Maybe Letter
-decodeLetter "C" = Just C
-decodeLetter "D" = Just D
-decodeLetter "E" = Just E
-decodeLetter "F" = Just F
-decodeLetter "G" = Just G
-decodeLetter "A" = Just A
-decodeLetter "B" = Just B
-decodeLetter _ = Nothing
+decodeLetter = case _ of
+  "C" -> Just C
+  "D" -> Just D
+  "E" -> Just E
+  "F" -> Just F
+  "G" -> Just G
+  "A" -> Just A
+  "B" -> Just B
+  _ -> Nothing

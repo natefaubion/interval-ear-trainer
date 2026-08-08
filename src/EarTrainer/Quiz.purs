@@ -56,8 +56,9 @@ isPlayable config =
   isValid config && isJust (promptSet config)
 
 directionFor :: PlaybackMode -> Direction
-directionFor MelodicDescending = Descending
-directionFor _ = Ascending
+directionFor = case _ of
+  MelodicDescending -> Descending
+  _ -> Ascending
 
 pick :: forall a. a -> Int -> Array a -> a
 pick fallback seed values =
@@ -133,21 +134,22 @@ availableIntervalSizes config =
     [ SizeUnison, SizeSecond, SizeThird, SizeFourth, SizeFifth, SizeSixth, SizeSeventh, SizeOctave ]
 
 intervalSizeNumber :: IntervalSize -> Int
-intervalSizeNumber SizeUnison = 1
-intervalSizeNumber SizeSecond = 2
-intervalSizeNumber SizeThird = 3
-intervalSizeNumber SizeFourth = 4
-intervalSizeNumber SizeFifth = 5
-intervalSizeNumber SizeSixth = 6
-intervalSizeNumber SizeSeventh = 7
-intervalSizeNumber SizeOctave = 8
+intervalSizeNumber = case _ of
+  SizeUnison -> 1
+  SizeSecond -> 2
+  SizeThird -> 3
+  SizeFourth -> 4
+  SizeFifth -> 5
+  SizeSixth -> 6
+  SizeSeventh -> 7
+  SizeOctave -> 8
 
 pitchInRange :: VocalRange -> Pitch -> Boolean
 pitchInRange range pitch =
   midiNumber pitch >= midiNumber range.low && midiNumber pitch <= midiNumber range.high
 
 makeChoices :: Int -> ExerciseConfig -> Prompt -> Array IntervalChoice
-makeChoices seed config prompt =
+makeChoices seed config prompt = do
   let
     direction = directionFor prompt.mode
     soundMidi interval = midiNumber (transpose direction interval prompt.root)
@@ -169,10 +171,9 @@ makeChoices seed config prompt =
       AllSelected -> rotated
     correctPosition = abs (seed `div` 31) `mod` (Array.length intervals + 1)
     withCorrect = fromMaybe intervals (Array.insertAt correctPosition prompt.interval intervals)
-  in
-    map
-      (\interval -> { interval, target: transpose direction interval prompt.root })
-      withCorrect
+  map
+    (\interval -> { interval, target: transpose direction interval prompt.root })
+    withCorrect
 
 data Phase
   = Configuring
@@ -189,16 +190,17 @@ data Phase
 derive instance Eq Phase
 
 instance Show Phase where
-  show Configuring = "Configuring"
-  show ShowingPrompt = "ShowingPrompt"
-  show PlayingInterval = "PlayingInterval"
-  show WaitingForSilence = "WaitingForSilence"
-  show SingingFirstNote = "SingingFirstNote"
-  show AwaitingRearticulation = "AwaitingRearticulation"
-  show SingingSecondNote = "SingingSecondNote"
-  show IntervalError = "IntervalError"
-  show ChoosingNotation = "ChoosingNotation"
-  show RevealingAnswer = "RevealingAnswer"
+  show = case _ of
+    Configuring -> "Configuring"
+    ShowingPrompt -> "ShowingPrompt"
+    PlayingInterval -> "PlayingInterval"
+    WaitingForSilence -> "WaitingForSilence"
+    SingingFirstNote -> "SingingFirstNote"
+    AwaitingRearticulation -> "AwaitingRearticulation"
+    SingingSecondNote -> "SingingSecondNote"
+    IntervalError -> "IntervalError"
+    ChoosingNotation -> "ChoosingNotation"
+    RevealingAnswer -> "RevealingAnswer"
 
 data Event
   = BeginQuiz
@@ -213,16 +215,17 @@ data Event
   | Continue
 
 transition :: Phase -> Event -> Maybe Phase
-transition Configuring BeginQuiz = Just ShowingPrompt
-transition ShowingPrompt PromptReady = Just PlayingInterval
-transition PlayingInterval PlaybackFinished = Just WaitingForSilence
-transition WaitingForSilence RoomIsQuiet = Just SingingFirstNote
-transition SingingFirstNote FirstPitchAccepted = Just AwaitingRearticulation
-transition SingingFirstNote PitchRejected = Just IntervalError
-transition AwaitingRearticulation VoiceReleased = Just SingingSecondNote
-transition SingingSecondNote SecondPitchAccepted = Just ChoosingNotation
-transition SingingSecondNote PitchRejected = Just IntervalError
-transition IntervalError Continue = Just PlayingInterval
-transition ChoosingNotation (ChoiceSubmitted _) = Just RevealingAnswer
-transition RevealingAnswer Continue = Just ShowingPrompt
-transition _ _ = Nothing
+transition phase event = case phase, event of
+  Configuring, BeginQuiz -> Just ShowingPrompt
+  ShowingPrompt, PromptReady -> Just PlayingInterval
+  PlayingInterval, PlaybackFinished -> Just WaitingForSilence
+  WaitingForSilence, RoomIsQuiet -> Just SingingFirstNote
+  SingingFirstNote, FirstPitchAccepted -> Just AwaitingRearticulation
+  SingingFirstNote, PitchRejected -> Just IntervalError
+  AwaitingRearticulation, VoiceReleased -> Just SingingSecondNote
+  SingingSecondNote, SecondPitchAccepted -> Just ChoosingNotation
+  SingingSecondNote, PitchRejected -> Just IntervalError
+  IntervalError, Continue -> Just PlayingInterval
+  ChoosingNotation, ChoiceSubmitted _ -> Just RevealingAnswer
+  RevealingAnswer, Continue -> Just ShowingPrompt
+  _, _ -> Nothing

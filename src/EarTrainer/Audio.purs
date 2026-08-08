@@ -19,28 +19,29 @@ type PlaybackPlan =
   }
 
 intervalPlan :: PlaybackMode -> Pitch -> Pitch -> PlaybackPlan
-intervalPlan Harmonic root target =
-  { durationMilliseconds: 900.0
-  , events:
-      [ { durationMilliseconds: 900.0
-        , notes: [ midiNumber root, midiNumber target ]
-        , startMilliseconds: 0.0
-        }
-      ]
-  }
-intervalPlan _ root target =
-  { durationMilliseconds: 1450.0
-  , events:
-      [ { durationMilliseconds: 650.0
-        , notes: [ midiNumber root ]
-        , startMilliseconds: 0.0
-        }
-      , { durationMilliseconds: 650.0
-        , notes: [ midiNumber target ]
-        , startMilliseconds: 800.0
-        }
-      ]
-  }
+intervalPlan mode root target = case mode of
+  Harmonic ->
+    { durationMilliseconds: 900.0
+    , events:
+        [ { durationMilliseconds: 900.0
+          , notes: [ midiNumber root, midiNumber target ]
+          , startMilliseconds: 0.0
+          }
+        ]
+    }
+  _ ->
+    { durationMilliseconds: 1450.0
+    , events:
+        [ { durationMilliseconds: 650.0
+          , notes: [ midiNumber root ]
+          , startMilliseconds: 0.0
+          }
+        , { durationMilliseconds: 650.0
+          , notes: [ midiNumber target ]
+          , startMilliseconds: 800.0
+          }
+        ]
+    }
 
 rootPlan :: Pitch -> PlaybackPlan
 rootPlan root =

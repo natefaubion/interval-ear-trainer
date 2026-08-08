@@ -291,12 +291,12 @@ component =
                   (RootSelectIntervalSystem ExactIntervals)
                   "Exact intervals"
               ]
-          , let
-              possibleExactIntervals = Quiz.availableExactIntervals state.config
-              possibleSizes = Quiz.availableIntervalSizes state.config
-              selectedPossibleExactIntervals = Array.filter (flip Array.elem possibleExactIntervals) state.config.intervals
-              selectedPossibleSizes = Array.filter (flip Array.elem possibleSizes) state.config.availableIntervals
-            in
+          , do
+              let
+                possibleExactIntervals = Quiz.availableExactIntervals state.config
+                possibleSizes = Quiz.availableIntervalSizes state.config
+                selectedPossibleExactIntervals = Array.filter (flip Array.elem possibleExactIntervals) state.config.intervals
+                selectedPossibleSizes = Array.filter (flip Array.elem possibleSizes) state.config.availableIntervals
               SettingGroup.settingGroup
                 { description:
                     if state.config.intervalSystem == ExactIntervals then
@@ -334,13 +334,13 @@ component =
                             (Array.null state.config.availableIntervals)
                         ]
                 )
-          , let
-              availableOrientations =
-                if state.config.quizMode == Audiation then
-                  Array.filter (_ /= Harmonic) allPlaybackModes
-                else allPlaybackModes
-              selectedOrientations = Array.filter (flip Array.elem state.config.playbackModes) availableOrientations
-            in
+          , do
+              let
+                availableOrientations =
+                  if state.config.quizMode == Audiation then
+                    Array.filter (_ /= Harmonic) allPlaybackModes
+                  else allPlaybackModes
+                selectedOrientations = Array.filter (flip Array.elem state.config.playbackModes) availableOrientations
               SettingGroup.settingGroup
                 { description: "Choose the directions or forms intervals may take."
                 , title: "Interval orientation"
@@ -478,31 +478,30 @@ component =
           ]
       ]
 
-  renderDeletePresetDialog state =
+  renderDeletePresetDialog state = do
     let
       title = case activePreset state of
         Nothing -> "Delete preset?"
         Just preset -> "Delete “" <> preset.name <> "”?"
-    in
-      Dialog.dialog
-        { classes: [ H.ClassName "preset-dialog" ]
-        , ref: deletePresetDialogRef
-        , title
-        }
-        [ HH.div
-            [ HP.class_ (H.ClassName "dialog-actions") ]
-            [ Button.button
-                { action: RootCloseDeletePreset, classes: [], disabled: false, variant: Button.Secondary }
-                [ HH.text "Cancel" ]
-            , Button.button
-                { action: RootConfirmDeletePreset
-                , classes: [ H.ClassName "danger-button" ]
-                , disabled: isNothing state.activePresetId
-                , variant: Button.Primary
-                }
-                [ HH.text "Delete" ]
-            ]
-        ]
+    Dialog.dialog
+      { classes: [ H.ClassName "preset-dialog" ]
+      , ref: deletePresetDialogRef
+      , title
+      }
+      [ HH.div
+          [ HP.class_ (H.ClassName "dialog-actions") ]
+          [ Button.button
+              { action: RootCloseDeletePreset, classes: [], disabled: false, variant: Button.Secondary }
+              [ HH.text "Cancel" ]
+          , Button.button
+              { action: RootConfirmDeletePreset
+              , classes: [ H.ClassName "danger-button" ]
+              , disabled: isNothing state.activePresetId
+              , variant: Button.Primary
+              }
+              [ HH.text "Delete" ]
+          ]
+      ]
 
   activePreset state = case state.activePresetId of
     Nothing -> Nothing
@@ -564,17 +563,15 @@ component =
   rootMajorKeyOption preset =
     HH.option [ HP.value preset.id ] [ HH.text preset.name ]
 
-  rootRangeButton config preset =
+  rootRangeButton config preset = do
     let
       label = case preset of
         Custom -> "Custom"
-        _ ->
+        _ -> do
           let
             range = presetRange preset
-          in
-            presetName preset <> " · " <> pitchName range.low <> "–" <> pitchName range.high
-    in
-      rootChoiceButton (config.vocalRange == preset) (RootSelectRange preset) label
+          presetName preset <> " · " <> pitchName range.low <> "–" <> pitchName range.high
+    rootChoiceButton (config.vocalRange == preset) (RootSelectRange preset) label
 
   rootCustomRangeControls config =
     HH.div
@@ -586,29 +583,28 @@ component =
           ]
       ]
 
-  rootPitchBoundary label current selectClass selectOctave =
+  rootPitchBoundary label current selectClass selectOctave = do
     let
       currentMidi = midiNumber current
       currentClass = currentMidi `mod` 12
       currentOctave = currentMidi `div` 12 - 1
-    in
-      HH.label
-        [ HP.class_ (H.ClassName "custom-range-boundary") ]
-        [ HH.span_ [ HH.text label ]
-        , HH.div
-            [ HP.class_ (H.ClassName "custom-range-selects") ]
-            [ HH.select
-                [ HP.value (show currentClass)
-                , HE.onValueChange (selectClass <<< fromMaybe currentClass <<< Int.fromString)
-                ]
-                (Array.mapWithIndex (rootPitchClassOption currentClass) customPitchClassLabels)
-            , HH.select
-                [ HP.value (show currentOctave)
-                , HE.onValueChange (selectOctave <<< fromMaybe currentOctave <<< Int.fromString)
-                ]
-                (map (rootOctaveOption currentOctave) (Array.range 1 7))
-            ]
-        ]
+    HH.label
+      [ HP.class_ (H.ClassName "custom-range-boundary") ]
+      [ HH.span_ [ HH.text label ]
+      , HH.div
+          [ HP.class_ (H.ClassName "custom-range-selects") ]
+          [ HH.select
+              [ HP.value (show currentClass)
+              , HE.onValueChange (selectClass <<< fromMaybe currentClass <<< Int.fromString)
+              ]
+              (Array.mapWithIndex (rootPitchClassOption currentClass) customPitchClassLabels)
+          , HH.select
+              [ HP.value (show currentOctave)
+              , HE.onValueChange (selectOctave <<< fromMaybe currentOctave <<< Int.fromString)
+              ]
+              (map (rootOctaveOption currentOctave) (Array.range 1 7))
+          ]
+      ]
 
   rootPitchClassOption selected index label =
     HH.option

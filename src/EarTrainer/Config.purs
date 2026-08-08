@@ -75,13 +75,15 @@ data RangeBoundary = Lowest | Highest
 derive instance Eq RangeBoundary
 
 quizModeUsesSinging :: QuizMode -> Boolean
-quizModeUsesSinging RecognitionOnly = false
-quizModeUsesSinging _ = true
+quizModeUsesSinging = case _ of
+  RecognitionOnly -> false
+  _ -> true
 
 quizModeUsesRecognition :: QuizMode -> Boolean
-quizModeUsesRecognition SingingOnly = false
-quizModeUsesRecognition Audiation = false
-quizModeUsesRecognition _ = true
+quizModeUsesRecognition = case _ of
+  SingingOnly -> false
+  Audiation -> false
+  _ -> true
 
 type ExerciseConfig =
   { answerCount :: AnswerCount
@@ -166,28 +168,28 @@ selectMajorKey presetId config = case Array.find (\preset -> preset.id == preset
   Nothing -> config
 
 setCustomPitchClass :: RangeBoundary -> Int -> ExerciseConfig -> ExerciseConfig
-setCustomPitchClass boundary pitchClass config =
+setCustomPitchClass boundary pitchClass config = do
   let
     current = customBoundary boundary config
     octave = midiNumber current `div` 12 - 1
-  in
-    setCustomBoundary boundary (pitchFromMidi (12 * (octave + 1) + pitchClass)) config
+  setCustomBoundary boundary (pitchFromMidi (12 * (octave + 1) + pitchClass)) config
 
 setCustomPitchOctave :: RangeBoundary -> Int -> ExerciseConfig -> ExerciseConfig
-setCustomPitchOctave boundary octave config =
+setCustomPitchOctave boundary octave config = do
   let
     current = customBoundary boundary config
     pitchClass = midiNumber current `mod` 12
-  in
-    setCustomBoundary boundary (pitchFromMidi (12 * (octave + 1) + pitchClass)) config
+  setCustomBoundary boundary (pitchFromMidi (12 * (octave + 1) + pitchClass)) config
 
 customBoundary :: RangeBoundary -> ExerciseConfig -> Pitch
-customBoundary Lowest config = config.customRange.low
-customBoundary Highest config = config.customRange.high
+customBoundary boundary config = case boundary of
+  Lowest -> config.customRange.low
+  Highest -> config.customRange.high
 
 setCustomBoundary :: RangeBoundary -> Pitch -> ExerciseConfig -> ExerciseConfig
-setCustomBoundary Lowest value config = config { customRange = config.customRange { low = value } }
-setCustomBoundary Highest value config = config { customRange = config.customRange { high = value } }
+setCustomBoundary boundary value config = case boundary of
+  Lowest -> config { customRange = config.customRange { low = value } }
+  Highest -> config { customRange = config.customRange { high = value } }
 
 samePitchClasses :: Array PitchClass -> Array PitchClass -> Boolean
 samePitchClasses left right =

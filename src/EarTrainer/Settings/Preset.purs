@@ -34,11 +34,10 @@ presetName :: PresetName -> String
 presetName (PresetName name) = name
 
 validatePresetName :: Array Preset -> String -> Either NameError PresetName
-validatePresetName presets input =
+validatePresetName presets input = do
   let
     name = String.trim input
     duplicate = Array.any (\preset -> String.toLower preset.name == String.toLower name) presets
-  in
-    if name == "" then Left EmptyName
-    else if duplicate then Left DuplicateName
-    else Right (PresetName name)
+  if name == "" then Left EmptyName
+  else if duplicate then Left DuplicateName
+  else Right (PresetName name)

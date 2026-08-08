@@ -23,8 +23,9 @@ render element score =
     (map encodeEvent score.events)
 
 encodeClef :: Clef -> String
-encodeClef Treble = "treble"
-encodeClef Bass = "bass"
+encodeClef = case _ of
+  Treble -> "treble"
+  Bass -> "bass"
 
 encodeEvent :: EngravedEvent -> ForeignEvent
 encodeEvent event = case event.appearance of

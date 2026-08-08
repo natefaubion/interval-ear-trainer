@@ -104,16 +104,15 @@ engravedEvent :: Appearance -> Array Pitch -> EngravedEvent
 engravedEvent appearance pitches = { appearance, notes: map engravedNote pitches }
 
 selectClef :: Array Pitch -> Clef
-selectClef pitches =
+selectClef pitches = do
   let
     midi = map midiNumber pitches
     lowest = Array.foldl min 127 midi
     highest = Array.foldl max 0 midi
-  in
-    if highest > 67 then Treble
-    else if lowest < 53 then Bass
-    else if lowest + highest >= 120 then Treble
-    else Bass
+  if highest > 67 then Treble
+  else if lowest < 53 then Bass
+  else if lowest + highest >= 120 then Treble
+  else Bass
 
 engravedNote :: Pitch -> EngravedNote
 engravedNote (Pitch (PitchClass letter accidental) octave) =
@@ -122,17 +121,19 @@ engravedNote (Pitch (PitchClass letter accidental) octave) =
   }
 
 vexLetter :: Letter -> String
-vexLetter C = "c"
-vexLetter D = "d"
-vexLetter E = "e"
-vexLetter F = "f"
-vexLetter G = "g"
-vexLetter A = "a"
-vexLetter B = "b"
+vexLetter = case _ of
+  C -> "c"
+  D -> "d"
+  E -> "e"
+  F -> "f"
+  G -> "g"
+  A -> "a"
+  B -> "b"
 
 vexAccidental :: Accidental -> String
-vexAccidental (Accidental (-2)) = "bb"
-vexAccidental (Accidental (-1)) = "b"
-vexAccidental (Accidental 1) = "#"
-vexAccidental (Accidental 2) = "##"
-vexAccidental _ = ""
+vexAccidental = case _ of
+  Accidental (-2) -> "bb"
+  Accidental (-1) -> "b"
+  Accidental 1 -> "#"
+  Accidental 2 -> "##"
+  _ -> ""

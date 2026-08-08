@@ -148,26 +148,25 @@ component =
           }
     }
   where
-  initialState input =
+  initialState input = do
     let
       prompt = Quiz.makePrompt input.seed input.prompts
-    in
-      { captureFiber: Nothing
-      , captureStatus: ReadyToPlay
-      , choices: Quiz.makeChoices input.seed input.config prompt
-      , config: input.config
-      , ghostFiber: Nothing
-      , ghostMidi: Nothing
-      , monitor: Nothing
-      , observation: Recognition.initialObservation
-      , playbackFiber: Nothing
-      , prompt: prompt
-      , prompts: input.prompts
-      , progressionFiber: Nothing
-      , previewFiber: Nothing
-      , recognition: Recognition.initialRecognition
-      , sampler: input.sampler
-      }
+    { captureFiber: Nothing
+    , captureStatus: ReadyToPlay
+    , choices: Quiz.makeChoices input.seed input.config prompt
+    , config: input.config
+    , ghostFiber: Nothing
+    , ghostMidi: Nothing
+    , monitor: Nothing
+    , observation: Recognition.initialObservation
+    , playbackFiber: Nothing
+    , prompt: prompt
+    , prompts: input.prompts
+    , progressionFiber: Nothing
+    , previewFiber: Nothing
+    , recognition: Recognition.initialRecognition
+    , sampler: input.sampler
+    }
 
   render :: State -> H.ComponentHTML Action Slots m
   render = renderPractice
@@ -274,7 +273,7 @@ component =
               (Array.mapWithIndex (renderIntervalChoice state) state.choices)
           ]
 
-  renderIntervalChoice state index choice =
+  renderIntervalChoice state index choice = do
     let
       revealed = Array.elem choice.interval (revealedChoices state.captureStatus)
       correct = revealed && choice.interval == state.prompt.interval
@@ -285,45 +284,44 @@ component =
         if correct then [ H.ClassName "answer-correct" ]
         else if incorrect then [ H.ClassName "answer-incorrect" ]
         else []
-    in
-      Button.button
-        { action: ChooseInterval choice.interval
-        , classes:
-            [ H.ClassName "interval-answer" ]
-              <>
-                ( if state.config.answerDisplay == AnswerName then [ H.ClassName "name-only" ]
-                  else []
-                )
-              <>
-                ( if state.config.answerDisplay /= AnswerNotation then [ H.ClassName "names-visible" ]
-                  else []
-                )
-              <> resultClasses
-        , disabled: isAnswerComplete state.captureStatus || isBusy state.captureStatus
-        , variant: Button.Unstyled
-        }
-        [ if revealed then
-            HH.span
-              [ HP.classes
-                  [ H.ClassName "choice-result-icon"
-                  , H.ClassName if correct then "result-correct" else "result-incorrect"
-                  ]
-              ]
-              []
-          else
-            HH.text ""
-        , if showNotation then
-            HH.div
-              [ HP.class_ (H.ClassName "choice-notation") ]
-              [ HH.slot_ notationSlot (ChoiceNotation index) NotationComponent.component
-                  (Notation.intervalChoice state.prompt.root choice.target)
-              ]
-          else
-            HH.text ""
-        , HH.span
-            [ HP.class_ (H.ClassName "choice-label") ]
-            [ HH.text if showName then intervalName choice.interval else "Interval hidden" ]
-        ]
+    Button.button
+      { action: ChooseInterval choice.interval
+      , classes:
+          [ H.ClassName "interval-answer" ]
+            <>
+              ( if state.config.answerDisplay == AnswerName then [ H.ClassName "name-only" ]
+                else []
+              )
+            <>
+              ( if state.config.answerDisplay /= AnswerNotation then [ H.ClassName "names-visible" ]
+                else []
+              )
+            <> resultClasses
+      , disabled: isAnswerComplete state.captureStatus || isBusy state.captureStatus
+      , variant: Button.Unstyled
+      }
+      [ if revealed then
+          HH.span
+            [ HP.classes
+                [ H.ClassName "choice-result-icon"
+                , H.ClassName if correct then "result-correct" else "result-incorrect"
+                ]
+            ]
+            []
+        else
+          HH.text ""
+      , if showNotation then
+          HH.div
+            [ HP.class_ (H.ClassName "choice-notation") ]
+            [ HH.slot_ notationSlot (ChoiceNotation index) NotationComponent.component
+                (Notation.intervalChoice state.prompt.root choice.target)
+            ]
+        else
+          HH.text ""
+      , HH.span
+          [ HP.class_ (H.ClassName "choice-label") ]
+          [ HH.text if showName then intervalName choice.interval else "Interval hidden" ]
+      ]
 
   footerButtonAction state =
     if isAnswerComplete state.captureStatus then NextPrompt else PlayPrompt
@@ -404,23 +402,23 @@ component =
 
   feedbackName = case _ of
     Nothing -> "—"
-    Just feedback ->
+    Just feedback -> do
       let
         cents = Int.round feedback.cents
-      in
-        if cents >= -3 && cents <= 3 then
-          "◆ 0¢"
-        else if cents > 0 then
-          "↓ " <> show cents <> "¢"
-        else
-          "↑ " <> show (-cents) <> "¢"
+      if cents >= -3 && cents <= 3 then
+        "◆ 0¢"
+      else if cents > 0 then
+        "↓ " <> show cents <> "¢"
+      else
+        "↑ " <> show (-cents) <> "¢"
 
   feedbackPosition cents = 50.0 + max (-50.0) (min 50.0 cents)
 
-  quizModeTitle SingingOnly = "Singing"
-  quizModeTitle RecognitionOnly = "Recognition"
-  quizModeTitle SingingAndRecognition = "Singing & Recognition"
-  quizModeTitle Audiation = "Audiation"
+  quizModeTitle = case _ of
+    SingingOnly -> "Singing"
+    RecognitionOnly -> "Recognition"
+    SingingAndRecognition -> "Singing & Recognition"
+    Audiation -> "Audiation"
 
   shouldShowIntervalName state =
     state.config.quizMode == Audiation
@@ -722,7 +720,7 @@ component =
         handleAction RetryAutomatically
       H.modify_ _ { progressionFiber = Just fiber }
 
-  promptNotation state =
+  promptNotation state = do
     let
       rootAccepted =
         Recognition.phase state.recognition /= Recognition.WaitingForFirst
@@ -733,12 +731,11 @@ component =
       detected = map
         (pitchFromMidiLike (spellingReference state.prompt))
         state.ghostMidi
-    in
-      case state.captureStatus, detected of
-        AnswerComplete _, _ -> Notation.completed state.prompt.root state.prompt.target
-        IntervalError, Just pitch -> Notation.incorrect state.prompt.root state.prompt.target pitch rootAccepted
-        _, Just pitch -> Notation.ghost state.prompt.root state.prompt.target pitch rootAccepted
-        _, Nothing -> Notation.prompt state.prompt.root state.prompt.target rootAccepted
+    case state.captureStatus, detected of
+      AnswerComplete _, _ -> Notation.completed state.prompt.root state.prompt.target
+      IntervalError, Just pitch -> Notation.incorrect state.prompt.root state.prompt.target pitch rootAccepted
+      _, Just pitch -> Notation.ghost state.prompt.root state.prompt.target pitch rootAccepted
+      _, Nothing -> Notation.prompt state.prompt.root state.prompt.target rootAccepted
 
   spellingReference prompt = case prompt.root, prompt.target of
     Pitch (PitchClass _ (Accidental rootAccidental)) _,
