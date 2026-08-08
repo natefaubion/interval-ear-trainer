@@ -71,10 +71,6 @@ import Web.HTML.HTMLDialogElement as HTMLDialogElement
 import Web.HTML.HTMLElement as HTMLElement
 import Web.UIEvent.KeyboardEvent as KeyboardEvent
 
-data Screen = Setup | Practice
-
-derive instance Eq Screen
-
 data CaptureStatus
   = ReadyToPlay
   | PlayingAudio
@@ -103,28 +99,11 @@ type State =
   , revealedChoices :: Array Interval
   , resumeAnswersAfterPlayback :: Boolean
   , sampler :: Maybe Audio.Sampler
-  , screen :: Screen
   }
 
 data Action
   = Initialize
   | Finalize
-  | ToggleInterval Interval
-  | SelectAllIntervals
-  | ClearIntervals
-  | TogglePlaybackMode PlaybackMode
-  | ToggleRoot PitchClass
-  | SelectAllRoots
-  | ClearRoots
-  | SelectRange VocalRangePreset
-  | SelectOctavePolicy OctavePolicy
-  | SelectGhostMode GhostMode
-  | SelectPitchTuner Boolean
-  | SelectAnswerCount AnswerCount
-  | SelectAnswerDisplay AnswerDisplay
-  | SelectQuizMode QuizMode
-  | SelectQuizProgression QuizProgression
-  | BeginPractice
   | PlayPrompt
   | PlaybackStarted Int
   | AudioFailed Int String
@@ -1059,160 +1038,10 @@ practiceComponent =
       , revealedChoices: []
       , resumeAnswersAfterPlayback: false
       , sampler: Just input.sampler
-      , screen: Practice
       }
 
   render :: State -> H.ComponentHTML Action () m
-  render state =
-    if state.screen == Setup then renderSetup state else renderPractice state
-
-  renderSetup state =
-    HH.section
-      [ HP.class_ (H.ClassName "setup-card") ]
-      [ HH.div
-          [ HP.class_ (H.ClassName "setup-heading") ]
-          [ HH.h2_ [ HH.text "Exercise setup" ] ]
-      , HH.div
-          [ HP.class_ (H.ClassName "setup-content") ]
-          [ settingGroup
-              "Quiz mode"
-              "Choose which parts of the exercise to practice."
-              [ choiceButton
-                  (state.config.quizMode == SingingAndRecognition)
-                  (SelectQuizMode SingingAndRecognition)
-                  "Singing and recognition"
-              , choiceButton (state.config.quizMode == SingingOnly) (SelectQuizMode SingingOnly) "Singing only"
-              , choiceButton (state.config.quizMode == RecognitionOnly) (SelectQuizMode RecognitionOnly) "Recognition only"
-              , choiceButton (state.config.quizMode == Audiation) (SelectQuizMode Audiation) "Audiation"
-              ]
-              Nothing
-          , settingGroup
-              "Quiz progression"
-              "Choose how the next interval begins after a correct answer."
-              [ choiceButton
-                  (state.config.quizProgression == AutomaticProgression)
-                  (SelectQuizProgression AutomaticProgression)
-                  "Automatic"
-              , choiceButton
-                  (state.config.quizProgression == ManualProgression)
-                  (SelectQuizProgression ManualProgression)
-                  "Manual"
-              ]
-              Nothing
-          , let
-              availableOrientations =
-                if state.config.quizMode == Audiation then
-                  Array.filter (_ /= Harmonic) allPlaybackModes
-                else allPlaybackModes
-              selectedOrientations = Array.filter (flip Array.elem state.config.playbackModes) availableOrientations
-            in
-              settingGroup
-                "Interval orientation"
-                "Choose the directions or forms intervals may take."
-                (map (modeButton state.config) availableOrientations)
-                (if Array.null selectedOrientations then Just "Select at least one interval orientation." else Nothing)
-          , settingGroup
-              "Intervals"
-              "Choose the intervals that may appear in an exercise."
-              ( map (intervalButton state.config) allIntervals
-                  <>
-                    [ selectionActions
-                        SelectAllIntervals
-                        ClearIntervals
-                        (Array.length state.config.intervals == Array.length allIntervals)
-                        (Array.null state.config.intervals)
-                    ]
-              )
-              (if Array.null state.config.intervals then Just "Select at least one interval." else Nothing)
-          , settingGroup
-              "Playback range"
-              "Choose the written and playback register."
-              (map (rangeButton state.config) allVocalRangePresets)
-              Nothing
-          , settingGroup
-              "Root notes"
-              "Choose the individual pitch classes that may begin an exercise."
-              ( map (rootButton state.config) allRootPitchClasses
-                  <>
-                    [ selectionActions
-                        SelectAllRoots
-                        ClearRoots
-                        (Array.length state.config.rootPitchClasses == Array.length allRootPitchClasses)
-                        (Array.null state.config.rootPitchClasses)
-                    ]
-              )
-              (if Array.null state.config.rootPitchClasses then Just "Select at least one root note." else Nothing)
-          , settingGroup
-              "Octave matching"
-              "Choose whether the detected pitch must be in the written octave."
-              [ choiceButton
-                  (state.config.octavePolicy == AnyOctave)
-                  (SelectOctavePolicy AnyOctave)
-                  "Any comfortable octave"
-              , choiceButton
-                  (state.config.octavePolicy == WrittenOctave)
-                  (SelectOctavePolicy WrittenOctave)
-                  "Written octave only"
-              ]
-              Nothing
-          , settingGroup
-              "Ghost note"
-              "The ghost note shows the pitch you are currently singing on the staff."
-              [ choiceButton (state.config.ghostMode == GhostOn) (SelectGhostMode GhostOn) "Shown briefly"
-              , choiceButton (state.config.ghostMode == GhostPersist) (SelectGhostMode GhostPersist) "Kept visible"
-              , choiceButton (state.config.ghostMode == GhostOff) (SelectGhostMode GhostOff) "Hidden"
-              ]
-              Nothing
-          , settingGroup
-              "Pitch tuner"
-              "Choose whether to show cents feedback while singing."
-              [ choiceButton state.config.showPitchTuner (SelectPitchTuner true) "Shown"
-              , choiceButton (not state.config.showPitchTuner) (SelectPitchTuner false) "Hidden"
-              ]
-              Nothing
-          , if not (quizModeUsesRecognition state.config.quizMode) then HH.text ""
-            else
-              settingGroup
-                "Available answers"
-                "Choose how many interval choices are shown for each question."
-                [ choiceButton (state.config.answerCount == AFew) (SelectAnswerCount AFew) "A few"
-                , choiceButton
-                    (state.config.answerCount == AllSelected)
-                    (SelectAnswerCount AllSelected)
-                    "All selected choices"
-                ]
-                Nothing
-          , if not (quizModeUsesRecognition state.config.quizMode) then HH.text ""
-            else
-              settingGroup
-                "Answer display"
-                "Choose how interval answers are presented."
-                [ choiceButton
-                    (state.config.answerDisplay == AnswerNotation)
-                    (SelectAnswerDisplay AnswerNotation)
-                    "Notation"
-                , choiceButton
-                    (state.config.answerDisplay == AnswerName)
-                    (SelectAnswerDisplay AnswerName)
-                    "Interval name"
-                , choiceButton
-                    (state.config.answerDisplay == AnswerBoth)
-                    (SelectAnswerDisplay AnswerBoth)
-                    "Both"
-                ]
-                Nothing
-          ]
-      , HH.footer
-          [ HP.class_ (H.ClassName "setup-footer") ]
-          [ HH.button
-              [ HP.type_ HP.ButtonButton
-              , HP.class_ (H.ClassName "primary-button")
-              , HP.disabled (not (isValid state.config))
-              , HE.onClick \_ -> BeginPractice
-              ]
-              [ HH.text "Begin practice" ]
-          ]
-      ]
+  render = renderPractice
 
   renderPractice state =
     HH.section
@@ -1390,83 +1219,6 @@ practiceComponent =
     | footerButtonLabel state == "Next interval" = "→"
     | otherwise = "▶"
 
-  settingGroup title description controls validation =
-    HH.fieldset
-      [ HP.class_ (H.ClassName "setting-group") ]
-      [ HH.legend_ [ HH.text title ]
-      , HH.p
-          [ HP.class_ (H.ClassName "setting-description") ]
-          [ HH.text description ]
-      , HH.div
-          [ HP.class_ (H.ClassName "choice-grid") ]
-          controls
-      , case validation of
-          Nothing -> HH.text ""
-          Just message ->
-            HH.p
-              [ HP.class_ (H.ClassName "setting-error") ]
-              [ HH.text message ]
-      ]
-
-  choiceButton selected action label =
-    HH.button
-      [ HP.type_ HP.ButtonButton
-      , HP.classes
-          if selected then
-            [ H.ClassName "choice-chip", H.ClassName "selected" ]
-          else
-            [ H.ClassName "choice-chip" ]
-      , HE.onClick \_ -> action
-      ]
-      [ HH.text label ]
-
-  selectionActions selectAction clearAction selectDisabled clearDisabled =
-    HH.div
-      [ HP.class_ (H.ClassName "selection-actions") ]
-      [ HH.button
-          [ HP.type_ HP.ButtonButton
-          , HP.class_ (H.ClassName "small-text-button")
-          , HP.disabled selectDisabled
-          , HE.onClick \_ -> selectAction
-          ]
-          [ HH.text "Select All" ]
-      , HH.button
-          [ HP.type_ HP.ButtonButton
-          , HP.class_ (H.ClassName "small-text-button")
-          , HP.disabled clearDisabled
-          , HE.onClick \_ -> clearAction
-          ]
-          [ HH.text "Clear" ]
-      ]
-
-  modeButton config mode =
-    choiceButton
-      (Array.elem mode config.playbackModes)
-      (TogglePlaybackMode mode)
-      (playbackModeName mode)
-
-  intervalButton config interval =
-    choiceButton
-      (Array.elem interval config.intervals)
-      (ToggleInterval interval)
-      (intervalName interval)
-
-  rootButton config root =
-    choiceButton
-      (Array.elem root config.rootPitchClasses)
-      (ToggleRoot root)
-      (pitchClassName root)
-
-  rangeButton config preset =
-    let
-      range = presetRange preset
-      label = presetName preset <> " · " <> pitchName range.low <> "–" <> pitchName range.high
-    in
-      choiceButton
-        (config.vocalRange == preset)
-        (SelectRange preset)
-        label
-
   practiceInstruction state = case state.captureStatus of
     ReadyToPlay ->
       if state.config.quizMode == Audiation then
@@ -1536,68 +1288,6 @@ practiceComponent =
       case state.sampler of
         Nothing -> pure unit
         Just sampler -> H.liftEffect (Audio.stop sampler)
-    ToggleInterval interval ->
-      updateConfig (toggleInterval interval)
-    SelectAllIntervals ->
-      updateConfig (_ { intervals = allIntervals })
-    ClearIntervals ->
-      updateConfig (_ { intervals = [] })
-    TogglePlaybackMode mode ->
-      updateConfig (togglePlaybackMode mode)
-    ToggleRoot root ->
-      updateConfig (toggleRootPitchClass root)
-    SelectAllRoots ->
-      updateConfig (_ { rootPitchClasses = allRootPitchClasses })
-    ClearRoots ->
-      updateConfig (_ { rootPitchClasses = [] })
-    SelectRange preset ->
-      updateConfig (_ { vocalRange = preset })
-    SelectOctavePolicy policy ->
-      updateConfig (_ { octavePolicy = policy })
-    SelectGhostMode mode ->
-      updateConfig (_ { ghostMode = mode })
-    SelectPitchTuner shown ->
-      updateConfig (_ { showPitchTuner = shown })
-    SelectAnswerCount count ->
-      updateConfig (_ { answerCount = count })
-    SelectAnswerDisplay display ->
-      updateConfig (_ { answerDisplay = display })
-    SelectQuizMode mode ->
-      updateConfig (_ { quizMode = mode })
-    SelectQuizProgression progression ->
-      updateConfig (_ { quizProgression = progression })
-    BeginPractice -> do
-      state <- H.get
-      stopMonitor state.monitor
-      case state.sampler of
-        Nothing -> pure unit
-        Just sampler -> H.liftEffect (Audio.stop sampler)
-      seed <- H.liftEffect (randomInt 0 2147483647)
-      sampler <- case state.sampler of
-        Just existing -> pure existing
-        Nothing -> H.liftEffect Audio.createSampler
-      let
-        prompt = Quiz.makePrompt seed state.config
-        choices = Quiz.makeChoices seed state.config prompt
-      H.modify_ _
-        { answerCorrect = false
-        , activityRevision = state.activityRevision + 1
-        , automaticAdvancePending = false
-        , captureStatus = ReadyToPlay
-        , choices = choices
-        , ghostMidi = Nothing
-        , ghostRevision = state.ghostRevision + 1
-        , prompt = prompt
-        , promptRevision = state.promptRevision + 1
-        , recognition = Detection.initialRecognition
-        , revealedChoices = []
-        , resumeAnswersAfterPlayback = false
-        , sampler = Just sampler
-        , screen = Practice
-        }
-      renderPromptNotation prompt false
-      when (state.config.quizProgression == AutomaticProgression) do
-        handleAction PlayPrompt
     PlayPrompt -> do
       state <- H.get
       stopMonitor state.monitor
@@ -1630,8 +1320,7 @@ practiceComponent =
     PlaybackStarted activityRevision -> do
       state <- H.get
       when
-        ( state.screen == Practice
-            && state.captureStatus == PlayingAudio
+        ( state.captureStatus == PlayingAudio
             && state.activityRevision == activityRevision
         )
         do
@@ -1649,8 +1338,7 @@ practiceComponent =
     StartListening activityRevision -> do
       state <- H.get
       when
-        ( state.screen == Practice
-            && state.captureStatus == PlayingAudio
+        ( state.captureStatus == PlayingAudio
             && state.activityRevision == activityRevision
         )
         do
@@ -1825,8 +1513,7 @@ practiceComponent =
     AdvanceAutomatically revision -> do
       state <- H.get
       when
-        ( state.screen == Practice
-            && state.automaticAdvancePending
+        ( state.automaticAdvancePending
             && state.promptRevision == revision
             && state.captureStatus == AnswerComplete
         )
@@ -1836,8 +1523,7 @@ practiceComponent =
     RetryAutomatically revision -> do
       state <- H.get
       when
-        ( state.screen == Practice
-            && state.automaticAdvancePending
+        ( state.automaticAdvancePending
             && state.promptRevision == revision
             && state.captureStatus == IntervalError
         )
@@ -1855,9 +1541,6 @@ practiceComponent =
     case maybeElement of
       Nothing -> pure unit
       Just htmlElement -> H.liftEffect (Element.setScrollTop 0.0 (HTMLElement.toElement htmlElement))
-
-  updateConfig update = do
-    H.modify_ \state -> state { config = update state.config }
 
   scheduleAutomaticAdvance state =
     when (state.config.quizProgression == AutomaticProgression) do
