@@ -242,12 +242,12 @@ component =
               [ HP.class_ (H.ClassName "pitch-feedback") ]
               [ HH.span
                   [ HP.class_ (H.ClassName "tuner-readout") ]
-                  [ HH.text (feedbackName state.recognition.feedback) ]
+                  [ HH.text (feedbackName (Recognition.feedback state.recognition)) ]
               ]
           , HH.div
               [ HP.class_ (H.ClassName "tuner-track") ]
               [ HH.div [ HP.class_ (H.ClassName "tuner-center") ] []
-              , case state.recognition.feedback of
+              , case Recognition.feedback state.recognition of
                   Nothing -> HH.text ""
                   Just feedback ->
                     HH.div
@@ -331,13 +331,13 @@ component =
   footerButtonDisabled state =
     hasFiber state.progressionFiber
       || isBusy state.captureStatus
-      || (state.captureStatus == Listening && state.recognition.phase == Recognition.RecognitionComplete)
+      || (state.captureStatus == Listening && Recognition.phase state.recognition == Recognition.RecognitionComplete)
 
   footerButtonLabel state
     | isPlaying state.captureStatus = "Playing…"
     | state.captureStatus == StartingCapture = "Requesting…"
     | isAnswerComplete state.captureStatus = "Next interval"
-    | state.captureStatus == Listening && state.recognition.phase == Recognition.RecognitionComplete = "Next interval"
+    | state.captureStatus == Listening && Recognition.phase state.recognition == Recognition.RecognitionComplete = "Next interval"
     | state.config.quizMode == Audiation = "Play root"
     | otherwise = "Play interval"
 
@@ -356,7 +356,7 @@ component =
         "Listen to the interval, then choose."
     PlayingAudio _ -> "Listen carefully."
     StartingCapture -> "Requesting microphone access."
-    Listening -> Recognition.phaseInstruction state.recognition.phase
+    Listening -> Recognition.phaseInstruction (Recognition.phase state.recognition)
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
     IntervalError -> "Incorrect pitch."
@@ -529,11 +529,11 @@ component =
             Nothing -> state.ghostMidi
             Just midi -> Just midi
           completed =
-            state.recognition.phase /= Recognition.RecognitionComplete
-              && next.phase == Recognition.RecognitionComplete
+            Recognition.phase state.recognition /= Recognition.RecognitionComplete
+              && Recognition.phase next == Recognition.RecognitionComplete
           incorrect =
-            state.recognition.phase /= Recognition.RecognitionIncorrect
-              && next.phase == Recognition.RecognitionIncorrect
+            Recognition.phase state.recognition /= Recognition.RecognitionIncorrect
+              && Recognition.phase next == Recognition.RecognitionIncorrect
         when (detectedGhost /= Nothing) do
           cancelFiber state.ghostFiber
         H.modify_ _
@@ -563,7 +563,7 @@ component =
           let
             incorrectMidi = map
               (Recognition.relativeMidi state.config.octavePolicy state.prompt.root next <<< _.midi)
-              next.feedback
+              (Recognition.feedback next)
           H.modify_ _
             { captureStatus = IntervalError
             , ghostFiber = Nothing
@@ -586,7 +586,7 @@ component =
       state <- H.get
       when
         ( state.captureStatus == Listening
-            && state.recognition.phase == Recognition.RecognitionComplete
+            && Recognition.phase state.recognition == Recognition.RecognitionComplete
         )
         do
           let persistGhost = state.config.ghostMode == GhostPersist
@@ -725,7 +725,7 @@ component =
   promptNotation state =
     let
       rootAccepted =
-        state.recognition.phase /= Recognition.WaitingForFirst
+        Recognition.phase state.recognition /= Recognition.WaitingForFirst
           || (quizModeUsesSinging state.config.quizMode && isChoosingAnswer state.captureStatus)
           || case state.captureStatus of
             PlayingAudio (ResumeAnswers _) -> quizModeUsesSinging state.config.quizMode

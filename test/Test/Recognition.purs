@@ -14,6 +14,7 @@ import EarTrainer.Recognition
   , initialRecognition
   , nearestMidi
   , observePitch
+  , phase
   , relativeMidi
   , stepRecognition
   )
@@ -72,19 +73,20 @@ run = do
       { clarity: 0.99, decibels: -80.0, frequency: 440.0, time: 400.0 }
       observed4.observation
   assertEqual { actual: nearestMidi 440.0, expected: 69 }
-  assertEqual { actual: beforeFirst.phase, expected: WaitingForFirst }
-  assertEqual { actual: afterFirst.phase, expected: WaitingForRelease }
-  assertEqual { actual: afterRelease.phase, expected: WaitingForSecond }
-  assertEqual { actual: afterSecond.phase, expected: RecognitionComplete }
-  assertEqual { actual: wrongFirst.phase, expected: RecognitionIncorrect }
-  assertEqual { actual: wrongSecond.phase, expected: RecognitionIncorrect }
-  assertEqual { actual: detunedFirst.phase, expected: WaitingForFirst }
-  assertEqual { actual: detunedSecond.phase, expected: WaitingForSecond }
-  assertEqual { actual: anyOctaveFirst.phase, expected: WaitingForRelease }
-  assertEqual { actual: writtenOctaveFirst.phase, expected: RecognitionIncorrect }
-  assertEqual { actual: wrongOctaveSecond.phase, expected: RecognitionIncorrect }
-  assertEqual { actual: correctNormalizedSecond.phase, expected: RecognitionComplete }
+  assertEqual { actual: phase beforeFirst, expected: WaitingForFirst }
+  assertEqual { actual: phase afterFirst, expected: WaitingForRelease }
+  assertEqual { actual: phase afterRelease, expected: WaitingForSecond }
+  assertEqual { actual: phase afterSecond, expected: RecognitionComplete }
+  assertEqual { actual: phase wrongFirst, expected: RecognitionIncorrect }
+  assertEqual { actual: phase wrongSecond, expected: RecognitionIncorrect }
+  assertEqual { actual: phase detunedFirst, expected: WaitingForFirst }
+  assertEqual { actual: phase detunedSecond, expected: WaitingForSecond }
+  assertEqual { actual: phase anyOctaveFirst, expected: WaitingForRelease }
+  assertEqual { actual: phase writtenOctaveFirst, expected: RecognitionIncorrect }
+  assertEqual { actual: phase wrongOctaveSecond, expected: RecognitionIncorrect }
+  assertEqual { actual: phase correctNormalizedSecond, expected: RecognitionComplete }
   assertEqual { actual: relativeMidi AnyOctave c4 octaveBelowFirst 57, expected: 69 }
+  assertEqual { actual: relativeMidi AnyOctave c4 wrongFirst 64, expected: 64 }
   assertEqual { actual: relativeMidi WrittenOctave c4 octaveBelowFirst 57, expected: 57 }
   assertEqual { actual: observed1.sample, expected: Nothing }
   assertEqual { actual: observed4.sample, expected: Just { clarity: 0.96, frequency: 250.0 } }
