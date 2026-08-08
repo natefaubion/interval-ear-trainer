@@ -55,8 +55,8 @@ import Web.HTML.HTMLElement as HTMLElement
 data CaptureStatus
   = ReadyToPlay
   | PlayingAudio PlaybackDestination
-  | StartingCapture
-  | Listening
+  | StartingCapture H.ForkId
+  | Listening PitchInput.Monitor
   | CaptureFailed String
   | PlaybackFailed String
   | IntervalError
@@ -67,17 +67,14 @@ data PlaybackDestination
   = BeginSinging
   | ResumeAnswers (Array Interval)
 
-derive instance Eq CaptureStatus
 derive instance Eq PlaybackDestination
 
 type State =
-  { captureFiber :: Maybe H.ForkId
-  , captureStatus :: CaptureStatus
+  { captureStatus :: CaptureStatus
   , choices :: Array Quiz.IntervalChoice
   , config :: ExerciseConfig
   , ghostFiber :: Maybe H.ForkId
   , ghostMidi :: Maybe Int
-  , monitor :: Maybe PitchInput.Monitor
   , observation :: Recognition.Observation
   , playbackFiber :: Maybe H.ForkId
   , prompt :: Quiz.Prompt
@@ -151,13 +148,11 @@ component =
   initialState input = do
     let
       prompt = Quiz.makePrompt input.seed input.prompts
-    { captureFiber: Nothing
-    , captureStatus: ReadyToPlay
+    { captureStatus: ReadyToPlay
     , choices: Quiz.makeChoices input.seed input.config prompt
     , config: input.config
     , ghostFiber: Nothing
     , ghostMidi: Nothing
-    , monitor: Nothing
     , observation: Recognition.initialObservation
     , playbackFiber: Nothing
     , prompt: prompt
@@ -329,13 +324,13 @@ component =
   footerButtonDisabled state =
     hasFiber state.progressionFiber
       || isBusy state.captureStatus
-      || (state.captureStatus == Listening && Recognition.phase state.recognition == Recognition.RecognitionComplete)
+      || (isListening state.captureStatus && Recognition.phase state.recognition == Recognition.RecognitionComplete)
 
   footerButtonLabel state
     | isPlaying state.captureStatus = "Playing…"
-    | state.captureStatus == StartingCapture = "Requesting…"
+    | isStartingCapture state.captureStatus = "Requesting…"
     | isAnswerComplete state.captureStatus = "Next interval"
-    | state.captureStatus == Listening && Recognition.phase state.recognition == Recognition.RecognitionComplete = "Next interval"
+    | isListening state.captureStatus && Recognition.phase state.recognition == Recognition.RecognitionComplete = "Next interval"
     | state.config.quizMode == Audiation = "Play root"
     | otherwise = "Play interval"
 
@@ -353,8 +348,8 @@ component =
       else
         "Listen to the interval, then choose."
     PlayingAudio _ -> "Listen carefully."
-    StartingCapture -> "Requesting microphone access."
-    Listening -> Recognition.phaseInstruction (Recognition.phase state.recognition)
+    StartingCapture _ -> "Requesting microphone access."
+    Listening _ -> Recognition.phaseInstruction (Recognition.phase state.recognition)
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
     IntervalError -> "Incorrect pitch."
@@ -371,11 +366,19 @@ component =
 
   isBusy = case _ of
     PlayingAudio _ -> true
-    StartingCapture -> true
+    StartingCapture _ -> true
     _ -> false
 
   isResumingAnswers = case _ of
     PlayingAudio (ResumeAnswers _) -> true
+    _ -> false
+
+  isStartingCapture = case _ of
+    StartingCapture _ -> true
+    _ -> false
+
+  isListening = case _ of
+    Listening _ -> true
     _ -> false
 
   isIntervalError = case _ of
@@ -445,22 +448,18 @@ component =
     Finalize -> do
       state <- H.get
       cancelTasks state
-      stopMonitor state.monitor
       H.liftEffect (AudioCapability.stop state.sampler)
     PlayPrompt -> do
       state <- H.get
       cancelTasks state
-      stopMonitor state.monitor
       let
         destination = case state.captureStatus of
           ChoosingAnswer revealed -> ResumeAnswers revealed
           _ -> BeginSinging
       H.modify_ _
-        { captureFiber = Nothing
-        , captureStatus = PlayingAudio destination
+        { captureStatus = PlayingAudio destination
         , ghostFiber = Nothing
         , ghostMidi = Nothing
-        , monitor = Nothing
         , observation = Recognition.initialObservation
         , playbackFiber = Nothing
         , progressionFiber = Nothing
@@ -493,23 +492,22 @@ component =
         PlayingAudio BeginSinging -> do
           { emitter, listener } <- H.liftEffect HS.create
           void (H.subscribe emitter)
-          H.modify_ _ { captureStatus = StartingCapture }
           fiber <- H.fork do
             result <- H.liftAff $ attempt $ PitchInput.start (HS.notify listener <<< PitchObserved)
             case result of
               Left error -> handleAction (MicrophoneFailed (message error))
               Right monitor -> handleAction (MicrophoneStarted monitor)
-          H.modify_ _ { captureFiber = Just fiber }
+          H.modify_ _ { captureStatus = StartingCapture fiber }
         _ -> pure unit
     PitchObserved raw -> do
       state <- H.get
-      when (state.captureStatus == Listening) do
+      when (isListening state.captureStatus) do
         let observed = Recognition.observePitch Recognition.defaultCaptureSettings raw state.observation
         H.modify_ _ { observation = observed.observation }
         for_ observed.sample (handleAction <<< PitchDetected)
     PitchDetected sample -> do
       state <- H.get
-      when (state.captureStatus == Listening) do
+      when (isListening state.captureStatus) do
         let
           detectedMidi =
             if sample.frequency > 0.0 then Just (Recognition.nearestMidi sample.frequency) else Nothing
@@ -552,12 +550,12 @@ component =
             H.modify_ _ { ghostFiber = Just fiber }
         when completed do
           cancelFiber state.ghostFiber
-          stopMonitor state.monitor
-          H.modify_ _ { ghostFiber = Nothing, monitor = Nothing }
+          stopCapture state.captureStatus
+          H.modify_ _ { ghostFiber = Nothing }
           handleAction FinishSinging
         when incorrect do
           cancelFiber state.ghostFiber
-          stopMonitor state.monitor
+          stopCapture state.captureStatus
           let
             incorrectMidi = map
               (Recognition.relativeMidi state.config.octavePolicy state.prompt.root next <<< _.midi)
@@ -566,7 +564,6 @@ component =
             { captureStatus = IntervalError
             , ghostFiber = Nothing
             , ghostMidi = incorrectMidi
-            , monitor = Nothing
             , recognition = next
             }
           scheduleAutomaticRetry state
@@ -574,7 +571,7 @@ component =
       state <- H.get
       H.modify_ _ { ghostFiber = Nothing }
       when
-        ( state.captureStatus == Listening
+        ( isListening state.captureStatus
             && state.ghostMidi /= Nothing
         )
         do
@@ -583,7 +580,7 @@ component =
     FinishSinging -> do
       state <- H.get
       when
-        ( state.captureStatus == Listening
+        ( isListening state.captureStatus
             && Recognition.phase state.recognition == Recognition.RecognitionComplete
         )
         do
@@ -598,21 +595,15 @@ component =
               }
     MicrophoneStarted monitor -> do
       state <- H.get
-      H.modify_ _ { captureFiber = Nothing }
-      if state.captureStatus == StartingCapture then
-        H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
-      else
-        H.liftEffect (PitchInput.stop monitor)
+      case state.captureStatus of
+        StartingCapture _ -> H.modify_ _ { captureStatus = Listening monitor }
+        _ -> H.liftEffect (PitchInput.stop monitor)
     MicrophoneFailed failure -> do
       state <- H.get
-      when (state.captureStatus == StartingCapture || state.captureStatus == Listening) do
-        cancelFiber state.ghostFiber
-        H.modify_ _
-          { captureFiber = Nothing
-          , captureStatus = CaptureFailed failure
-          , ghostFiber = Nothing
-          , monitor = Nothing
-          }
+      case state.captureStatus of
+        StartingCapture _ -> captureFailed state failure
+        Listening _ -> captureFailed state failure
+        _ -> pure unit
     ChooseInterval interval -> do
       state <- H.get
       case state.captureStatus of
@@ -646,8 +637,7 @@ component =
         prompt = Quiz.makePrompt seed state.prompts
         choices = Quiz.makeChoices seed state.config prompt
       H.modify_ _
-        { captureFiber = Nothing
-        , captureStatus = ReadyToPlay
+        { captureStatus = ReadyToPlay
         , choices = choices
         , ghostFiber = Nothing
         , ghostMidi = Nothing
@@ -668,25 +658,35 @@ component =
     RetryAutomatically -> do
       state <- H.get
       H.modify_ _ { progressionFiber = Nothing }
-      when (state.captureStatus == IntervalError) do
+      when (isIntervalError state.captureStatus) do
         handleAction PlayPrompt
     EditSetup -> do
       state <- H.get
       cancelTasks state
-      stopMonitor state.monitor
       H.liftEffect (AudioCapability.stop state.sampler)
       H.raise BackToSetup
 
-  stopMonitor = case _ of
-    Nothing -> pure unit
-    Just monitor -> H.liftEffect (PitchInput.stop monitor)
+  captureFailed state failure = do
+    cancelFiber state.ghostFiber
+    case state.captureStatus of
+      Listening monitor -> H.liftEffect (PitchInput.stop monitor)
+      _ -> pure unit
+    H.modify_ _
+      { captureStatus = CaptureFailed failure
+      , ghostFiber = Nothing
+      }
+
+  stopCapture = case _ of
+    StartingCapture fiber -> H.kill fiber
+    Listening monitor -> H.liftEffect (PitchInput.stop monitor)
+    _ -> pure unit
 
   cancelFiber = case _ of
     Nothing -> pure unit
     Just fiber -> H.kill fiber
 
   cancelTasks state = do
-    cancelFiber state.captureFiber
+    stopCapture state.captureStatus
     cancelFiber state.ghostFiber
     cancelFiber state.playbackFiber
     cancelFiber state.progressionFiber
