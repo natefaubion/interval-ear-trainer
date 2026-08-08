@@ -6,6 +6,8 @@ module EarTrainer.Capability.PitchInput
   ) where
 
 import Effect (Effect)
+import Effect.Aff (Aff)
+import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
 import Prelude (Unit)
 
 foreign import data Monitor :: Type
@@ -17,5 +19,8 @@ type Sample =
   , time :: Number
   }
 
-foreign import start :: (Sample -> Effect Unit) -> (String -> Effect Unit) -> Effect Monitor
+foreign import startImpl :: (Sample -> Effect Unit) -> EffectFnAff Monitor
 foreign import stop :: Monitor -> Effect Unit
+
+start :: (Sample -> Effect Unit) -> Aff Monitor
+start onSample = fromEffectFnAff (startImpl onSample)

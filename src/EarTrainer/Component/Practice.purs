@@ -51,6 +51,7 @@ import Web.HTML.HTMLElement as HTMLElement
 data CaptureStatus
   = ReadyToPlay
   | PlayingAudio PlaybackDestination
+  | StartingCapture
   | Listening
   | CaptureFailed String
   | PlaybackFailed String
@@ -71,7 +72,8 @@ derive instance Eq PlaybackDestination
 derive instance Eq Progression
 
 type State =
-  { captureStatus :: CaptureStatus
+  { captureFiber :: Maybe H.ForkId
+  , captureStatus :: CaptureStatus
   , choices :: Array Quiz.IntervalChoice
   , config :: ExerciseConfig
   , ghostFiber :: Maybe H.ForkId
@@ -94,6 +96,7 @@ data Action
   | AudioFailed String
   | PitchObserved PitchInput.Sample
   | PitchDetected Recognition.PitchSample
+  | MicrophoneStarted PitchInput.Monitor
   | ClearGhost
   | FinishSinging
   | MicrophoneFailed String
@@ -140,7 +143,8 @@ component =
     let
       prompt = Quiz.makePrompt input.seed input.config
     in
-      { captureStatus: ReadyToPlay
+      { captureFiber: Nothing
+      , captureStatus: ReadyToPlay
       , choices: Quiz.makeChoices input.seed input.config prompt
       , config: input.config
       , ghostFiber: Nothing
@@ -288,7 +292,7 @@ component =
                   )
                 <> resultClasses
             )
-        , HP.disabled (isAnswerComplete state.captureStatus || isPlaying state.captureStatus)
+        , HP.disabled (isAnswerComplete state.captureStatus || isBusy state.captureStatus)
         , HE.onClick \_ -> ChooseInterval choice.interval
         ]
         [ if revealed then
@@ -319,18 +323,19 @@ component =
 
   footerButtonDisabled state =
     progressionScheduled state.captureStatus
-      || isPlaying state.captureStatus
+      || isBusy state.captureStatus
       || (state.captureStatus == Listening && state.recognition.phase == Recognition.RecognitionComplete)
 
   footerButtonLabel state
     | isPlaying state.captureStatus = "Playing…"
+    | state.captureStatus == StartingCapture = "Requesting…"
     | isAnswerComplete state.captureStatus = "Next interval"
     | state.captureStatus == Listening && state.recognition.phase == Recognition.RecognitionComplete = "Next interval"
     | state.config.quizMode == Audiation = "Play root"
     | otherwise = "Play interval"
 
   footerButtonIcon state
-    | isPlaying state.captureStatus = ""
+    | isBusy state.captureStatus = ""
     | footerButtonLabel state == "Next interval" = "→"
     | otherwise = "▶"
 
@@ -343,6 +348,7 @@ component =
       else
         "Listen to the interval, then choose."
     PlayingAudio _ -> "Listen carefully."
+    StartingCapture -> "Requesting microphone access."
     Listening -> Recognition.phaseInstruction state.recognition.phase
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
@@ -356,6 +362,11 @@ component =
 
   isPlaying = case _ of
     PlayingAudio _ -> true
+    _ -> false
+
+  isBusy = case _ of
+    PlayingAudio _ -> true
+    StartingCapture -> true
     _ -> false
 
   isResumingAnswers = case _ of
@@ -430,19 +441,20 @@ component =
         handleAction PlayPrompt
     Finalize -> do
       state <- H.get
-      cancelDelayedActions state
+      cancelTasks state
       stopMonitor state.monitor
       H.liftEffect (Audio.stop state.sampler)
     PlayPrompt -> do
       state <- H.get
-      cancelDelayedActions state
+      cancelTasks state
       stopMonitor state.monitor
       let
         destination = case state.captureStatus of
           ChoosingAnswer revealed -> ResumeAnswers revealed
           _ -> BeginSinging
       H.modify_ _
-        { captureStatus = PlayingAudio destination
+        { captureFiber = Nothing
+        , captureStatus = PlayingAudio destination
         , ghostFiber = Nothing
         , ghostMidi = Nothing
         , monitor = Nothing
@@ -480,10 +492,13 @@ component =
         PlayingAudio BeginSinging -> do
           { emitter, listener } <- H.liftEffect HS.create
           void (H.subscribe emitter)
-          monitor <- H.liftEffect $ PitchInput.start
-            (HS.notify listener <<< PitchObserved)
-            (HS.notify listener <<< MicrophoneFailed)
-          H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
+          H.modify_ _ { captureStatus = StartingCapture }
+          fiber <- H.fork do
+            result <- H.liftAff $ attempt $ PitchInput.start (HS.notify listener <<< PitchObserved)
+            case result of
+              Left error -> handleAction (MicrophoneFailed (message error))
+              Right monitor -> handleAction (MicrophoneStarted monitor)
+          H.modify_ _ { captureFiber = Just fiber }
         _ -> pure unit
     PitchObserved raw -> do
       state <- H.get
@@ -609,11 +624,23 @@ component =
               }
             unless persistGhost (renderPromptNotation state.prompt true)
             renderChoiceNotation state.prompt.root state.choices
+    MicrophoneStarted monitor -> do
+      state <- H.get
+      H.modify_ _ { captureFiber = Nothing }
+      if state.captureStatus == StartingCapture then
+        H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
+      else
+        H.liftEffect (PitchInput.stop monitor)
     MicrophoneFailed failure -> do
       state <- H.get
-      when (state.captureStatus == Listening) do
+      when (state.captureStatus == StartingCapture || state.captureStatus == Listening) do
         cancelFiber state.ghostFiber
-        H.modify_ _ { captureStatus = CaptureFailed failure, ghostFiber = Nothing, monitor = Nothing }
+        H.modify_ _
+          { captureFiber = Nothing
+          , captureStatus = CaptureFailed failure
+          , ghostFiber = Nothing
+          , monitor = Nothing
+          }
     ChooseInterval interval -> do
       state <- H.get
       case state.captureStatus of
@@ -641,14 +668,15 @@ component =
         _ -> pure unit
     NextPrompt -> do
       state <- H.get
-      cancelDelayedActions state
+      cancelTasks state
       H.liftEffect (Audio.stop state.sampler)
       seed <- H.liftEffect (randomInt 0 2147483647)
       let
         prompt = Quiz.makePrompt seed state.config
         choices = Quiz.makeChoices seed state.config prompt
       H.modify_ _
-        { captureStatus = ReadyToPlay
+        { captureFiber = Nothing
+        , captureStatus = ReadyToPlay
         , choices = choices
         , ghostFiber = Nothing
         , ghostMidi = Nothing
@@ -680,7 +708,7 @@ component =
           handleAction PlayPrompt
     EditSetup -> do
       state <- H.get
-      cancelDelayedActions state
+      cancelTasks state
       stopMonitor state.monitor
       H.liftEffect (Audio.stop state.sampler)
       H.raise BackToSetup
@@ -693,7 +721,8 @@ component =
     Nothing -> pure unit
     Just fiber -> H.kill fiber
 
-  cancelDelayedActions state = do
+  cancelTasks state = do
+    cancelFiber state.captureFiber
     cancelFiber state.ghostFiber
     cancelFiber state.playbackFiber
     cancelFiber state.progressionFiber

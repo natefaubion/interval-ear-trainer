@@ -9,7 +9,16 @@ const decibels = (buffer) => {
   return 20 * Math.log10(Math.max(rms, 1e-8));
 };
 
-export const start = (onSample) => (onError) => () => {
+const stopMonitor = (monitor) => {
+  monitor.stopped = true;
+  cancelAnimationFrame(monitor.animationFrame);
+  monitor.stream?.getTracks().forEach((track) => track.stop());
+  if (monitor.audioContext && monitor.audioContext.state !== "closed") {
+    void monitor.audioContext.close();
+  }
+};
+
+export const startImpl = (onSample) => (onError, onSuccess) => {
   const monitor = {
     animationFrame: 0,
     audioContext: null,
@@ -57,21 +66,17 @@ export const start = (onSample) => (onError) => () => {
       };
 
       readPitch();
+      onSuccess(monitor);
     } catch (error) {
       if (monitor.stopped) return;
-      const message = error instanceof Error ? error.message : String(error);
-      onError(message)();
+      onError(error instanceof Error ? error : new Error(String(error)));
     }
   })();
 
-  return monitor;
+  return (_error, _onError, onCancel) => {
+    stopMonitor(monitor);
+    onCancel();
+  };
 };
 
-export const stop = (monitor) => () => {
-  monitor.stopped = true;
-  cancelAnimationFrame(monitor.animationFrame);
-  monitor.stream?.getTracks().forEach((track) => track.stop());
-  if (monitor.audioContext && monitor.audioContext.state !== "closed") {
-    void monitor.audioContext.close();
-  }
-};
+export const stop = (monitor) => () => stopMonitor(monitor);
