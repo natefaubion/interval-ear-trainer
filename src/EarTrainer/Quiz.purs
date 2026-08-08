@@ -1,7 +1,5 @@
 module EarTrainer.Quiz
-  ( Event(..)
-  , IntervalChoice
-  , Phase(..)
+  ( IntervalChoice
   , Prompt
   , PromptSet
   , availableExactIntervals
@@ -10,7 +8,6 @@ module EarTrainer.Quiz
   , makeChoices
   , makePrompt
   , promptSet
-  , transition
   ) where
 
 import Prelude
@@ -174,58 +171,3 @@ makeChoices seed config prompt = do
   map
     (\interval -> { interval, target: transpose direction interval prompt.root })
     withCorrect
-
-data Phase
-  = Configuring
-  | ShowingPrompt
-  | PlayingInterval
-  | WaitingForSilence
-  | SingingFirstNote
-  | AwaitingRearticulation
-  | SingingSecondNote
-  | IntervalError
-  | ChoosingNotation
-  | RevealingAnswer
-
-derive instance Eq Phase
-
-instance Show Phase where
-  show = case _ of
-    Configuring -> "Configuring"
-    ShowingPrompt -> "ShowingPrompt"
-    PlayingInterval -> "PlayingInterval"
-    WaitingForSilence -> "WaitingForSilence"
-    SingingFirstNote -> "SingingFirstNote"
-    AwaitingRearticulation -> "AwaitingRearticulation"
-    SingingSecondNote -> "SingingSecondNote"
-    IntervalError -> "IntervalError"
-    ChoosingNotation -> "ChoosingNotation"
-    RevealingAnswer -> "RevealingAnswer"
-
-data Event
-  = BeginQuiz
-  | PromptReady
-  | PlaybackFinished
-  | RoomIsQuiet
-  | FirstPitchAccepted
-  | VoiceReleased
-  | SecondPitchAccepted
-  | PitchRejected
-  | ChoiceSubmitted Boolean
-  | Continue
-
-transition :: Phase -> Event -> Maybe Phase
-transition phase event = case phase, event of
-  Configuring, BeginQuiz -> Just ShowingPrompt
-  ShowingPrompt, PromptReady -> Just PlayingInterval
-  PlayingInterval, PlaybackFinished -> Just WaitingForSilence
-  WaitingForSilence, RoomIsQuiet -> Just SingingFirstNote
-  SingingFirstNote, FirstPitchAccepted -> Just AwaitingRearticulation
-  SingingFirstNote, PitchRejected -> Just IntervalError
-  AwaitingRearticulation, VoiceReleased -> Just SingingSecondNote
-  SingingSecondNote, SecondPitchAccepted -> Just ChoosingNotation
-  SingingSecondNote, PitchRejected -> Just IntervalError
-  IntervalError, Continue -> Just PlayingInterval
-  ChoosingNotation, ChoiceSubmitted _ -> Just RevealingAnswer
-  RevealingAnswer, Continue -> Just ShowingPrompt
-  _, _ -> Nothing

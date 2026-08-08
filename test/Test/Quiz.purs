@@ -37,15 +37,12 @@ import EarTrainer.Music
   , transpose
   )
 import EarTrainer.Quiz
-  ( Event(..)
-  , Phase(..)
-  , availableExactIntervals
+  ( availableExactIntervals
   , availableIntervalSizes
   , isPlayable
   , makeChoices
   , makePrompt
   , promptSet
-  , transition
   )
 import Effect (Effect)
 import Effect.Exception (throw)
@@ -219,15 +216,3 @@ run = do
   assertTrue' "collection configuration has prompts" (isJust (promptSet collectionConfig))
   assertTrue' "descending collection has prompts" (isJust (promptSet descendingCollectionConfig))
   assertTrue' "narrow exact configuration has prompts" (isJust (promptSet narrowExactConfig))
-  assertTrue' "accepting the first pitch awaits rearticulation"
-    (transition SingingFirstNote FirstPitchAccepted == Just AwaitingRearticulation)
-  assertTrue' "a second pitch before release is ignored"
-    (transition AwaitingRearticulation SecondPitchAccepted == Nothing)
-  assertTrue' "voice release begins the second note"
-    (transition AwaitingRearticulation VoiceReleased == Just SingingSecondNote)
-  assertTrue' "rejecting the first pitch enters the error phase"
-    (transition SingingFirstNote PitchRejected == Just IntervalError)
-  assertTrue' "rejecting the second pitch enters the error phase"
-    (transition SingingSecondNote PitchRejected == Just IntervalError)
-  assertTrue' "continuing after an error replays the interval"
-    (transition IntervalError Continue == Just PlayingInterval)
