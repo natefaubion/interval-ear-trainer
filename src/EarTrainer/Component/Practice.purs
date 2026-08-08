@@ -38,6 +38,7 @@ import EarTrainer.Music
 import EarTrainer.Notation as Notation
 import EarTrainer.Quiz as Quiz
 import EarTrainer.Recognition as Recognition
+import EarTrainer.UI.Button as Button
 import Effect.Aff (attempt, delay)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Exception (message)
@@ -217,17 +218,18 @@ component =
           [ HP.class_ (H.ClassName "practice-actions") ]
           [ HH.p_
               [ HH.text (practiceInstruction state) ]
-          , HH.button
-              [ HP.type_ HP.ButtonButton
-              , HP.class_ (H.ClassName "primary-button play-button")
-              , HP.disabled (footerButtonDisabled state)
-              , HE.onClick \_ -> footerButtonAction state
-              ]
-              [ HH.span
-                  [ HP.class_ (H.ClassName "play-icon") ]
-                  [ HH.text (footerButtonIcon state) ]
-              , HH.text (footerButtonLabel state)
-              ]
+          , Button.button
+              { action: footerButtonAction state
+              , classes: [ H.ClassName "play-button" ]
+              , content:
+                  [ HH.span
+                      [ HP.class_ (H.ClassName "play-icon") ]
+                      [ HH.text (footerButtonIcon state) ]
+                  , HH.text (footerButtonLabel state)
+                  ]
+              , disabled: footerButtonDisabled state
+              , variant: Button.Primary
+              }
           ]
       ]
 
@@ -287,45 +289,45 @@ component =
         else if incorrect then [ H.ClassName "answer-incorrect" ]
         else []
     in
-      HH.button
-        [ HP.type_ HP.ButtonButton
-        , HP.classes
-            ( [ H.ClassName "interval-answer" ]
-                <>
-                  ( if state.config.answerDisplay == AnswerName then [ H.ClassName "name-only" ]
-                    else []
-                  )
-                <>
-                  ( if state.config.answerDisplay /= AnswerNotation then [ H.ClassName "names-visible" ]
-                    else []
-                  )
-                <> resultClasses
-            )
-        , HP.disabled (isAnswerComplete state.captureStatus || isBusy state.captureStatus)
-        , HE.onClick \_ -> ChooseInterval choice.interval
-        ]
-        [ if revealed then
-            HH.span
-              [ HP.classes
-                  [ H.ClassName "choice-result-icon"
-                  , H.ClassName if correct then "result-correct" else "result-incorrect"
+      Button.button
+        { action: ChooseInterval choice.interval
+        , classes:
+            [ H.ClassName "interval-answer" ]
+              <>
+                ( if state.config.answerDisplay == AnswerName then [ H.ClassName "name-only" ]
+                  else []
+                )
+              <>
+                ( if state.config.answerDisplay /= AnswerNotation then [ H.ClassName "names-visible" ]
+                  else []
+                )
+              <> resultClasses
+        , content:
+            [ if revealed then
+                HH.span
+                  [ HP.classes
+                      [ H.ClassName "choice-result-icon"
+                      , H.ClassName if correct then "result-correct" else "result-incorrect"
+                      ]
                   ]
-              ]
-              []
-          else
-            HH.text ""
-        , if showNotation then
-            HH.div
-              [ HP.class_ (H.ClassName "choice-notation") ]
-              [ HH.slot_ notationSlot (ChoiceNotation index) NotationComponent.component
-                  (Notation.intervalChoice state.prompt.root choice.target)
-              ]
-          else
-            HH.text ""
-        , HH.span
-            [ HP.class_ (H.ClassName "choice-label") ]
-            [ HH.text if showName then intervalName choice.interval else "Interval hidden" ]
-        ]
+                  []
+              else
+                HH.text ""
+            , if showNotation then
+                HH.div
+                  [ HP.class_ (H.ClassName "choice-notation") ]
+                  [ HH.slot_ notationSlot (ChoiceNotation index) NotationComponent.component
+                      (Notation.intervalChoice state.prompt.root choice.target)
+                  ]
+              else
+                HH.text ""
+            , HH.span
+                [ HP.class_ (H.ClassName "choice-label") ]
+                [ HH.text if showName then intervalName choice.interval else "Interval hidden" ]
+            ]
+        , disabled: isAnswerComplete state.captureStatus || isBusy state.captureStatus
+        , variant: Button.Unstyled
+        }
 
   footerButtonAction state =
     if isAnswerComplete state.captureStatus then NextPrompt else PlayPrompt

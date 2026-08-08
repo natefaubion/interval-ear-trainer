@@ -53,6 +53,7 @@ import EarTrainer.Music
   )
 import EarTrainer.Quiz as Quiz
 import EarTrainer.Settings as Settings
+import EarTrainer.UI.Button as Button
 import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.HTML as HH
@@ -159,12 +160,7 @@ component =
       [ HH.div
           [ HP.class_ (H.ClassName "setup-heading") ]
           [ HH.h2_ [ HH.text "Exercise setup" ]
-          , HH.button
-              [ HP.type_ HP.ButtonButton
-              , HP.classes [ H.ClassName "secondary-button", H.ClassName "save-preset-button" ]
-              , HE.onClick \_ -> RootOpenSavePreset
-              ]
-              [ HH.text "Save preset" ]
+          , Button.text Button.Secondary [ H.ClassName "save-preset-button" ] false RootOpenSavePreset "Save preset"
           ]
       , HH.div
           [ HP.class_ (H.ClassName "setup-content") ]
@@ -183,13 +179,7 @@ component =
                     <>
                       [ HH.div
                           [ HP.class_ (H.ClassName "selection-actions") ]
-                          [ HH.button
-                              [ HP.type_ HP.ButtonButton
-                              , HP.class_ (H.ClassName "small-text-button")
-                              , HP.disabled (isNothing state.activePresetId)
-                              , HE.onClick \_ -> RootOpenDeletePreset
-                              ]
-                              [ HH.text "Delete preset" ]
+                          [ Button.text Button.SmallText [] (isNothing state.activePresetId) RootOpenDeletePreset "Delete preset"
                           ]
                       ]
                 )
@@ -407,20 +397,8 @@ component =
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "setup-footer") ]
-          [ HH.button
-              [ HP.type_ HP.ButtonButton
-              , HP.class_ (H.ClassName "secondary-button")
-              , HP.disabled (state.config == defaultConfig)
-              , HE.onClick \_ -> RootResetDefaults
-              ]
-              [ HH.text "Reset to defaults" ]
-          , HH.button
-              [ HP.type_ HP.ButtonButton
-              , HP.class_ (H.ClassName "primary-button")
-              , HP.disabled (not (rootConfigValid state.config) || not state.samplerReady)
-              , HE.onClick \_ -> RootBeginPractice
-              ]
-              [ HH.text "Begin practice" ]
+          [ Button.text Button.Secondary [] (state.config == defaultConfig) RootResetDefaults "Reset to defaults"
+          , Button.text Button.Primary [] (not (rootConfigValid state.config) || not state.samplerReady) RootBeginPractice "Begin practice"
           ]
       , renderSavePresetDialog state
       , renderDeletePresetDialog state
@@ -450,18 +428,8 @@ component =
           Just message -> HH.p [ HP.class_ (H.ClassName "setting-error") ] [ HH.text message ]
       , HH.div
           [ HP.class_ (H.ClassName "dialog-actions") ]
-          [ HH.button
-              [ HP.type_ HP.ButtonButton
-              , HP.class_ (H.ClassName "secondary-button")
-              , HE.onClick \_ -> RootCloseSavePreset
-              ]
-              [ HH.text "Cancel" ]
-          , HH.button
-              [ HP.type_ HP.ButtonButton
-              , HP.class_ (H.ClassName "primary-button")
-              , HE.onClick \_ -> RootSavePreset
-              ]
-              [ HH.text "Save" ]
+          [ Button.text Button.Secondary [] false RootCloseSavePreset "Cancel"
+          , Button.text Button.Primary [] false RootSavePreset "Save"
           ]
       ]
 
@@ -479,19 +447,8 @@ component =
           ]
       , HH.div
           [ HP.class_ (H.ClassName "dialog-actions") ]
-          [ HH.button
-              [ HP.type_ HP.ButtonButton
-              , HP.class_ (H.ClassName "secondary-button")
-              , HE.onClick \_ -> RootCloseDeletePreset
-              ]
-              [ HH.text "Cancel" ]
-          , HH.button
-              [ HP.type_ HP.ButtonButton
-              , HP.classes [ H.ClassName "primary-button", H.ClassName "danger-button" ]
-              , HP.disabled (isNothing state.activePresetId)
-              , HE.onClick \_ -> RootConfirmDeletePreset
-              ]
-              [ HH.text "Delete" ]
+          [ Button.text Button.Secondary [] false RootCloseDeletePreset "Cancel"
+          , Button.text Button.Primary [ H.ClassName "danger-button" ] (isNothing state.activePresetId) RootConfirmDeletePreset "Delete"
           ]
       ]
 
@@ -511,60 +468,33 @@ component =
       ]
 
   rootChoiceButton selected action label =
-    HH.button
-      [ HP.type_ HP.ButtonButton
-      , HP.classes
-          if selected then [ H.ClassName "choice-chip", H.ClassName "selected" ]
-          else [ H.ClassName "choice-chip" ]
-      , HE.onClick \_ -> action
-      ]
-      [ HH.text label ]
+    Button.text (Button.Choice selected) [] false action label
 
   rootSelectionActions selectAction clearAction selectDisabled clearDisabled =
     HH.div
       [ HP.class_ (H.ClassName "selection-actions") ]
-      [ HH.button
-          [ HP.type_ HP.ButtonButton
-          , HP.class_ (H.ClassName "small-text-button")
-          , HP.disabled selectDisabled
-          , HE.onClick \_ -> selectAction
-          ]
-          [ HH.text "Select All" ]
-      , HH.button
-          [ HP.type_ HP.ButtonButton
-          , HP.class_ (H.ClassName "small-text-button")
-          , HP.disabled clearDisabled
-          , HE.onClick \_ -> clearAction
-          ]
-          [ HH.text "Clear" ]
+      [ Button.text Button.SmallText [] selectDisabled selectAction "Select All"
+      , Button.text Button.SmallText [] clearDisabled clearAction "Clear"
       ]
 
   rootModeButton config mode =
     rootChoiceButton (Array.elem mode config.playbackModes) (RootTogglePlaybackMode mode) (playbackModeName mode)
 
   rootIntervalButton config possible interval =
-    HH.button
-      [ HP.type_ HP.ButtonButton
-      , HP.classes
-          if Array.elem interval config.intervals then
-            [ H.ClassName "choice-chip", H.ClassName "selected" ]
-          else [ H.ClassName "choice-chip" ]
-      , HP.disabled (not (Array.elem interval possible))
-      , HE.onClick \_ -> RootToggleInterval interval
-      ]
-      [ HH.text (intervalName interval) ]
+    Button.text
+      (Button.Choice (Array.elem interval config.intervals))
+      []
+      (not (Array.elem interval possible))
+      (RootToggleInterval interval)
+      (intervalName interval)
 
   rootIntervalSizeButton config possible interval =
-    HH.button
-      [ HP.type_ HP.ButtonButton
-      , HP.classes
-          if Array.elem interval config.availableIntervals then
-            [ H.ClassName "choice-chip", H.ClassName "selected" ]
-          else [ H.ClassName "choice-chip" ]
-      , HP.disabled (not (Array.elem interval possible))
-      , HE.onClick \_ -> RootToggleIntervalSize interval
-      ]
-      [ HH.text (intervalSizeName interval) ]
+    Button.text
+      (Button.Choice (Array.elem interval config.availableIntervals))
+      []
+      (not (Array.elem interval possible))
+      (RootToggleIntervalSize interval)
+      (intervalSizeName interval)
 
   rootRootButton config root =
     rootChoiceButton (Array.elem root config.rootPitchClasses) (RootToggleRoot root) (pitchClassName root)
