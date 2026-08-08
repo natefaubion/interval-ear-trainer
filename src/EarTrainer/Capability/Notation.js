@@ -75,24 +75,14 @@ export const renderScoreImpl = (element) => (clef) => (width) => (events) => () 
       duration: "q",
     });
     event.notes.forEach(({ accidental }, index) => {
-      if (event.appearance !== "hidden" && accidental !== "") {
+      if (!event.hidden && accidental !== "") {
         note.addModifier(new Accidental(accidental), index);
       }
     });
-    if (event.appearance === "dim") {
-      note.setStyle({ fillStyle: "#aeb4b0", strokeStyle: "#aeb4b0" });
-    } else if (event.appearance === "accepted") {
-      note.setStyle({
-        fillStyle: "#20a65a",
-        strokeStyle: "#20a65a",
-      });
-    } else if (event.appearance === "incorrect") {
-      note.setStyle({
-        fillStyle: "#b83b35",
-        strokeStyle: "#b83b35",
-      });
-    } else if (event.appearance === "hidden") {
-      note.setStyle({ fillStyle: "transparent", strokeStyle: "transparent" });
+    if (event.color !== "") {
+      note.setStyle({ fillStyle: event.color, strokeStyle: event.color });
+    }
+    if (event.hidden) {
       note.setLedgerLineStyle({ fillStyle: "transparent", strokeStyle: "transparent" });
     }
     return note;
@@ -108,7 +98,7 @@ export const renderScoreImpl = (element) => (clef) => (width) => (events) => () 
     const noteGroups = svg.querySelectorAll(".vf-stavenote");
     const recognizedFilterId = addRecognizedFilter(svg);
     events.forEach((event, index) => {
-      if (event.appearance === "accepted" || event.appearance === "incorrect") {
+      if (event.highlighted) {
         const group = noteGroups[index];
         if (group) {
           addRecognizedHighlight(group, recognizedFilterId);
