@@ -3,7 +3,7 @@ module EarTrainer.Component.App (component) where
 import Prelude
 
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..), isJust)
+import Data.Maybe (Maybe(..))
 import EarTrainer.Capability.Audio as Audio
 import EarTrainer.Component.Practice as Practice
 import EarTrainer.Component.Setup as Setup
@@ -21,11 +21,15 @@ import Type.Proxy (Proxy(..))
 type State =
   { activePresetId :: Maybe Settings.PresetId
   , config :: ExerciseConfig
-  , practice :: Maybe Practice.Input
+  , phase :: Phase
   , presets :: Array Settings.Preset
-  , sampler :: Maybe Audio.Sampler
   , storageError :: Maybe String
   }
+
+data Phase
+  = Loading
+  | Setup Audio.Sampler
+  | Practice Practice.Input
 
 data Action
   = Initialize
@@ -49,9 +53,8 @@ component =
     { initialState: const
         { activePresetId: Nothing
         , config: defaultConfig
-        , practice: Nothing
+        , phase: Loading
         , presets: []
-        , sampler: Nothing
         , storageError: Nothing
         }
     , render
@@ -65,19 +68,21 @@ component =
   render state =
     HH.main
       [ HP.class_ (H.ClassName "app-shell") ]
-      [ case state.practice of
-          Just input ->
-            HH.slot practiceSlot unit Practice.component input PracticeOutput
-          Nothing ->
-            HH.slot setupSlot unit Setup.component
-              { activePresetId: state.activePresetId
-              , config: state.config
-              , presets: state.presets
-              , samplerReady: isJust state.sampler
-              , storageError: state.storageError
-              }
-              SetupOutput
+      [ case state.phase of
+          Loading -> renderSetup false
+          Setup _ -> renderSetup true
+          Practice input -> HH.slot practiceSlot unit Practice.component input PracticeOutput
       ]
+    where
+    renderSetup samplerReady =
+      HH.slot setupSlot unit Setup.component
+        { activePresetId: state.activePresetId
+        , config: state.config
+        , presets: state.presets
+        , samplerReady
+        , storageError: state.storageError
+        }
+        SetupOutput
 
   handleAction = case _ of
     Initialize -> do
@@ -95,12 +100,15 @@ component =
       H.modify_ _
         { activePresetId = appData.activePresetId
         , config = appData.config
+        , phase = Setup sampler
         , presets = appData.presets
-        , sampler = Just sampler
         , storageError = storageError
         }
-    PracticeOutput Practice.BackToSetup ->
-      H.modify_ _ { practice = Nothing }
+    PracticeOutput Practice.BackToSetup -> do
+      state <- H.get
+      case state.phase of
+        Practice input -> H.modify_ _ { phase = Setup input.sampler }
+        _ -> pure unit
     SetupOutput (Setup.DataChanged appData) -> do
       H.modify_ _
         { activePresetId = appData.activePresetId
@@ -110,13 +118,13 @@ component =
       persist
     SetupOutput Setup.BeginRequested -> do
       state <- H.get
-      case state.sampler of
-        Nothing -> pure unit
-        Just sampler -> case Quiz.promptSet state.config of
+      case state.phase of
+        Setup sampler -> case Quiz.promptSet state.config of
           Nothing -> pure unit
           Just prompts -> do
             seed <- H.liftEffect (randomInt 0 2147483647)
-            H.modify_ _ { practice = Just { config: state.config, prompts, sampler, seed } }
+            H.modify_ _ { phase = Practice { config: state.config, prompts, sampler, seed } }
+        _ -> pure unit
     SetupOutput Setup.PersistenceRequested ->
       void $ H.fork do
         void $ H.liftAff Settings.requestPersistence
