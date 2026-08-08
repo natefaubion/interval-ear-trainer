@@ -49,7 +49,7 @@ import EarTrainer.Quiz
   )
 import Effect (Effect)
 import Effect.Exception (throw)
-import Test.Assert (assertEqual)
+import Test.Assert (assertEqual, assertFalse', assertTrue')
 
 run :: Effect Unit
 run = do
@@ -140,111 +140,94 @@ run = do
       }
     narrowExactPrompt = makePrompt 0 (promptsFor narrowExactConfig)
   assertEqual { actual: Array.length generatedChoices, expected: 4 }
+  assertTrue' "major seventh fits the narrow range" (Array.elem MajorSeventh (availableExactIntervals narrowExactConfig))
+  assertFalse' "octave does not fit the narrow range" (Array.elem PerfectOctave (availableExactIntervals narrowExactConfig))
+  assertTrue' "narrow prompt is a major seventh" (narrowExactPrompt.interval == MajorSeventh)
+  assertTrue' "generated root is in range" (midiNumber narrowExactPrompt.root >= midiNumber narrowExactConfig.customRange.low)
+  assertTrue' "generated target is in range" (midiNumber narrowExactPrompt.target <= midiNumber narrowExactConfig.customRange.high)
+  assertTrue' "augmented fourth is offered" (Array.elem AugmentedFourth (map _.interval augmentedFourthChoices))
+  assertFalse' "enharmonic duplicate diminished fifth is omitted"
+    (Array.elem DiminishedFifth (map _.interval augmentedFourthChoices))
   assertEqual
-    { actual:
-        [ Array.elem MajorSeventh (availableExactIntervals narrowExactConfig)
-        , Array.elem PerfectOctave (availableExactIntervals narrowExactConfig)
-        , narrowExactPrompt.interval == MajorSeventh
-        , midiNumber narrowExactPrompt.root >= midiNumber narrowExactConfig.customRange.low
-        , midiNumber narrowExactPrompt.target <= midiNumber narrowExactConfig.customRange.high
-        ]
-    , expected: [ true, false, true, true, true ]
+    { actual: Array.length (Array.nub (map (midiNumber <<< _.target) augmentedFourthChoices))
+    , expected: Array.length augmentedFourthChoices
+    }
+  assertTrue' "diminished fifth is offered" (Array.elem DiminishedFifth (map _.interval diminishedFifthChoices))
+  assertFalse' "enharmonic duplicate augmented fourth is omitted"
+    (Array.elem AugmentedFourth (map _.interval diminishedFifthChoices))
+  assertEqual
+    { actual: Array.length (Array.nub (map (midiNumber <<< _.target) diminishedFifthChoices))
+    , expected: Array.length diminishedFifthChoices
+    }
+  assertTrue' "augmented fifth is offered" (Array.elem AugmentedFifth (map _.interval augmentedFifthChoices))
+  assertFalse' "enharmonic duplicate minor sixth is omitted" (Array.elem MinorSixth (map _.interval augmentedFifthChoices))
+  assertEqual
+    { actual: Array.length (Array.nub (map (midiNumber <<< _.target) augmentedFifthChoices))
+    , expected: Array.length augmentedFifthChoices
     }
   assertEqual
-    { actual:
-        [ Array.elem AugmentedFourth (map _.interval augmentedFourthChoices)
-        , not (Array.elem DiminishedFifth (map _.interval augmentedFourthChoices))
-        , Array.length (Array.nub (map (midiNumber <<< _.target) augmentedFourthChoices)) == Array.length augmentedFourthChoices
-        , Array.elem DiminishedFifth (map _.interval diminishedFifthChoices)
-        , not (Array.elem AugmentedFourth (map _.interval diminishedFifthChoices))
-        , Array.length (Array.nub (map (midiNumber <<< _.target) diminishedFifthChoices)) == Array.length diminishedFifthChoices
-        , Array.elem AugmentedFifth (map _.interval augmentedFifthChoices)
-        , not (Array.elem MinorSixth (map _.interval augmentedFifthChoices))
-        , Array.length (Array.nub (map (midiNumber <<< _.target) augmentedFifthChoices)) == Array.length augmentedFifthChoices
-        ]
-    , expected: Array.replicate 9 true
+    { actual: Array.length (Array.filter (\choice -> choice.interval == generatedPrompt.interval) generatedChoices)
+    , expected: 1
     }
+  assertEqual { actual: Array.length allSelectedChoices, expected: Array.length allAnswersConfig.intervals }
+  assertTrue' "all selected intervals are offered"
+    (Array.all (\interval -> Array.elem interval (map _.interval allSelectedChoices)) allAnswersConfig.intervals)
+  assertTrue' "descending prompts descend"
+    (Array.all (\prompt -> midiNumber prompt.target < midiNumber prompt.root) descendingCollectionPrompts)
+  assertEqual { actual: Array.length collectionChoices, expected: 2 }
   assertEqual
-    { actual:
-        [ Array.length (Array.filter (\choice -> choice.interval == generatedPrompt.interval) generatedChoices) == 1
-        , Array.length allSelectedChoices == Array.length allAnswersConfig.intervals
-        , Array.all (\interval -> Array.elem interval (map _.interval allSelectedChoices)) allAnswersConfig.intervals
-        , Array.all (\prompt -> midiNumber prompt.target < midiNumber prompt.root) descendingCollectionPrompts
-        , Array.length collectionChoices == 2
-        , Array.length
-            ( Array.filter
-                (\choice -> choice.interval == (makePrompt 24 (promptsFor collectionConfig)).interval)
-                collectionChoices
-            ) == 1
-        , Array.all (\choice -> intervalNumber choice.interval == 3) allCollectionChoices
-        ]
-    , expected: Array.replicate 7 true
+    { actual: Array.length $ Array.filter
+        (\choice -> choice.interval == (makePrompt 24 (promptsFor collectionConfig)).interval)
+        collectionChoices
+    , expected: 1
     }
-  assertEqual
-    { actual:
-        [ midiNumber generatedPrompt.root >= midiNumber generatedRange.low
-        , midiNumber generatedPrompt.target >= midiNumber generatedRange.low
-        , midiNumber generatedPrompt.root <= midiNumber generatedRange.high
-        , midiNumber generatedPrompt.target <= midiNumber generatedRange.high
-        ]
-    , expected: Array.replicate 4 true
-    }
-  assertEqual
-    { actual:
-        [ quizModeUsesSinging SingingOnly
-        , not (quizModeUsesRecognition SingingOnly)
-        , not (quizModeUsesSinging RecognitionOnly)
-        , quizModeUsesRecognition RecognitionOnly
-        , quizModeUsesSinging SingingAndRecognition
-        , quizModeUsesRecognition SingingAndRecognition
-        , quizModeUsesSinging Audiation
-        , not (quizModeUsesRecognition Audiation)
-        , defaultConfig.quizProgression == AutomaticProgression
-        ]
-    , expected: Array.replicate 9 true
-    }
-  assertEqual
-    { actual:
-        [ Array.all
-            ( \prompt ->
-                intervalNumber prompt.interval == 3
-                  && Array.elem (pitchClassOf prompt.root) collectionConfig.rootPitchClasses
-                  && Array.elem (pitchClassOf prompt.target) collectionConfig.rootPitchClasses
-            )
-            collectionPrompts
-        , Array.elem SizeThird (availableIntervalSizes collectionConfig)
-        , not (Array.elem SizeSecond (availableIntervalSizes sparseCollectionConfig))
-        , midiNumber audiationPrompt.target < midiNumber audiationPrompt.root
-        , midiNumber ascendingAudiationPrompt.target > midiNumber ascendingAudiationPrompt.root
-        , not (isValid (defaultConfig { quizMode = Audiation, playbackModes = [ Harmonic ] }))
-        , isValid (toggleInterval MinorThird defaultConfig)
-        ]
-    , expected: Array.replicate 7 true
-    }
-  assertEqual
-    { actual:
-        [ selectedMajorKeyId defaultConfig.rootPitchClasses == "c"
-        , selectedMajorKeyId selectedGMajor.rootPitchClasses == "g"
-        , midiNumber classAdjustedRange.customRange.low == 49
-        , midiNumber octaveAdjustedRange.customRange.high == 91
-        , isValid narrowConfig
-        , not (isPlayable narrowConfig)
-        ]
-    , expected: Array.replicate 6 true
-    }
-  assertEqual
-    { actual: map (isJust <<< promptSet)
-        [ descendingConfig, audiationConfig, collectionConfig, descendingCollectionConfig, narrowExactConfig ]
-    , expected: Array.replicate 5 true
-    }
-  assertEqual
-    { actual:
-        [ transition SingingFirstNote FirstPitchAccepted == Just AwaitingRearticulation
-        , transition AwaitingRearticulation SecondPitchAccepted == Nothing
-        , transition AwaitingRearticulation VoiceReleased == Just SingingSecondNote
-        , transition SingingFirstNote PitchRejected == Just IntervalError
-        , transition SingingSecondNote PitchRejected == Just IntervalError
-        , transition IntervalError Continue == Just PlayingInterval
-        ]
-    , expected: Array.replicate 6 true
-    }
+  assertTrue' "collection choices are thirds" (Array.all (\choice -> intervalNumber choice.interval == 3) allCollectionChoices)
+  assertTrue' "generated root is above range floor" (midiNumber generatedPrompt.root >= midiNumber generatedRange.low)
+  assertTrue' "generated target is above range floor" (midiNumber generatedPrompt.target >= midiNumber generatedRange.low)
+  assertTrue' "generated root is below range ceiling" (midiNumber generatedPrompt.root <= midiNumber generatedRange.high)
+  assertTrue' "generated target is below range ceiling" (midiNumber generatedPrompt.target <= midiNumber generatedRange.high)
+  assertTrue' "singing mode uses singing" (quizModeUsesSinging SingingOnly)
+  assertFalse' "singing mode does not use recognition" (quizModeUsesRecognition SingingOnly)
+  assertFalse' "recognition mode does not use singing" (quizModeUsesSinging RecognitionOnly)
+  assertTrue' "recognition mode uses recognition" (quizModeUsesRecognition RecognitionOnly)
+  assertTrue' "combined mode uses singing" (quizModeUsesSinging SingingAndRecognition)
+  assertTrue' "combined mode uses recognition" (quizModeUsesRecognition SingingAndRecognition)
+  assertTrue' "audiation uses singing" (quizModeUsesSinging Audiation)
+  assertFalse' "audiation does not use recognition" (quizModeUsesRecognition Audiation)
+  assertTrue' "automatic progression is the default" (defaultConfig.quizProgression == AutomaticProgression)
+  assertTrue' "collection prompts use selected thirds and pitch classes" $ Array.all
+    ( \prompt ->
+        intervalNumber prompt.interval == 3
+          && Array.elem (pitchClassOf prompt.root) collectionConfig.rootPitchClasses
+          && Array.elem (pitchClassOf prompt.target) collectionConfig.rootPitchClasses
+    )
+    collectionPrompts
+  assertTrue' "selected interval size is available" (Array.elem SizeThird (availableIntervalSizes collectionConfig))
+  assertFalse' "unplayable interval size is unavailable" (Array.elem SizeSecond (availableIntervalSizes sparseCollectionConfig))
+  assertTrue' "descending audiation descends" (midiNumber audiationPrompt.target < midiNumber audiationPrompt.root)
+  assertTrue' "ascending audiation ascends" (midiNumber ascendingAudiationPrompt.target > midiNumber ascendingAudiationPrompt.root)
+  assertFalse' "harmonic-only audiation is invalid" (isValid (defaultConfig { quizMode = Audiation, playbackModes = [ Harmonic ] }))
+  assertTrue' "removing one default interval remains valid" (isValid (toggleInterval MinorThird defaultConfig))
+  assertEqual { actual: selectedMajorKeyId defaultConfig.rootPitchClasses, expected: "c" }
+  assertEqual { actual: selectedMajorKeyId selectedGMajor.rootPitchClasses, expected: "g" }
+  assertEqual { actual: midiNumber classAdjustedRange.customRange.low, expected: 49 }
+  assertEqual { actual: midiNumber octaveAdjustedRange.customRange.high, expected: 91 }
+  assertTrue' "narrow configuration is structurally valid" (isValid narrowConfig)
+  assertFalse' "narrow configuration has no playable prompt" (isPlayable narrowConfig)
+  assertTrue' "descending configuration has prompts" (isJust (promptSet descendingConfig))
+  assertTrue' "audiation configuration has prompts" (isJust (promptSet audiationConfig))
+  assertTrue' "collection configuration has prompts" (isJust (promptSet collectionConfig))
+  assertTrue' "descending collection has prompts" (isJust (promptSet descendingCollectionConfig))
+  assertTrue' "narrow exact configuration has prompts" (isJust (promptSet narrowExactConfig))
+  assertTrue' "accepting the first pitch awaits rearticulation"
+    (transition SingingFirstNote FirstPitchAccepted == Just AwaitingRearticulation)
+  assertTrue' "a second pitch before release is ignored"
+    (transition AwaitingRearticulation SecondPitchAccepted == Nothing)
+  assertTrue' "voice release begins the second note"
+    (transition AwaitingRearticulation VoiceReleased == Just SingingSecondNote)
+  assertTrue' "rejecting the first pitch enters the error phase"
+    (transition SingingFirstNote PitchRejected == Just IntervalError)
+  assertTrue' "rejecting the second pitch enters the error phase"
+    (transition SingingSecondNote PitchRejected == Just IntervalError)
+  assertTrue' "continuing after an error replays the interval"
+    (transition IntervalError Continue == Just PlayingInterval)

@@ -9,7 +9,7 @@ import EarTrainer.Config (AnswerCount(..), QuizProgression(..), defaultConfig)
 import EarTrainer.Settings (DecodeError(..), NameError(..), decodeStoredAppData, presetId, presetName, validatePresetName)
 import Effect (Effect)
 import Foreign (unsafeToForeign)
-import Test.Assert (assertEqual)
+import Test.Assert (assertEqual, assertTrue')
 
 run :: Effect Unit
 run = do
@@ -44,14 +44,6 @@ run = do
       , presets: []
       , settings
       }
-    decodedLegacyData = case decodeStoredAppData legacyStoredData of
-      Left _ -> [ false, false, false, false ]
-      Right value ->
-        [ value.activePresetId == Just (presetId "legacy-preset")
-        , value.config.answerCount == AFew
-        , value.config.quizProgression == AutomaticProgression
-        , Array.length value.presets == 1
-        ]
     rejectsFutureData = case decodeStoredAppData (unsafeToForeign { version: 2 }) of
       Left (UnsupportedStoredVersion 2) -> true
       _ -> false
@@ -61,15 +53,15 @@ run = do
     rejectsMalformedPreset = case decodeStoredAppData malformedPresetData of
       Left (MalformedStoredData _) -> true
       _ -> false
-    rejectsUnknownTags = map
-      ( case _ of
-          Left (MalformedStoredData _) -> true
-          _ -> false
-      )
-      [ decodeStoredAppData (storedDataWith (unsafeToForeign (legacySettingsRecord { vocalRange = "contralto" })))
-      , decodeStoredAppData (storedDataWith (unsafeToForeign (legacySettingsRecord { answerCount = "many" })))
-      , decodeStoredAppData (storedDataWith (unsafeToForeign (legacySettingsRecord { intervals = [ "mystery-interval" ] })))
-      ]
+    rejectsMalformed = case _ of
+      Left (MalformedStoredData _) -> true
+      _ -> false
+    rejectsUnknownVocalRange = rejectsMalformed $ decodeStoredAppData
+      (storedDataWith (unsafeToForeign (legacySettingsRecord { vocalRange = "contralto" })))
+    rejectsUnknownAnswerCount = rejectsMalformed $ decodeStoredAppData
+      (storedDataWith (unsafeToForeign (legacySettingsRecord { answerCount = "many" })))
+    rejectsUnknownInterval = rejectsMalformed $ decodeStoredAppData
+      (storedDataWith (unsafeToForeign (legacySettingsRecord { intervals = [ "mystery-interval" ] })))
     rejectsInvalidConfig =
       case
         decodeStoredAppData
@@ -80,19 +72,24 @@ run = do
     rejectsMalformedVersion = case decodeStoredAppData (unsafeToForeign { version: "one" }) of
       Left (MalformedStoredData _) -> true
       _ -> false
-  assertEqual
-    { actual:
-        [ validatePresetName [] "   " == Left EmptyName
-        , validatePresetName [ existingPreset ] " warmUP " == Left DuplicateName
-        , map presetName (validatePresetName [ existingPreset ] "  Daily thirds  ") == Right "Daily thirds"
-        ]
-    , expected: [ true, true, true ]
-    }
-  assertEqual
-    { actual:
-        decodedLegacyData
-          <> [ rejectsFutureData, rejectsMalformedData, rejectsMalformedPreset, rejectsMalformedVersion ]
-          <> rejectsUnknownTags
-          <> [ rejectsInvalidConfig ]
-    , expected: [ true, true, true, true, true, true, true, true, true, true, true, true ]
-    }
+  assertTrue' "blank preset names are rejected" (validatePresetName [] "   " == Left EmptyName)
+  assertTrue' "preset names are unique ignoring case"
+    (validatePresetName [ existingPreset ] " warmUP " == Left DuplicateName)
+  assertTrue' "preset names are trimmed"
+    (map presetName (validatePresetName [ existingPreset ] "  Daily thirds  ") == Right "Daily thirds")
+  case decodeStoredAppData legacyStoredData of
+    Left _ -> assertTrue' "legacy settings decode" false
+    Right value -> do
+      assertTrue' "active preset ID is decoded" (value.activePresetId == Just (presetId "legacy-preset"))
+      assertTrue' "answer count is decoded" (value.config.answerCount == AFew)
+      assertTrue' "missing progression receives its migration default"
+        (value.config.quizProgression == AutomaticProgression)
+      assertEqual { actual: Array.length value.presets, expected: 1 }
+  assertTrue' "future versions are rejected" rejectsFutureData
+  assertTrue' "malformed settings are rejected" rejectsMalformedData
+  assertTrue' "malformed presets are rejected" rejectsMalformedPreset
+  assertTrue' "malformed versions are rejected" rejectsMalformedVersion
+  assertTrue' "unknown vocal ranges are rejected" rejectsUnknownVocalRange
+  assertTrue' "unknown answer counts are rejected" rejectsUnknownAnswerCount
+  assertTrue' "unknown intervals are rejected" rejectsUnknownInterval
+  assertTrue' "invalid exercise configurations are rejected" rejectsInvalidConfig
