@@ -2,11 +2,10 @@ import { PitchDetector } from "pitchy";
 
 // The analyser exposes its time-domain window as a mutable Float32Array.
 
-const decibels = (buffer) => {
+const rootMeanSquare = (buffer) => {
   let sum = 0;
   for (const value of buffer) sum += value * value;
-  const rms = Math.sqrt(sum / buffer.length);
-  return 20 * Math.log10(Math.max(rms, 1e-8));
+  return Math.sqrt(sum / buffer.length);
 };
 
 const stopMonitor = (monitor) => {
@@ -58,8 +57,8 @@ export const startImpl = (onSample) => (onError, onSuccess) => {
         const now = performance.now();
         onSample({
           clarity,
-          decibels: decibels(input),
           frequency,
+          rms: rootMeanSquare(input),
           time: now,
         })();
         monitor.animationFrame = requestAnimationFrame(readPitch);

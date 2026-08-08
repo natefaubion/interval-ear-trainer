@@ -6,7 +6,9 @@ import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..), fromMaybe, isJust)
+import Data.Number (abs)
 import EarTrainer.Audio as Audio
+import EarTrainer.Capability.PitchInput as PitchInput
 import EarTrainer.Config
   ( AnswerCount(..)
   , IntervalSystem(..)
@@ -571,6 +573,14 @@ main = do
           <> rejectsUnknownTags
           <> [ rejectsInvalidConfig ]
     , expected: [ true, true, true, true, true, true, true, true, true, true, true, true ]
+    }
+  assertEqual
+    { actual:
+        [ PitchInput.decibelsFromRms 1.0 == 0.0
+        , abs (PitchInput.decibelsFromRms 0.1 + 20.0) < 1.0e-9
+        , abs (PitchInput.decibelsFromRms 0.0 + 160.0) < 1.0e-9
+        ]
+    , expected: [ true, true, true ]
     }
   assertEqual
     { actual:
