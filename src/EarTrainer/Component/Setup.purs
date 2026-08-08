@@ -57,6 +57,7 @@ import EarTrainer.Music
 import EarTrainer.Quiz as Quiz
 import EarTrainer.Settings as Settings
 import EarTrainer.UI.Button as Button
+import EarTrainer.UI.Dialog as Dialog
 import EarTrainer.UI.SettingGroup as SettingGroup
 import Effect.Aff.Class (class MonadAff)
 import Halogen as H
@@ -446,11 +447,11 @@ component =
       ]
 
   renderSavePresetDialog state =
-    HH.dialog
-      [ HP.ref savePresetDialogRef
-      , HP.class_ (H.ClassName "preset-dialog")
-      , HP.attr (H.AttrName "aria-labelledby") "save-preset-title"
-      ]
+    Dialog.dialog
+      { classes: [ H.ClassName "preset-dialog" ]
+      , labelledBy: "save-preset-title"
+      , ref: savePresetDialogRef
+      }
       [ HH.h3 [ HP.id "save-preset-title" ] [ HH.text "Save preset" ]
       , HH.label
           [ HP.class_ (H.ClassName "dialog-field") ]
@@ -479,11 +480,11 @@ component =
       ]
 
   renderDeletePresetDialog state =
-    HH.dialog
-      [ HP.ref deletePresetDialogRef
-      , HP.class_ (H.ClassName "preset-dialog")
-      , HP.attr (H.AttrName "aria-labelledby") "delete-preset-title"
-      ]
+    Dialog.dialog
+      { classes: [ H.ClassName "preset-dialog" ]
+      , labelledBy: "delete-preset-title"
+      , ref: deletePresetDialogRef
+      }
       [ HH.h3
           [ HP.id "delete-preset-title" ]
           [ HH.text case activePreset state of
