@@ -34,35 +34,16 @@ const sampleUrls = {
 };
 
 const sampleBaseUrl = new URL("./audio/salamander/", document.baseURI).href;
-const midiNote = (midi) => Tone.Frequency(midi, "midi").toNote();
 const samplerReady = new WeakMap();
 const playbackState = new WeakMap();
 let contextConfigured = false;
 
-const beginPlayback = (sampler) => {
-  const previous = playbackState.get(sampler) ?? { generation: 0, timers: [] };
-  previous.timers.forEach(clearTimeout);
-  const generation = previous.generation + 1;
-  playbackState.set(sampler, { generation, timers: [] });
+const cancelPlayback = (sampler) => {
+  const state = playbackState.get(sampler);
+  if (state) state.cancelled = true;
+  state?.timers.forEach(clearTimeout);
+  playbackState.delete(sampler);
   sampler.releaseAll();
-  return generation;
-};
-
-const isCurrentPlayback = (sampler, generation) =>
-  playbackState.get(sampler)?.generation === generation;
-
-const schedulePlayback = (sampler, generation, delay, action) => {
-  const timer = setTimeout(() => {
-    if (isCurrentPlayback(sampler, generation)) action();
-  }, delay);
-  playbackState.get(sampler)?.timers.push(timer);
-};
-
-const triggerNote = (sampler, generation, note, duration, time = Tone.now()) => {
-  sampler.triggerAttack(note, time);
-  schedulePlayback(sampler, generation, duration * 1000, () =>
-    sampler.triggerRelease(note),
-  );
 };
 
 export const createSampler = () => {
@@ -91,60 +72,46 @@ export const createSampler = () => {
       ),
   }).toDestination();
   samplerReady.set(sampler, ready);
-  playbackState.set(sampler, { generation: 0, timers: [] });
   return sampler;
 };
 
-export const playIntervalImpl = (sampler) => (rootMidi) => (targetMidi) => (mode) => (onStarted) => (onError) => () => {
-  const generation = beginPlayback(sampler);
+export const playImpl = (sampler) => (events) => (durationMilliseconds) => (onError, onSuccess) => {
+  cancelPlayback(sampler);
+  const state = { cancelled: false, timers: [] };
+  playbackState.set(sampler, state);
+
   void (async () => {
     try {
       await Tone.start();
       await samplerReady.get(sampler);
-      if (!isCurrentPlayback(sampler, generation)) return;
+      if (state.cancelled) return;
 
-      const root = midiNote(rootMidi);
-      const target = midiNote(targetMidi);
-      const now = Tone.now() + 0.05;
-
-      if (mode === "harmonic") {
-        triggerNote(sampler, generation, [root, target], 0.9, now);
-      } else {
-        triggerNote(sampler, generation, root, 0.65, now);
-        schedulePlayback(sampler, generation, 800, () =>
-          triggerNote(sampler, generation, target, 0.65),
-        );
+      for (const event of events) {
+        const timer = setTimeout(() => {
+          if (state.cancelled) return;
+          const notes = event.notes.map((midi) => Tone.Frequency(midi, "midi").toNote());
+          sampler.triggerAttackRelease(notes, event.durationMilliseconds / 1000);
+        }, event.startMilliseconds);
+        state.timers.push(timer);
       }
-      onStarted();
+      state.timers.push(setTimeout(() => {
+        if (state.cancelled) return;
+        playbackState.delete(sampler);
+        onSuccess();
+      }, durationMilliseconds));
     } catch (error) {
-      if (!isCurrentPlayback(sampler, generation)) return;
-      const message = error instanceof Error ? error.message : String(error);
-      onError(message)();
+      if (!state.cancelled) {
+        cancelPlayback(sampler);
+        onError(error instanceof Error ? error : new Error(String(error)));
+      }
     }
   })();
+
+  return (_error, _onError, onCancel) => {
+    state.cancelled = true;
+    if (playbackState.get(sampler) === state) cancelPlayback(sampler);
+    onCancel();
+  };
 };
 
-export const playRootImpl = (sampler) => (rootMidi) => (onStarted) => (onError) => () => {
-  const generation = beginPlayback(sampler);
-  void (async () => {
-    try {
-      await Tone.start();
-      await samplerReady.get(sampler);
-      if (!isCurrentPlayback(sampler, generation)) return;
-
-      triggerNote(sampler, generation, midiNote(rootMidi), 0.9, Tone.now() + 0.05);
-      onStarted();
-    } catch (error) {
-      if (!isCurrentPlayback(sampler, generation)) return;
-      const message = error instanceof Error ? error.message : String(error);
-      onError(message)();
-    }
-  })();
-};
-
-export const stop = (sampler) => () => {
-  const previous = playbackState.get(sampler) ?? { generation: 0, timers: [] };
-  previous.timers.forEach(clearTimeout);
-  playbackState.set(sampler, { generation: previous.generation + 1, timers: [] });
-  sampler.releaseAll();
-};
+export const stop = (sampler) => () => cancelPlayback(sampler);

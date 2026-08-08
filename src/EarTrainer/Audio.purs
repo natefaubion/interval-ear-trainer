@@ -12,47 +12,54 @@ import Prelude
 
 import EarTrainer.Music (Pitch, PlaybackMode(..), midiNumber)
 import Effect (Effect)
+import Effect.Aff (Aff)
+import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
 
 foreign import data Sampler :: Type
 
+type NoteEvent =
+  { durationMilliseconds :: Number
+  , notes :: Array Int
+  , startMilliseconds :: Number
+  }
+
 foreign import createSampler :: Effect Sampler
-foreign import playIntervalImpl
-  :: Sampler
-  -> Int
-  -> Int
-  -> String
-  -> Effect Unit
-  -> (String -> Effect Unit)
-  -> Effect Unit
-
-foreign import playRootImpl
-  :: Sampler
-  -> Int
-  -> Effect Unit
-  -> (String -> Effect Unit)
-  -> Effect Unit
-
+foreign import playImpl :: Sampler -> Array NoteEvent -> Number -> EffectFnAff Unit
 foreign import stop :: Sampler -> Effect Unit
 
-playInterval
-  :: Sampler
-  -> PlaybackMode
-  -> Pitch
-  -> Pitch
-  -> Effect Unit
-  -> (String -> Effect Unit)
-  -> Effect Unit
-playInterval sampler mode root target onStarted onError =
-  playIntervalImpl sampler (midiNumber root) (midiNumber target) (modeCode mode) onStarted onError
+playInterval :: Sampler -> PlaybackMode -> Pitch -> Pitch -> Aff Unit
+playInterval sampler mode root target =
+  fromEffectFnAff (playImpl sampler (intervalPlan mode (midiNumber root) (midiNumber target)) (playbackDurationMilliseconds mode))
 
-playRoot :: Sampler -> Pitch -> Effect Unit -> (String -> Effect Unit) -> Effect Unit
-playRoot sampler root onStarted onError =
-  playRootImpl sampler (midiNumber root) onStarted onError
+playRoot :: Sampler -> Pitch -> Aff Unit
+playRoot sampler root =
+  fromEffectFnAff
+    ( playImpl sampler
+        [ { durationMilliseconds: rootPlaybackDurationMilliseconds
+          , notes: [ midiNumber root ]
+          , startMilliseconds: 0.0
+          }
+        ]
+        rootPlaybackDurationMilliseconds
+    )
 
-modeCode :: PlaybackMode -> String
-modeCode MelodicAscending = "melodic"
-modeCode MelodicDescending = "melodic"
-modeCode Harmonic = "harmonic"
+intervalPlan :: PlaybackMode -> Int -> Int -> Array NoteEvent
+intervalPlan Harmonic root target =
+  [ { durationMilliseconds: 900.0
+    , notes: [ root, target ]
+    , startMilliseconds: 0.0
+    }
+  ]
+intervalPlan _ root target =
+  [ { durationMilliseconds: 650.0
+    , notes: [ root ]
+    , startMilliseconds: 0.0
+    }
+  , { durationMilliseconds: 650.0
+    , notes: [ target ]
+    , startMilliseconds: 800.0
+    }
+  ]
 
 playbackDurationMilliseconds :: PlaybackMode -> Number
 playbackDurationMilliseconds Harmonic = 900.0
