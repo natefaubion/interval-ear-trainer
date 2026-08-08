@@ -15,8 +15,8 @@ import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
 import EarTrainer.Capability.Audio as AudioCapability
-import EarTrainer.Capability.Notation as NotationCapability
 import EarTrainer.Capability.PitchInput as PitchInput
+import EarTrainer.Component.Notation as NotationComponent
 import EarTrainer.Config
   ( AnswerDisplay(..)
   , ExerciseConfig
@@ -47,6 +47,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Subscription as HS
+import Type.Proxy (Proxy(..))
 import Web.DOM.Element as Element
 import Web.HTML.HTMLElement as HTMLElement
 
@@ -108,14 +109,22 @@ data Action
   | RetryAutomatically
   | EditSetup
 
-notationRef :: H.RefLabel
-notationRef = H.RefLabel "prompt-notation"
-
 practiceContentRef :: H.RefLabel
 practiceContentRef = H.RefLabel "practice-content"
 
-choiceNotationRef :: Int -> H.RefLabel
-choiceNotationRef index = H.RefLabel ("choice-notation-" <> show index)
+data NotationSlot
+  = PromptNotation
+  | ChoiceNotation Int
+
+derive instance Eq NotationSlot
+derive instance Ord NotationSlot
+
+type Slots =
+  ( notation :: H.Slot NotationComponent.Query Void NotationSlot
+  )
+
+notationSlot :: Proxy "notation"
+notationSlot = Proxy
 
 type Input =
   { config :: ExerciseConfig
@@ -161,7 +170,7 @@ component =
       , sampler: input.sampler
       }
 
-  render :: State -> H.ComponentHTML Action () m
+  render :: State -> H.ComponentHTML Action Slots m
   render = renderPractice
 
   renderPractice state =
@@ -192,10 +201,8 @@ component =
           [ HH.div
               [ HP.class_ (H.ClassName "notation-panel") ]
               [ HH.div
-                  [ HP.ref notationRef
-                  , HP.class_ (H.ClassName "notation-canvas")
-                  ]
-                  []
+                  [ HP.class_ (H.ClassName "notation-canvas") ]
+                  [ HH.slot_ notationSlot PromptNotation NotationComponent.component (promptNotation state) ]
               , if shouldShowIntervalName state then
                   HH.p
                     [ HP.class_ (H.ClassName "completed-interval-name") ]
@@ -309,10 +316,10 @@ component =
             HH.text ""
         , if showNotation then
             HH.div
-              [ HP.ref (choiceNotationRef index)
-              , HP.class_ (H.ClassName "choice-notation")
+              [ HP.class_ (H.ClassName "choice-notation") ]
+              [ HH.slot_ notationSlot (ChoiceNotation index) NotationComponent.component
+                  (Notation.intervalChoice state.prompt.root choice.target)
               ]
-              []
           else
             HH.text ""
         , HH.span
@@ -434,11 +441,10 @@ component =
       && feedback.cents >= -Recognition.defaultRecognitionSettings.toleranceCents
       && feedback.cents <= Recognition.defaultRecognitionSettings.toleranceCents
 
-  handleAction :: Action -> H.HalogenM State Action () Output m Unit
+  handleAction :: Action -> H.HalogenM State Action Slots Output m Unit
   handleAction = case _ of
     Initialize -> do
       state <- H.get
-      renderPromptNotation state.prompt false
       when (state.config.quizProgression == AutomaticProgression) do
         handleAction PlayPrompt
     Finalize -> do
@@ -466,8 +472,6 @@ component =
         , previewFiber = Nothing
         , recognition = Recognition.initialRecognition
         }
-      renderPromptNotation state.prompt
-        (isChoosingAnswer state.captureStatus && quizModeUsesSinging state.config.quizMode)
       fiber <- H.fork do
         result <- H.liftAff $ attempt
           $ AudioCapability.play state.sampler
@@ -488,11 +492,9 @@ component =
       case state.captureStatus of
         PlayingAudio (ResumeAnswers revealed) -> do
           H.modify_ _ { captureStatus = ChoosingAnswer revealed }
-          renderChoiceNotation state.prompt.root state.choices
         PlayingAudio BeginSinging
           | not (quizModeUsesSinging state.config.quizMode) -> do
               H.modify_ _ { captureStatus = ChoosingAnswer [] }
-              renderChoiceNotation state.prompt.root state.choices
         PlayingAudio BeginSinging -> do
           { emitter, listener } <- H.liftEffect HS.create
           void (H.subscribe emitter)
@@ -535,8 +537,6 @@ component =
           incorrect =
             state.recognition.phase /= Recognition.RecognitionIncorrect
               && next.phase == Recognition.RecognitionIncorrect
-          firstAccepted = next.firstMidi /= Nothing
-          firstJustAccepted = state.recognition.firstMidi == Nothing && firstAccepted
         when (detectedGhost /= Nothing) do
           cancelFiber state.ghostFiber
         H.modify_ _
@@ -544,19 +544,6 @@ component =
           , ghostMidi = nextGhost
           , recognition = next
           }
-        when ((detectedGhost /= Nothing && detectedGhost /= state.ghostMidi) || firstJustAccepted) do
-          case nextGhost of
-            Just midi ->
-              let
-                spellingReference = case state.prompt.root, state.prompt.target of
-                  Pitch (PitchClass _ (Accidental rootAccidental)) _,
-                  Pitch (PitchClass _ (Accidental targetAccidental)) _ ->
-                    if rootAccidental /= 0 then state.prompt.root
-                    else if targetAccidental /= 0 then state.prompt.target
-                    else state.prompt.root
-              in
-                renderGhostNotation state.prompt (pitchFromMidiLike spellingReference midi) firstAccepted
-            Nothing -> renderPromptNotation state.prompt firstAccepted
         when
           ( state.config.ghostMode == GhostOn
               && detectedGhost == Nothing
@@ -576,27 +563,17 @@ component =
         when incorrect do
           cancelFiber state.ghostFiber
           stopMonitor state.monitor
+          let
+            incorrectMidi = map
+              (Recognition.relativeMidi state.config.octavePolicy state.prompt.root next <<< _.midi)
+              next.feedback
           H.modify_ _
             { captureStatus = IntervalError AwaitingInput
             , ghostFiber = Nothing
+            , ghostMidi = incorrectMidi
             , monitor = Nothing
             , recognition = next
             }
-          case next.feedback of
-            Just feedback -> do
-              let
-                midi = Recognition.relativeMidi state.config.octavePolicy state.prompt.root next feedback.midi
-                spellingReference = case state.prompt.root, state.prompt.target of
-                  Pitch (PitchClass _ (Accidental rootAccidental)) _,
-                  Pitch (PitchClass _ (Accidental targetAccidental)) _ ->
-                    if rootAccidental /= 0 then state.prompt.root
-                    else if targetAccidental /= 0 then state.prompt.target
-                    else state.prompt.root
-              renderIncorrectNotation
-                state.prompt
-                (pitchFromMidiLike spellingReference midi)
-                firstAccepted
-            Nothing -> pure unit
           scheduleAutomaticRetry state
     ClearGhost -> do
       state <- H.get
@@ -608,7 +585,6 @@ component =
         do
           when (state.config.ghostMode == GhostOn) do
             H.modify_ _ { ghostMidi = Nothing }
-            renderPromptNotation state.prompt (state.recognition.phase /= Recognition.WaitingForFirst)
     FinishSinging -> do
       state <- H.get
       when
@@ -619,15 +595,12 @@ component =
           let persistGhost = state.config.ghostMode == GhostPersist
           if not (quizModeUsesRecognition state.config.quizMode) then do
             H.modify_ _ { captureStatus = AnswerComplete [] AwaitingInput, ghostMidi = Nothing }
-            renderCompletedNotation state.prompt
             scheduleAutomaticAdvance state
           else do
             H.modify_ _
               { captureStatus = ChoosingAnswer []
               , ghostMidi = if persistGhost then state.ghostMidi else Nothing
               }
-            unless persistGhost (renderPromptNotation state.prompt true)
-            renderChoiceNotation state.prompt.root state.choices
     MicrophoneStarted monitor -> do
       state <- H.get
       H.modify_ _ { captureFiber = Nothing }
@@ -667,7 +640,6 @@ component =
                     else ChoosingAnswer revealed
                 }
               when correct do
-                renderCompletedNotation state.prompt
                 scheduleAutomaticAdvance state
         _ -> pure unit
     NextPrompt -> do
@@ -692,7 +664,6 @@ component =
         , recognition = Recognition.initialRecognition
         }
       resetPracticeScroll
-      renderPromptNotation prompt false
     AdvanceAutomatically -> do
       state <- H.get
       H.modify_ _ { progressionFiber = Nothing }
@@ -770,44 +741,27 @@ component =
         handleAction RetryAutomatically
       H.modify_ _ { progressionFiber = Just fiber }
 
-  renderPromptNotation prompt rootAccepted = do
-    maybeElement <- H.getHTMLElementRef notationRef
-    case maybeElement of
-      Nothing -> pure unit
-      Just htmlElement ->
-        H.liftEffect (NotationCapability.render (HTMLElement.toElement htmlElement) (Notation.prompt prompt.root prompt.target rootAccepted))
+  promptNotation state =
+    let
+      rootAccepted =
+        state.recognition.phase /= Recognition.WaitingForFirst
+          || (quizModeUsesSinging state.config.quizMode && isChoosingAnswer state.captureStatus)
+          || case state.captureStatus of
+            PlayingAudio (ResumeAnswers _) -> quizModeUsesSinging state.config.quizMode
+            _ -> false
+      detected = map
+        (pitchFromMidiLike (spellingReference state.prompt))
+        state.ghostMidi
+    in
+      case state.captureStatus, detected of
+        AnswerComplete _ _, _ -> Notation.completed state.prompt.root state.prompt.target
+        IntervalError _, Just pitch -> Notation.incorrect state.prompt.root state.prompt.target pitch rootAccepted
+        _, Just pitch -> Notation.ghost state.prompt.root state.prompt.target pitch rootAccepted
+        _, Nothing -> Notation.prompt state.prompt.root state.prompt.target rootAccepted
 
-  renderCompletedNotation prompt = do
-    maybeElement <- H.getHTMLElementRef notationRef
-    case maybeElement of
-      Nothing -> pure unit
-      Just htmlElement ->
-        H.liftEffect (NotationCapability.render (HTMLElement.toElement htmlElement) (Notation.completed prompt.root prompt.target))
-
-  renderGhostNotation prompt detected rootAccepted = do
-    maybeElement <- H.getHTMLElementRef notationRef
-    case maybeElement of
-      Nothing -> pure unit
-      Just htmlElement ->
-        H.liftEffect
-          (NotationCapability.render (HTMLElement.toElement htmlElement) (Notation.ghost prompt.root prompt.target detected rootAccepted))
-
-  renderIncorrectNotation prompt detected rootAccepted = do
-    maybeElement <- H.getHTMLElementRef notationRef
-    case maybeElement of
-      Nothing -> pure unit
-      Just htmlElement ->
-        H.liftEffect
-          ( NotationCapability.render
-              (HTMLElement.toElement htmlElement)
-              (Notation.incorrect prompt.root prompt.target detected rootAccepted)
-          )
-
-  renderChoiceNotation root choices =
-    for_ (Array.mapWithIndex (\index choice -> { choice, index }) choices) \item -> do
-      maybeElement <- H.getHTMLElementRef (choiceNotationRef item.index)
-      case maybeElement of
-        Nothing -> pure unit
-        Just htmlElement ->
-          H.liftEffect
-            (NotationCapability.render (HTMLElement.toElement htmlElement) (Notation.intervalChoice root item.choice.target))
+  spellingReference prompt = case prompt.root, prompt.target of
+    Pitch (PitchClass _ (Accidental rootAccidental)) _,
+    Pitch (PitchClass _ (Accidental targetAccidental)) _ ->
+      if rootAccidental /= 0 then prompt.root
+      else if targetAccidental /= 0 then prompt.target
+      else prompt.root
