@@ -6,6 +6,7 @@ import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..))
+import EarTrainer.Audio as Audio
 import EarTrainer.Config
   ( AnswerCount(..)
   , IntervalSystem(..)
@@ -60,6 +61,9 @@ main = do
   let
     c4 = pitch C (Accidental 0) 4
     e4 = pitch E (Accidental 0) 4
+    melodicPlan = Audio.intervalPlan MelodicAscending c4 e4
+    harmonicPlan = Audio.intervalPlan Harmonic c4 e4
+    rootPlan = Audio.rootPlan c4
     b4 = pitch B (Accidental 0) 4
     c4Sample = { frequency: 261.625565, clarity: 0.98 }
     c3Sample = { frequency: 130.812783, clarity: 0.98 }
@@ -481,6 +485,17 @@ main = do
   assertEqual
     { actual: decodedLegacyData <> [ rejectsFutureData, rejectsMalformedData, rejectsMalformedVersion ]
     , expected: [ true, true, true, true, true, true, true ]
+    }
+  assertEqual
+    { actual:
+        [ melodicPlan.durationMilliseconds == 1450.0
+        , map _.startMilliseconds melodicPlan.events == [ 0.0, 800.0 ]
+        , map _.notes melodicPlan.events == [ [ 60 ], [ 64 ] ]
+        , harmonicPlan.durationMilliseconds == 900.0
+        , map _.notes harmonicPlan.events == [ [ 60, 64 ] ]
+        , map _.notes rootPlan.events == [ [ 60 ] ]
+        ]
+    , expected: [ true, true, true, true, true, true ]
     }
   assertEqual
     { actual:

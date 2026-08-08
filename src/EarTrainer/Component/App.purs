@@ -4,7 +4,7 @@ import Prelude
 
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), isJust)
-import EarTrainer.Audio as Audio
+import EarTrainer.Capability.Audio as Audio
 import EarTrainer.Component.Practice as Practice
 import EarTrainer.Component.Setup as Setup
 import EarTrainer.Config (ExerciseConfig, defaultConfig)

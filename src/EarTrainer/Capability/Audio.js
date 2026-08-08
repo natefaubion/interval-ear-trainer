@@ -1,5 +1,7 @@
 import * as Tone from "tone";
 
+// Tone owns the sampler and audio clock; PureScript supplies the playback plan.
+
 const sampleUrls = {
   A0: "A0v8.mp3",
   A1: "A1v8.mp3",

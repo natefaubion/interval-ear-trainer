@@ -14,6 +14,7 @@ import Data.Int as Int
 import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
+import EarTrainer.Capability.Audio as AudioCapability
 import EarTrainer.Capability.PitchInput as PitchInput
 import EarTrainer.Config
   ( AnswerDisplay(..)
@@ -85,7 +86,7 @@ type State =
   , progressionFiber :: Maybe H.ForkId
   , previewFiber :: Maybe H.ForkId
   , recognition :: Recognition.Recognition
-  , sampler :: Audio.Sampler
+  , sampler :: AudioCapability.Sampler
   }
 
 data Action
@@ -117,7 +118,7 @@ choiceNotationRef index = H.RefLabel ("choice-notation-" <> show index)
 
 type Input =
   { config :: ExerciseConfig
-  , sampler :: Audio.Sampler
+  , sampler :: AudioCapability.Sampler
   , seed :: Int
   }
 
@@ -443,7 +444,7 @@ component =
       state <- H.get
       cancelTasks state
       stopMonitor state.monitor
-      H.liftEffect (Audio.stop state.sampler)
+      H.liftEffect (AudioCapability.stop state.sampler)
     PlayPrompt -> do
       state <- H.get
       cancelTasks state
@@ -467,9 +468,11 @@ component =
       renderPromptNotation state.prompt
         (isChoosingAnswer state.captureStatus && quizModeUsesSinging state.config.quizMode)
       fiber <- H.fork do
-        result <- H.liftAff $ attempt $
-          if state.config.quizMode == Audiation then Audio.playRoot state.sampler state.prompt.root
-          else Audio.playInterval state.sampler state.prompt.mode state.prompt.root state.prompt.target
+        result <- H.liftAff $ attempt
+          $ AudioCapability.play state.sampler
+          $
+            if state.config.quizMode == Audiation then Audio.rootPlan state.prompt.root
+            else Audio.intervalPlan state.prompt.mode state.prompt.root state.prompt.target
         case result of
           Left error -> handleAction (AudioFailed (message error))
           Right _ -> do
@@ -651,7 +654,7 @@ component =
                   cancelFiber state.previewFiber
                   fiber <- H.fork do
                     void $ H.liftAff $ attempt $
-                      Audio.playInterval state.sampler state.prompt.mode state.prompt.root choice.target
+                      AudioCapability.play state.sampler (Audio.intervalPlan state.prompt.mode state.prompt.root choice.target)
                   H.modify_ _ { previewFiber = Just fiber }
                 Nothing -> pure unit
               let
@@ -669,7 +672,7 @@ component =
     NextPrompt -> do
       state <- H.get
       cancelTasks state
-      H.liftEffect (Audio.stop state.sampler)
+      H.liftEffect (AudioCapability.stop state.sampler)
       seed <- H.liftEffect (randomInt 0 2147483647)
       let
         prompt = Quiz.makePrompt seed state.config
@@ -710,7 +713,7 @@ component =
       state <- H.get
       cancelTasks state
       stopMonitor state.monitor
-      H.liftEffect (Audio.stop state.sampler)
+      H.liftEffect (AudioCapability.stop state.sampler)
       H.raise BackToSetup
 
   stopMonitor = case _ of
@@ -747,7 +750,7 @@ component =
         let
           waitMilliseconds =
             if not (quizModeUsesRecognition state.config.quizMode) then 1200.0
-            else Audio.playbackDurationMilliseconds state.prompt.mode + 500.0
+            else (Audio.intervalPlan state.prompt.mode state.prompt.root state.prompt.target).durationMilliseconds + 500.0
         H.liftAff (delay (Milliseconds waitMilliseconds))
         handleAction AdvanceAutomatically
       H.modify_ _ { progressionFiber = Just fiber }
