@@ -3,7 +3,21 @@ const databaseVersion = 1;
 const storeName = "application";
 const stateKey = "state";
 
-const canceler = (_error, _onError, onSuccess) => onSuccess();
+const fromPromise = (promise, onError, onSuccess) => {
+  let cancelled = false;
+  promise.then(
+    (value) => {
+      if (!cancelled) onSuccess(value);
+    },
+    (error) => {
+      if (!cancelled) onError(error);
+    },
+  );
+  return (_error, _onError, onCancel) => {
+    cancelled = true;
+    onCancel();
+  };
+};
 
 const openDatabase = () =>
   new Promise((resolve, reject) => {
@@ -46,25 +60,24 @@ const writeState = async (state) => {
 };
 
 export const loadImpl = (just) => (nothing) => (onError, onSuccess) => {
-  readState()
-    .then((value) => onSuccess(value == null ? nothing : just(value)))
-    .catch(onError);
-  return canceler;
+  return fromPromise(
+    readState().then((value) => (value == null ? nothing : just(value))),
+    onError,
+    onSuccess,
+  );
 };
 
-export const saveImpl = (state) => (onError, onSuccess) => {
-  writeState(state).then(() => onSuccess()).catch(onError);
-  return canceler;
-};
+export const saveImpl = (state) => (onError, onSuccess) =>
+  fromPromise(writeState(state), onError, onSuccess);
 
 export const requestPersistenceImpl = (onError, onSuccess) => {
-  Promise.resolve()
-    .then(async () => {
+  return fromPromise(
+    Promise.resolve().then(async () => {
       if (!navigator.storage?.persist) return false;
       if (await navigator.storage.persisted?.()) return true;
       return navigator.storage.persist();
-    })
-    .then(onSuccess)
-    .catch(onError);
-  return canceler;
+    }),
+    onError,
+    onSuccess,
+  );
 };
