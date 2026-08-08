@@ -449,11 +449,10 @@ component =
   renderSavePresetDialog state =
     Dialog.dialog
       { classes: [ H.ClassName "preset-dialog" ]
-      , labelledBy: "save-preset-title"
       , ref: savePresetDialogRef
+      , title: "Save preset"
       }
-      [ HH.h3 [ HP.id "save-preset-title" ] [ HH.text "Save preset" ]
-      , HH.label
+      [ HH.label
           [ HP.class_ (H.ClassName "dialog-field") ]
           [ HH.span_ [ HH.text "Preset name" ]
           , HH.input
@@ -480,31 +479,30 @@ component =
       ]
 
   renderDeletePresetDialog state =
-    Dialog.dialog
-      { classes: [ H.ClassName "preset-dialog" ]
-      , labelledBy: "delete-preset-title"
-      , ref: deletePresetDialogRef
-      }
-      [ HH.h3
-          [ HP.id "delete-preset-title" ]
-          [ HH.text case activePreset state of
-              Nothing -> "Delete preset?"
-              Just preset -> "Delete “" <> preset.name <> "”?"
-          ]
-      , HH.div
-          [ HP.class_ (H.ClassName "dialog-actions") ]
-          [ Button.button
-              { action: RootCloseDeletePreset, classes: [], disabled: false, variant: Button.Secondary }
-              [ HH.text "Cancel" ]
-          , Button.button
-              { action: RootConfirmDeletePreset
-              , classes: [ H.ClassName "danger-button" ]
-              , disabled: isNothing state.activePresetId
-              , variant: Button.Primary
-              }
-              [ HH.text "Delete" ]
-          ]
-      ]
+    let
+      title = case activePreset state of
+        Nothing -> "Delete preset?"
+        Just preset -> "Delete “" <> preset.name <> "”?"
+    in
+      Dialog.dialog
+        { classes: [ H.ClassName "preset-dialog" ]
+        , ref: deletePresetDialogRef
+        , title
+        }
+        [ HH.div
+            [ HP.class_ (H.ClassName "dialog-actions") ]
+            [ Button.button
+                { action: RootCloseDeletePreset, classes: [], disabled: false, variant: Button.Secondary }
+                [ HH.text "Cancel" ]
+            , Button.button
+                { action: RootConfirmDeletePreset
+                , classes: [ H.ClassName "danger-button" ]
+                , disabled: isNothing state.activePresetId
+                , variant: Button.Primary
+                }
+                [ HH.text "Delete" ]
+            ]
+        ]
 
   activePreset state = case state.activePresetId of
     Nothing -> Nothing

@@ -6,11 +6,12 @@ module EarTrainer.UI.Dialog
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
+import Prelude ((<>))
 
 type DialogProps =
   { classes :: Array H.ClassName
-  , labelledBy :: String
   , ref :: H.RefLabel
+  , title :: String
   }
 
 dialog
@@ -22,6 +23,6 @@ dialog props children =
   HH.dialog
     [ HP.ref props.ref
     , HP.classes props.classes
-    , HP.attr (H.AttrName "aria-labelledby") props.labelledBy
+    , HP.attr (H.AttrName "aria-label") props.title
     ]
-    children
+    ([ HH.h3_ [ HH.text props.title ] ] <> children)
