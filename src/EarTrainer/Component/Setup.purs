@@ -54,6 +54,7 @@ import EarTrainer.Music
 import EarTrainer.Quiz as Quiz
 import EarTrainer.Settings as Settings
 import EarTrainer.UI.Button as Button
+import EarTrainer.UI.SettingGroup as SettingGroup
 import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.HTML as HH
@@ -175,9 +176,11 @@ component =
               Just message -> HH.p [ HP.class_ (H.ClassName "storage-error") ] [ HH.text message ]
           , if Array.null state.presets then HH.text ""
             else
-              rootSettingGroup
-                "Presets"
-                "Apply a saved exercise setup."
+              SettingGroup.settingGroup
+                { description: "Apply a saved exercise setup."
+                , title: "Presets"
+                , validation: Nothing
+                }
                 ( [ rootChoiceButton (isNothing state.activePresetId) (RootSelectPreset "") "Custom" ]
                     <> map
                       (\preset -> rootChoiceButton (state.activePresetId == Just preset.id) (RootSelectPreset preset.id) preset.name)
@@ -195,10 +198,11 @@ component =
                           ]
                       ]
                 )
-                Nothing
-          , rootSettingGroup
-              "Quiz mode"
-              "Choose which parts of the exercise to practice."
+          , SettingGroup.settingGroup
+              { description: "Choose which parts of the exercise to practice."
+              , title: "Quiz mode"
+              , validation: Nothing
+              }
               [ rootChoiceButton
                   (state.config.quizMode == SingingAndRecognition)
                   (RootSelectQuizMode SingingAndRecognition)
@@ -207,10 +211,11 @@ component =
               , rootChoiceButton (state.config.quizMode == RecognitionOnly) (RootSelectQuizMode RecognitionOnly) "Recognition only"
               , rootChoiceButton (state.config.quizMode == Audiation) (RootSelectQuizMode Audiation) "Audiation"
               ]
-              Nothing
-          , rootSettingGroup
-              "Quiz progression"
-              "Choose how the next interval begins after a correct answer."
+          , SettingGroup.settingGroup
+              { description: "Choose how the next interval begins after a correct answer."
+              , title: "Quiz progression"
+              , validation: Nothing
+              }
               [ rootChoiceButton
                   (state.config.quizProgression == AutomaticProgression)
                   (RootSelectQuizProgression AutomaticProgression)
@@ -220,23 +225,25 @@ component =
                   (RootSelectQuizProgression ManualProgression)
                   "Manual"
               ]
-              Nothing
           , if quizModeUsesRecognition state.config.quizMode then
-              rootSettingGroup
-                "Number of available answers"
-                "Choose how many interval choices are shown."
+              SettingGroup.settingGroup
+                { description: "Choose how many interval choices are shown."
+                , title: "Number of available answers"
+                , validation: Nothing
+                }
                 [ rootChoiceButton (state.config.answerCount == AFew) (RootSelectAnswerCount AFew) "A few"
                 , rootChoiceButton
                     (state.config.answerCount == AllSelected)
                     (RootSelectAnswerCount AllSelected)
                     "All selected intervals"
                 ]
-                Nothing
             else HH.text ""
           , if quizModeUsesRecognition state.config.quizMode then
-              rootSettingGroup
-                "Answer display"
-                "Choose how interval choices are presented."
+              SettingGroup.settingGroup
+                { description: "Choose how interval choices are presented."
+                , title: "Answer display"
+                , validation: Nothing
+                }
                 [ rootChoiceButton
                     (state.config.answerDisplay == AnswerNotation)
                     (RootSelectAnswerDisplay AnswerNotation)
@@ -250,11 +257,12 @@ component =
                     (RootSelectAnswerDisplay AnswerBoth)
                     "Both"
                 ]
-                Nothing
             else HH.text ""
-          , rootSettingGroup
-              "Note selection"
-              "Choose which notes may begin an exercise, or use a major-key preset."
+          , SettingGroup.settingGroup
+              { description: "Choose which notes may begin an exercise, or use a major-key preset."
+              , title: "Note selection"
+              , validation: if Array.null state.config.rootPitchClasses then Just "Select at least one note." else Nothing
+              }
               ( map (rootRootButton state.config) allRootPitchClasses
                   <>
                     [ rootSelectionActions
@@ -265,10 +273,11 @@ component =
                     , rootMajorKeySelector state.config
                     ]
               )
-              (if Array.null state.config.rootPitchClasses then Just "Select at least one note." else Nothing)
-          , rootSettingGroup
-              "Interval system"
-              "Choose exact interval qualities or derive their qualities from the selected notes."
+          , SettingGroup.settingGroup
+              { description: "Choose exact interval qualities or derive their qualities from the selected notes."
+              , title: "Interval system"
+              , validation: Nothing
+              }
               [ rootChoiceButton
                   (state.config.intervalSystem == FromSelectedNotes)
                   (RootSelectIntervalSystem FromSelectedNotes)
@@ -278,20 +287,26 @@ component =
                   (RootSelectIntervalSystem ExactIntervals)
                   "Exact intervals"
               ]
-              Nothing
           , let
               possibleExactIntervals = Quiz.availableExactIntervals state.config
               possibleSizes = Quiz.availableIntervalSizes state.config
               selectedPossibleExactIntervals = Array.filter (flip Array.elem possibleExactIntervals) state.config.intervals
               selectedPossibleSizes = Array.filter (flip Array.elem possibleSizes) state.config.availableIntervals
             in
-              rootSettingGroup
-                "Intervals"
-                ( if state.config.intervalSystem == ExactIntervals then
-                    "Choose the exact intervals that may appear in an exercise."
-                  else
-                    "Choose the basic intervals that may appear in an exercise. Each exact quality is determined by the selected note pair."
-                )
+              SettingGroup.settingGroup
+                { description:
+                    if state.config.intervalSystem == ExactIntervals then
+                      "Choose the exact intervals that may appear in an exercise."
+                    else
+                      "Choose the basic intervals that may appear in an exercise. Each exact quality is determined by the selected note pair."
+                , title: "Intervals"
+                , validation:
+                    if state.config.intervalSystem == ExactIntervals && Array.null selectedPossibleExactIntervals then
+                      Just "Select at least one interval available in this range."
+                    else if state.config.intervalSystem == FromSelectedNotes && Array.null selectedPossibleSizes then
+                      Just "Select at least one interval available from these notes."
+                    else Nothing
+                }
                 ( if state.config.intervalSystem == ExactIntervals then
                     map (rootIntervalButton state.config possibleExactIntervals) allIntervals
                       <>
@@ -315,12 +330,6 @@ component =
                             (Array.null state.config.availableIntervals)
                         ]
                 )
-                ( if state.config.intervalSystem == ExactIntervals && Array.null selectedPossibleExactIntervals then
-                    Just "Select at least one interval available in this range."
-                  else if state.config.intervalSystem == FromSelectedNotes && Array.null selectedPossibleSizes then
-                    Just "Select at least one interval available from these notes."
-                  else Nothing
-                )
           , let
               availableOrientations =
                 if state.config.quizMode == Audiation then
@@ -328,26 +337,30 @@ component =
                 else allPlaybackModes
               selectedOrientations = Array.filter (flip Array.elem state.config.playbackModes) availableOrientations
             in
-              rootSettingGroup
-                "Interval orientation"
-                "Choose the directions or forms intervals may take."
+              SettingGroup.settingGroup
+                { description: "Choose the directions or forms intervals may take."
+                , title: "Interval orientation"
+                , validation: if Array.null selectedOrientations then Just "Select at least one interval orientation." else Nothing
+                }
                 (map (rootModeButton state.config) availableOrientations)
-                (if Array.null selectedOrientations then Just "Select at least one interval orientation." else Nothing)
-          , rootSettingGroup
-              "Playback range"
-              "Choose the written and playback register."
+          , SettingGroup.settingGroup
+              { description: "Choose the written and playback register."
+              , title: "Playback range"
+              , validation:
+                  if
+                    state.config.vocalRange == Custom
+                      && midiNumber state.config.customRange.low > midiNumber state.config.customRange.high then
+                    Just "The lowest note must not be above the highest note."
+                  else Nothing
+              }
               ( map (rootRangeButton state.config) allVocalRangePresets
                   <> if state.config.vocalRange == Custom then [ rootCustomRangeControls state.config ] else []
               )
-              ( if
-                  state.config.vocalRange == Custom
-                    && midiNumber state.config.customRange.low > midiNumber state.config.customRange.high then
-                  Just "The lowest note must not be above the highest note."
-                else Nothing
-              )
-          , rootSettingGroup
-              "Octave matching"
-              "Choose whether the first sung note must match the written register. The second note must always form the written interval from it."
+          , SettingGroup.settingGroup
+              { description: "Choose whether the first sung note must match the written register. The second note must always form the written interval from it."
+              , title: "Octave matching"
+              , validation: Nothing
+              }
               [ rootChoiceButton
                   (state.config.octavePolicy == AnyOctave)
                   (RootSelectOctavePolicy AnyOctave)
@@ -357,10 +370,11 @@ component =
                   (RootSelectOctavePolicy WrittenOctave)
                   "Written octave"
               ]
-              Nothing
-          , rootSettingGroup
-              "Sung pitch on staff"
-              "Choose how the pitch you are currently singing appears on the staff."
+          , SettingGroup.settingGroup
+              { description: "Choose how the pitch you are currently singing appears on the staff."
+              , title: "Sung pitch on staff"
+              , validation: Nothing
+              }
               [ rootChoiceButton (state.config.ghostMode == GhostOn) (RootSelectGhostMode GhostOn) "Show briefly"
               , rootChoiceButton
                   (state.config.ghostMode == GhostPersist)
@@ -368,14 +382,14 @@ component =
                   "Keep visible"
               , rootChoiceButton (state.config.ghostMode == GhostOff) (RootSelectGhostMode GhostOff) "Hidden"
               ]
-              Nothing
-          , rootSettingGroup
-              "Pitch tuner"
-              "Choose whether to show cents feedback while singing."
+          , SettingGroup.settingGroup
+              { description: "Choose whether to show cents feedback while singing."
+              , title: "Pitch tuner"
+              , validation: Nothing
+              }
               [ rootChoiceButton state.config.showPitchTuner (RootSelectPitchTuner true) "Shown"
               , rootChoiceButton (not state.config.showPitchTuner) (RootSelectPitchTuner false) "Hidden"
               ]
-              Nothing
 
           , HH.aside
               [ HP.class_ (H.ClassName "credits-section") ]
@@ -491,17 +505,6 @@ component =
   activePreset state = case state.activePresetId of
     Nothing -> Nothing
     Just id -> Array.find (\preset -> preset.id == id) state.presets
-
-  rootSettingGroup title description controls validation =
-    HH.fieldset
-      [ HP.class_ (H.ClassName "setting-group") ]
-      [ HH.legend_ [ HH.text title ]
-      , HH.p [ HP.class_ (H.ClassName "setting-description") ] [ HH.text description ]
-      , HH.div [ HP.class_ (H.ClassName "choice-grid") ] controls
-      , case validation of
-          Nothing -> HH.text ""
-          Just message -> HH.p [ HP.class_ (H.ClassName "setting-error") ] [ HH.text message ]
-      ]
 
   rootChoiceButton selected action label =
     Button.button
