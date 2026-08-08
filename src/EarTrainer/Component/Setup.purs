@@ -160,7 +160,13 @@ component =
       [ HH.div
           [ HP.class_ (H.ClassName "setup-heading") ]
           [ HH.h2_ [ HH.text "Exercise setup" ]
-          , Button.text Button.Secondary [ H.ClassName "save-preset-button" ] false RootOpenSavePreset "Save preset"
+          , Button.button
+              { action: RootOpenSavePreset
+              , classes: [ H.ClassName "save-preset-button" ]
+              , disabled: false
+              , variant: Button.Secondary
+              }
+              [ HH.text "Save preset" ]
           ]
       , HH.div
           [ HP.class_ (H.ClassName "setup-content") ]
@@ -179,7 +185,13 @@ component =
                     <>
                       [ HH.div
                           [ HP.class_ (H.ClassName "selection-actions") ]
-                          [ Button.text Button.SmallText [] (isNothing state.activePresetId) RootOpenDeletePreset "Delete preset"
+                          [ Button.button
+                              { action: RootOpenDeletePreset
+                              , classes: []
+                              , disabled: isNothing state.activePresetId
+                              , variant: Button.SmallText
+                              }
+                              [ HH.text "Delete preset" ]
                           ]
                       ]
                 )
@@ -397,8 +409,20 @@ component =
           ]
       , HH.footer
           [ HP.class_ (H.ClassName "setup-footer") ]
-          [ Button.text Button.Secondary [] (state.config == defaultConfig) RootResetDefaults "Reset to defaults"
-          , Button.text Button.Primary [] (not (rootConfigValid state.config) || not state.samplerReady) RootBeginPractice "Begin practice"
+          [ Button.button
+              { action: RootResetDefaults
+              , classes: []
+              , disabled: state.config == defaultConfig
+              , variant: Button.Secondary
+              }
+              [ HH.text "Reset to defaults" ]
+          , Button.button
+              { action: RootBeginPractice
+              , classes: []
+              , disabled: not (rootConfigValid state.config) || not state.samplerReady
+              , variant: Button.Primary
+              }
+              [ HH.text "Begin practice" ]
           ]
       , renderSavePresetDialog state
       , renderDeletePresetDialog state
@@ -428,8 +452,12 @@ component =
           Just message -> HH.p [ HP.class_ (H.ClassName "setting-error") ] [ HH.text message ]
       , HH.div
           [ HP.class_ (H.ClassName "dialog-actions") ]
-          [ Button.text Button.Secondary [] false RootCloseSavePreset "Cancel"
-          , Button.text Button.Primary [] false RootSavePreset "Save"
+          [ Button.button
+              { action: RootCloseSavePreset, classes: [], disabled: false, variant: Button.Secondary }
+              [ HH.text "Cancel" ]
+          , Button.button
+              { action: RootSavePreset, classes: [], disabled: false, variant: Button.Primary }
+              [ HH.text "Save" ]
           ]
       ]
 
@@ -447,8 +475,16 @@ component =
           ]
       , HH.div
           [ HP.class_ (H.ClassName "dialog-actions") ]
-          [ Button.text Button.Secondary [] false RootCloseDeletePreset "Cancel"
-          , Button.text Button.Primary [ H.ClassName "danger-button" ] (isNothing state.activePresetId) RootConfirmDeletePreset "Delete"
+          [ Button.button
+              { action: RootCloseDeletePreset, classes: [], disabled: false, variant: Button.Secondary }
+              [ HH.text "Cancel" ]
+          , Button.button
+              { action: RootConfirmDeletePreset
+              , classes: [ H.ClassName "danger-button" ]
+              , disabled: isNothing state.activePresetId
+              , variant: Button.Primary
+              }
+              [ HH.text "Delete" ]
           ]
       ]
 
@@ -468,33 +504,41 @@ component =
       ]
 
   rootChoiceButton selected action label =
-    Button.text (Button.Choice selected) [] false action label
+    Button.button
+      { action, classes: [], disabled: false, variant: Button.Choice selected }
+      [ HH.text label ]
 
   rootSelectionActions selectAction clearAction selectDisabled clearDisabled =
     HH.div
       [ HP.class_ (H.ClassName "selection-actions") ]
-      [ Button.text Button.SmallText [] selectDisabled selectAction "Select All"
-      , Button.text Button.SmallText [] clearDisabled clearAction "Clear"
+      [ Button.button
+          { action: selectAction, classes: [], disabled: selectDisabled, variant: Button.SmallText }
+          [ HH.text "Select All" ]
+      , Button.button
+          { action: clearAction, classes: [], disabled: clearDisabled, variant: Button.SmallText }
+          [ HH.text "Clear" ]
       ]
 
   rootModeButton config mode =
     rootChoiceButton (Array.elem mode config.playbackModes) (RootTogglePlaybackMode mode) (playbackModeName mode)
 
   rootIntervalButton config possible interval =
-    Button.text
-      (Button.Choice (Array.elem interval config.intervals))
-      []
-      (not (Array.elem interval possible))
-      (RootToggleInterval interval)
-      (intervalName interval)
+    Button.button
+      { action: RootToggleInterval interval
+      , classes: []
+      , disabled: not (Array.elem interval possible)
+      , variant: Button.Choice (Array.elem interval config.intervals)
+      }
+      [ HH.text (intervalName interval) ]
 
   rootIntervalSizeButton config possible interval =
-    Button.text
-      (Button.Choice (Array.elem interval config.availableIntervals))
-      []
-      (not (Array.elem interval possible))
-      (RootToggleIntervalSize interval)
-      (intervalSizeName interval)
+    Button.button
+      { action: RootToggleIntervalSize interval
+      , classes: []
+      , disabled: not (Array.elem interval possible)
+      , variant: Button.Choice (Array.elem interval config.availableIntervals)
+      }
+      [ HH.text (intervalSizeName interval) ]
 
   rootRootButton config root =
     rootChoiceButton (Array.elem root config.rootPitchClasses) (RootToggleRoot root) (pitchClassName root)

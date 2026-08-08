@@ -221,15 +221,14 @@ component =
           , Button.button
               { action: footerButtonAction state
               , classes: [ H.ClassName "play-button" ]
-              , content:
-                  [ HH.span
-                      [ HP.class_ (H.ClassName "play-icon") ]
-                      [ HH.text (footerButtonIcon state) ]
-                  , HH.text (footerButtonLabel state)
-                  ]
               , disabled: footerButtonDisabled state
               , variant: Button.Primary
               }
+              [ HH.span
+                  [ HP.class_ (H.ClassName "play-icon") ]
+                  [ HH.text (footerButtonIcon state) ]
+              , HH.text (footerButtonLabel state)
+              ]
           ]
       ]
 
@@ -302,32 +301,31 @@ component =
                   else []
                 )
               <> resultClasses
-        , content:
-            [ if revealed then
-                HH.span
-                  [ HP.classes
-                      [ H.ClassName "choice-result-icon"
-                      , H.ClassName if correct then "result-correct" else "result-incorrect"
-                      ]
-                  ]
-                  []
-              else
-                HH.text ""
-            , if showNotation then
-                HH.div
-                  [ HP.class_ (H.ClassName "choice-notation") ]
-                  [ HH.slot_ notationSlot (ChoiceNotation index) NotationComponent.component
-                      (Notation.intervalChoice state.prompt.root choice.target)
-                  ]
-              else
-                HH.text ""
-            , HH.span
-                [ HP.class_ (H.ClassName "choice-label") ]
-                [ HH.text if showName then intervalName choice.interval else "Interval hidden" ]
-            ]
         , disabled: isAnswerComplete state.captureStatus || isBusy state.captureStatus
         , variant: Button.Unstyled
         }
+        [ if revealed then
+            HH.span
+              [ HP.classes
+                  [ H.ClassName "choice-result-icon"
+                  , H.ClassName if correct then "result-correct" else "result-incorrect"
+                  ]
+              ]
+              []
+          else
+            HH.text ""
+        , if showNotation then
+            HH.div
+              [ HP.class_ (H.ClassName "choice-notation") ]
+              [ HH.slot_ notationSlot (ChoiceNotation index) NotationComponent.component
+                  (Notation.intervalChoice state.prompt.root choice.target)
+              ]
+          else
+            HH.text ""
+        , HH.span
+            [ HP.class_ (H.ClassName "choice-label") ]
+            [ HH.text if showName then intervalName choice.interval else "Interval hidden" ]
+        ]
 
   footerButtonAction state =
     if isAnswerComplete state.captureStatus then NextPrompt else PlayPrompt

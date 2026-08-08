@@ -1,7 +1,7 @@
 module EarTrainer.UI.Button
-  ( Variant(..)
+  ( ButtonProps
+  , Variant(..)
   , button
-  , text
   ) where
 
 import Prelude
@@ -18,40 +18,26 @@ data Variant
   | SmallText
   | Unstyled
 
-type ButtonConfig slots action =
+type ButtonProps action =
   { action :: action
   , classes :: Array H.ClassName
-  , content :: Array (HH.HTML slots action)
   , disabled :: Boolean
   , variant :: Variant
   }
 
-button :: forall slots action. ButtonConfig slots action -> HH.HTML slots action
-button config =
+button
+  :: forall slots action
+   . ButtonProps action
+  -> Array (HH.HTML slots action)
+  -> HH.HTML slots action
+button props children =
   HH.button
     [ HP.type_ HP.ButtonButton
-    , HP.classes (variantClasses config.variant <> config.classes)
-    , HP.disabled config.disabled
-    , HE.onClick \_ -> config.action
+    , HP.classes (variantClasses props.variant <> props.classes)
+    , HP.disabled props.disabled
+    , HE.onClick \_ -> props.action
     ]
-    config.content
-
-text
-  :: forall slots action
-   . Variant
-  -> Array H.ClassName
-  -> Boolean
-  -> action
-  -> String
-  -> HH.HTML slots action
-text variant classes disabled action label =
-  button
-    { action
-    , classes
-    , content: [ HH.text label ]
-    , disabled
-    , variant
-    }
+    children
 
 variantClasses :: Variant -> Array H.ClassName
 variantClasses = case _ of
