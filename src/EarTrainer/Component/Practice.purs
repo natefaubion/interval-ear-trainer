@@ -72,7 +72,7 @@ type State =
   , recognition :: Detection.Recognition
   , revealedChoices :: Array Interval
   , resumeAnswersAfterPlayback :: Boolean
-  , sampler :: Maybe Audio.Sampler
+  , sampler :: Audio.Sampler
   }
 
 data Action
@@ -143,7 +143,7 @@ component =
       , recognition: Detection.initialRecognition
       , revealedChoices: []
       , resumeAnswersAfterPlayback: false
-      , sampler: Just input.sampler
+      , sampler: input.sampler
       }
 
   render :: State -> H.ComponentHTML Action () m
@@ -391,38 +391,33 @@ component =
     Finalize -> do
       state <- H.get
       stopMonitor state.monitor
-      case state.sampler of
-        Nothing -> pure unit
-        Just sampler -> H.liftEffect (Audio.stop sampler)
+      H.liftEffect (Audio.stop state.sampler)
     PlayPrompt -> do
       state <- H.get
       stopMonitor state.monitor
-      case state.sampler of
-        Nothing -> pure unit
-        Just sampler -> do
-          let activityRevision = state.activityRevision + 1
-          H.modify_ _
-            { activityRevision = activityRevision
-            , automaticAdvancePending = false
-            , captureStatus = PlayingAudio
-            , ghostMidi = Nothing
-            , ghostRevision = state.ghostRevision + 1
-            , monitor = Nothing
-            , recognition = Detection.initialRecognition
-            , resumeAnswersAfterPlayback = state.captureStatus == ChoosingAnswer
-            }
-          renderPromptNotation state.prompt
-            (state.captureStatus == ChoosingAnswer && quizModeUsesSinging state.config.quizMode)
-          { emitter, listener } <- H.liftEffect HS.create
-          void (H.subscribe emitter)
-          if state.config.quizMode == Audiation then
-            H.liftEffect $ Audio.playRoot sampler state.prompt.root
-              (HS.notify listener (PlaybackStarted activityRevision))
-              (HS.notify listener <<< AudioFailed activityRevision)
-          else
-            H.liftEffect $ Audio.playInterval sampler state.prompt.mode state.prompt.root state.prompt.target
-              (HS.notify listener (PlaybackStarted activityRevision))
-              (HS.notify listener <<< AudioFailed activityRevision)
+      let activityRevision = state.activityRevision + 1
+      H.modify_ _
+        { activityRevision = activityRevision
+        , automaticAdvancePending = false
+        , captureStatus = PlayingAudio
+        , ghostMidi = Nothing
+        , ghostRevision = state.ghostRevision + 1
+        , monitor = Nothing
+        , recognition = Detection.initialRecognition
+        , resumeAnswersAfterPlayback = state.captureStatus == ChoosingAnswer
+        }
+      renderPromptNotation state.prompt
+        (state.captureStatus == ChoosingAnswer && quizModeUsesSinging state.config.quizMode)
+      { emitter, listener } <- H.liftEffect HS.create
+      void (H.subscribe emitter)
+      if state.config.quizMode == Audiation then
+        H.liftEffect $ Audio.playRoot state.sampler state.prompt.root
+          (HS.notify listener (PlaybackStarted activityRevision))
+          (HS.notify listener <<< AudioFailed activityRevision)
+      else
+        H.liftEffect $ Audio.playInterval state.sampler state.prompt.mode state.prompt.root state.prompt.target
+          (HS.notify listener (PlaybackStarted activityRevision))
+          (HS.notify listener <<< AudioFailed activityRevision)
     PlaybackStarted activityRevision -> do
       state <- H.get
       when
@@ -574,12 +569,12 @@ component =
     ChooseInterval interval -> do
       state <- H.get
       when (state.captureStatus == ChoosingAnswer && not (Array.elem interval state.revealedChoices)) do
-        case state.sampler, Array.find (\choice -> choice.interval == interval) state.choices of
-          Just sampler, Just choice ->
-            H.liftEffect $ Audio.playInterval sampler state.prompt.mode state.prompt.root choice.target
+        case Array.find (\choice -> choice.interval == interval) state.choices of
+          Just choice ->
+            H.liftEffect $ Audio.playInterval state.sampler state.prompt.mode state.prompt.root choice.target
               (pure unit)
               (\_ -> pure unit)
-          _, _ -> pure unit
+          Nothing -> pure unit
         let
           correct = interval == state.prompt.interval
           revealed = Array.snoc state.revealedChoices interval
@@ -593,9 +588,7 @@ component =
           scheduleAutomaticAdvance state
     NextPrompt -> do
       state <- H.get
-      case state.sampler of
-        Nothing -> pure unit
-        Just sampler -> H.liftEffect (Audio.stop sampler)
+      H.liftEffect (Audio.stop state.sampler)
       seed <- H.liftEffect (randomInt 0 2147483647)
       let
         prompt = Quiz.makePrompt seed state.config
