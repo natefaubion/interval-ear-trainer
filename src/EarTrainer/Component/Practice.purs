@@ -14,6 +14,7 @@ import Data.Int as Int
 import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
+import EarTrainer.Capability.PitchInput as PitchInput
 import EarTrainer.Config
   ( AnswerDisplay(..)
   , ExerciseConfig
@@ -33,8 +34,8 @@ import EarTrainer.Music
   , playbackModeName
   )
 import EarTrainer.Notation as Notation
-import EarTrainer.PitchDetection as Detection
 import EarTrainer.Quiz as Quiz
+import EarTrainer.Recognition as Recognition
 import Effect.Aff (attempt, delay)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Exception (message)
@@ -75,13 +76,13 @@ type State =
   , config :: ExerciseConfig
   , ghostFiber :: Maybe H.ForkId
   , ghostMidi :: Maybe Int
-  , monitor :: Maybe Detection.Monitor
-  , observation :: Detection.Observation
+  , monitor :: Maybe PitchInput.Monitor
+  , observation :: Recognition.Observation
   , playbackFiber :: Maybe H.ForkId
   , prompt :: Quiz.Prompt
   , progressionFiber :: Maybe H.ForkId
   , previewFiber :: Maybe H.ForkId
-  , recognition :: Detection.Recognition
+  , recognition :: Recognition.Recognition
   , sampler :: Audio.Sampler
   }
 
@@ -91,8 +92,8 @@ data Action
   | PlayPrompt
   | StartListening
   | AudioFailed String
-  | PitchObserved Detection.RawPitchSample
-  | PitchDetected Detection.PitchSample
+  | PitchObserved PitchInput.Sample
+  | PitchDetected Recognition.PitchSample
   | ClearGhost
   | FinishSinging
   | MicrophoneFailed String
@@ -145,12 +146,12 @@ component =
       , ghostFiber: Nothing
       , ghostMidi: Nothing
       , monitor: Nothing
-      , observation: Detection.initialObservation
+      , observation: Recognition.initialObservation
       , playbackFiber: Nothing
       , prompt: prompt
       , progressionFiber: Nothing
       , previewFiber: Nothing
-      , recognition: Detection.initialRecognition
+      , recognition: Recognition.initialRecognition
       , sampler: input.sampler
       }
 
@@ -319,12 +320,12 @@ component =
   footerButtonDisabled state =
     progressionScheduled state.captureStatus
       || isPlaying state.captureStatus
-      || (state.captureStatus == Listening && state.recognition.phase == Detection.RecognitionComplete)
+      || (state.captureStatus == Listening && state.recognition.phase == Recognition.RecognitionComplete)
 
   footerButtonLabel state
     | isPlaying state.captureStatus = "Playing…"
     | isAnswerComplete state.captureStatus = "Next interval"
-    | state.captureStatus == Listening && state.recognition.phase == Detection.RecognitionComplete = "Next interval"
+    | state.captureStatus == Listening && state.recognition.phase == Recognition.RecognitionComplete = "Next interval"
     | state.config.quizMode == Audiation = "Play root"
     | otherwise = "Play interval"
 
@@ -342,7 +343,7 @@ component =
       else
         "Listen to the interval, then choose."
     PlayingAudio _ -> "Listen carefully."
-    Listening -> Detection.phaseInstruction state.recognition.phase
+    Listening -> Recognition.phaseInstruction state.recognition.phase
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
     IntervalError _ -> "Incorrect pitch."
@@ -416,9 +417,9 @@ component =
         else ""
 
   feedbackInRange feedback =
-    feedback.clarity >= Detection.defaultRecognitionSettings.clarityThreshold
-      && feedback.cents >= -Detection.defaultRecognitionSettings.toleranceCents
-      && feedback.cents <= Detection.defaultRecognitionSettings.toleranceCents
+    feedback.clarity >= Recognition.defaultRecognitionSettings.clarityThreshold
+      && feedback.cents >= -Recognition.defaultRecognitionSettings.toleranceCents
+      && feedback.cents <= Recognition.defaultRecognitionSettings.toleranceCents
 
   handleAction :: Action -> H.HalogenM State Action () Output m Unit
   handleAction = case _ of
@@ -445,11 +446,11 @@ component =
         , ghostFiber = Nothing
         , ghostMidi = Nothing
         , monitor = Nothing
-        , observation = Detection.initialObservation
+        , observation = Recognition.initialObservation
         , playbackFiber = Nothing
         , progressionFiber = Nothing
         , previewFiber = Nothing
-        , recognition = Detection.initialRecognition
+        , recognition = Recognition.initialRecognition
         }
       renderPromptNotation state.prompt
         (isChoosingAnswer state.captureStatus && quizModeUsesSinging state.config.quizMode)
@@ -479,7 +480,7 @@ component =
         PlayingAudio BeginSinging -> do
           { emitter, listener } <- H.liftEffect HS.create
           void (H.subscribe emitter)
-          monitor <- H.liftEffect $ Detection.start
+          monitor <- H.liftEffect $ PitchInput.start
             (HS.notify listener <<< PitchObserved)
             (HS.notify listener <<< MicrophoneFailed)
           H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
@@ -487,7 +488,7 @@ component =
     PitchObserved raw -> do
       state <- H.get
       when (state.captureStatus == Listening) do
-        let observed = Detection.observePitch Detection.defaultCaptureSettings raw state.observation
+        let observed = Recognition.observePitch Recognition.defaultCaptureSettings raw state.observation
         H.modify_ _ { observation = observed.observation }
         for_ observed.sample (handleAction <<< PitchDetected)
     PitchDetected sample -> do
@@ -495,9 +496,9 @@ component =
       when (state.captureStatus == Listening) do
         let
           detectedMidi =
-            if sample.frequency > 0.0 then Just (Detection.nearestMidi sample.frequency) else Nothing
-          next = Detection.stepRecognition
-            Detection.defaultRecognitionSettings
+            if sample.frequency > 0.0 then Just (Recognition.nearestMidi sample.frequency) else Nothing
+          next = Recognition.stepRecognition
+            Recognition.defaultRecognitionSettings
             state.config.octavePolicy
             state.prompt.root
             state.prompt.target
@@ -505,16 +506,16 @@ component =
             state.recognition
           detectedGhost =
             if state.config.ghostMode == GhostOff then Nothing
-            else map (Detection.relativeMidi state.config.octavePolicy state.prompt.root next) detectedMidi
+            else map (Recognition.relativeMidi state.config.octavePolicy state.prompt.root next) detectedMidi
           nextGhost = case detectedGhost of
             Nothing -> state.ghostMidi
             Just midi -> Just midi
           completed =
-            state.recognition.phase /= Detection.RecognitionComplete
-              && next.phase == Detection.RecognitionComplete
+            state.recognition.phase /= Recognition.RecognitionComplete
+              && next.phase == Recognition.RecognitionComplete
           incorrect =
-            state.recognition.phase /= Detection.RecognitionIncorrect
-              && next.phase == Detection.RecognitionIncorrect
+            state.recognition.phase /= Recognition.RecognitionIncorrect
+              && next.phase == Recognition.RecognitionIncorrect
           firstAccepted = next.firstMidi /= Nothing
           firstJustAccepted = state.recognition.firstMidi == Nothing && firstAccepted
         when (detectedGhost /= Nothing) do
@@ -565,7 +566,7 @@ component =
           case next.feedback of
             Just feedback -> do
               let
-                midi = Detection.relativeMidi state.config.octavePolicy state.prompt.root next feedback.midi
+                midi = Recognition.relativeMidi state.config.octavePolicy state.prompt.root next feedback.midi
                 spellingReference = case state.prompt.root, state.prompt.target of
                   Pitch (PitchClass _ (Accidental rootAccidental)) _,
                   Pitch (PitchClass _ (Accidental targetAccidental)) _ ->
@@ -588,12 +589,12 @@ component =
         do
           when (state.config.ghostMode == GhostOn) do
             H.modify_ _ { ghostMidi = Nothing }
-            renderPromptNotation state.prompt (state.recognition.phase /= Detection.WaitingForFirst)
+            renderPromptNotation state.prompt (state.recognition.phase /= Recognition.WaitingForFirst)
     FinishSinging -> do
       state <- H.get
       when
         ( state.captureStatus == Listening
-            && state.recognition.phase == Detection.RecognitionComplete
+            && state.recognition.phase == Recognition.RecognitionComplete
         )
         do
           let persistGhost = state.config.ghostMode == GhostPersist
@@ -655,8 +656,8 @@ component =
         , prompt = prompt
         , progressionFiber = Nothing
         , previewFiber = Nothing
-        , observation = Detection.initialObservation
-        , recognition = Detection.initialRecognition
+        , observation = Recognition.initialObservation
+        , recognition = Recognition.initialRecognition
         }
       resetPracticeScroll
       renderPromptNotation prompt false
@@ -686,7 +687,7 @@ component =
 
   stopMonitor = case _ of
     Nothing -> pure unit
-    Just monitor -> H.liftEffect (Detection.stop monitor)
+    Just monitor -> H.liftEffect (PitchInput.stop monitor)
 
   cancelFiber = case _ of
     Nothing -> pure unit

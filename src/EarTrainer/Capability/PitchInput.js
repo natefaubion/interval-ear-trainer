@@ -1,5 +1,7 @@
 import { PitchDetector } from "pitchy";
 
+// The analyser exposes its time-domain window as a mutable Float32Array.
+
 const decibels = (buffer) => {
   let sum = 0;
   for (const value of buffer) sum += value * value;

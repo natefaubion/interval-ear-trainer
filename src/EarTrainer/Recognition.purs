@@ -1,10 +1,8 @@
-module EarTrainer.PitchDetection
+module EarTrainer.Recognition
   ( CaptureSettings
   , Feedback
-  , Monitor
   , Observation
   , PitchSample
-  , RawPitchSample
   , Recognition
   , RecognitionPhase(..)
   , RecognitionSettings
@@ -17,9 +15,7 @@ module EarTrainer.PitchDetection
   , observePitch
   , phaseInstruction
   , relativeMidi
-  , start
   , stepRecognition
-  , stop
   ) where
 
 import Prelude
@@ -28,19 +24,12 @@ import Data.Array as Array
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Number as Math
+import EarTrainer.Capability.PitchInput as PitchInput
 import EarTrainer.Music (OctavePolicy(..), Pitch, midiNumber)
-import Effect (Effect)
 
 type PitchSample =
   { clarity :: Number
   , frequency :: Number
-  }
-
-type RawPitchSample =
-  { clarity :: Number
-  , decibels :: Number
-  , frequency :: Number
-  , time :: Number
   }
 
 type TimedPitchSample =
@@ -134,14 +123,9 @@ initialRecognition =
   , stableFrames: 0
   }
 
-foreign import data Monitor :: Type
-
-foreign import start :: (RawPitchSample -> Effect Unit) -> (String -> Effect Unit) -> Effect Monitor
-foreign import stop :: Monitor -> Effect Unit
-
 observePitch
   :: CaptureSettings
-  -> RawPitchSample
+  -> PitchInput.Sample
   -> Observation
   -> { observation :: Observation, sample :: Maybe PitchSample }
 observePitch settings raw (Observation observation) =

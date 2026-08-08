@@ -38,7 +38,8 @@ import EarTrainer.Music
   , presetRange
   , transpose
   )
-import EarTrainer.PitchDetection
+import EarTrainer.Quiz (Event(..), Phase(..), availableExactIntervals, availableIntervalSizes, makeChoices, makePrompt, transition)
+import EarTrainer.Recognition
   ( RecognitionPhase(..)
   , defaultCaptureSettings
   , defaultRecognitionSettings
@@ -49,7 +50,6 @@ import EarTrainer.PitchDetection
   , relativeMidi
   , stepRecognition
   )
-import EarTrainer.Quiz (Event(..), Phase(..), availableExactIntervals, availableIntervalSizes, makeChoices, makePrompt, transition)
 import EarTrainer.Settings (DecodeError(..), decodeStoredAppData)
 import Effect (Effect)
 import Foreign (unsafeToForeign)
