@@ -25,6 +25,7 @@ import EarTrainer.Config
   , QuizMode(..)
   , QuizProgression(..)
   , defaultConfig
+  , isValid
   )
 import EarTrainer.Music
   ( Accidental(..)
@@ -200,7 +201,7 @@ decodeSettings value =
     quizProgression <- optionalProperty (readTag "quiz progression" decodeQuizProgression) "quizProgression"
       defaultConfig.quizProgression
       value
-    pure $ defaultConfig
+    validateExerciseConfig $ defaultConfig
       { answerCount = answerCount
       , answerDisplay = answerDisplay
       , availableIntervals = availableIntervals
@@ -216,6 +217,11 @@ decodeSettings value =
       , rootPitchClasses = rootPitchClasses
       , vocalRange = vocalRange
       }
+
+validateExerciseConfig :: ExerciseConfig -> F ExerciseConfig
+validateExerciseConfig config
+  | isValid config = pure config
+  | otherwise = Foreign.fail (ForeignError "Invalid exercise configuration")
 
 requiredProperty :: forall a. (Foreign -> F a) -> String -> Foreign -> F a
 requiredProperty read name value = readProp name value >>= read

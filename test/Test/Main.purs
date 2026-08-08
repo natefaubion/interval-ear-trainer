@@ -245,6 +245,13 @@ main = do
       , decodeStoredAppData (storedDataWith (unsafeToForeign (legacySettingsRecord { answerCount = "many" })))
       , decodeStoredAppData (storedDataWith (unsafeToForeign (legacySettingsRecord { intervals = [ "mystery-interval" ] })))
       ]
+    rejectsInvalidConfig =
+      case
+        decodeStoredAppData
+          (storedDataWith (unsafeToForeign (legacySettingsRecord { playbackModes = [] })))
+        of
+        Left (MalformedStoredData _) -> true
+        _ -> false
     rejectsMalformedVersion = case decodeStoredAppData (unsafeToForeign { version: "one" }) of
       Left (MalformedStoredData _) -> true
       _ -> false
@@ -562,7 +569,8 @@ main = do
         decodedLegacyData
           <> [ rejectsFutureData, rejectsMalformedData, rejectsMalformedPreset, rejectsMalformedVersion ]
           <> rejectsUnknownTags
-    , expected: [ true, true, true, true, true, true, true, true, true, true, true ]
+          <> [ rejectsInvalidConfig ]
+    , expected: [ true, true, true, true, true, true, true, true, true, true, true, true ]
     }
   assertEqual
     { actual:
