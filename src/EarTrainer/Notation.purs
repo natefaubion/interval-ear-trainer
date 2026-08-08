@@ -1,18 +1,33 @@
 module EarTrainer.Notation
-  ( renderCompleted
-  , renderGhost
-  , renderIncorrect
-  , renderIntervalChoice
-  , renderNotes
-  , renderPrompt
+  ( Appearance(..)
+  , Clef(..)
+  , EngravedEvent
+  , EngravedNote
+  , Score
+  , completed
+  , ghost
+  , incorrect
+  , intervalChoice
+  , notes
+  , prompt
   ) where
 
 import Prelude
 
 import Data.Array as Array
 import EarTrainer.Music (Accidental(..), Letter(..), Pitch(..), PitchClass(..), midiNumber)
-import Effect (Effect)
-import Web.DOM.Element (Element)
+
+data Appearance
+  = Normal
+  | Dim
+  | Accepted
+  | Incorrect
+  | Hidden
+
+data Clef = Treble | Bass
+
+derive instance Eq Appearance
+derive instance Eq Clef
 
 type EngravedNote =
   { accidental :: String
@@ -20,67 +35,85 @@ type EngravedNote =
   }
 
 type EngravedEvent =
-  { appearance :: String
+  { appearance :: Appearance
   , notes :: Array EngravedNote
   }
 
-foreign import renderScoreImpl :: Element -> String -> Int -> Array EngravedEvent -> Effect Unit
+type Score =
+  { clef :: Clef
+  , events :: Array EngravedEvent
+  , width :: Int
+  }
 
-renderNotes :: Element -> Array Pitch -> Effect Unit
-renderNotes element notes =
-  renderScoreImpl element (selectClef notes) (if Array.length notes <= 1 then 240 else 300)
-    (map (\note -> engravedEvent "normal" [ note ]) notes)
+notes :: Array Pitch -> Score
+notes pitches =
+  { clef: selectClef pitches
+  , events: map (engravedEvent Normal <<< Array.singleton) pitches
+  , width: if Array.length pitches <= 1 then 240 else 300
+  }
 
-renderPrompt :: Element -> Pitch -> Pitch -> Boolean -> Effect Unit
-renderPrompt element root target rootAccepted =
-  renderScoreImpl element (selectClef [ root, target ]) 300
-    [ engravedEvent (if rootAccepted then "accepted" else "normal") [ root ]
-    , engravedEvent "hidden" [ target ]
-    ]
+prompt :: Pitch -> Pitch -> Boolean -> Score
+prompt root target rootAccepted =
+  { clef: selectClef [ root, target ]
+  , events:
+      [ engravedEvent (if rootAccepted then Accepted else Normal) [ root ]
+      , engravedEvent Hidden [ target ]
+      ]
+  , width: 300
+  }
 
-renderCompleted :: Element -> Pitch -> Pitch -> Effect Unit
-renderCompleted element root target =
-  renderScoreImpl element (selectClef [ root, target ]) 300
-    [ engravedEvent "accepted" [ root ]
-    , engravedEvent "accepted" [ target ]
-    ]
+completed :: Pitch -> Pitch -> Score
+completed root target =
+  { clef: selectClef [ root, target ]
+  , events: [ engravedEvent Accepted [ root ], engravedEvent Accepted [ target ] ]
+  , width: 300
+  }
 
-renderGhost :: Element -> Pitch -> Pitch -> Pitch -> Boolean -> Effect Unit
-renderGhost element root target detected rootAccepted =
-  renderScoreImpl element (selectClef [ root, target ]) 300
-    [ engravedEvent (if rootAccepted then "accepted" else "normal") [ root ]
-    , engravedEvent "dim" [ detected ]
-    ]
+ghost :: Pitch -> Pitch -> Pitch -> Boolean -> Score
+ghost root target detected rootAccepted =
+  { clef: selectClef [ root, target ]
+  , events:
+      [ engravedEvent (if rootAccepted then Accepted else Normal) [ root ]
+      , engravedEvent Dim [ detected ]
+      ]
+  , width: 300
+  }
 
-renderIncorrect :: Element -> Pitch -> Pitch -> Pitch -> Boolean -> Effect Unit
-renderIncorrect element root target detected rootAccepted =
-  renderScoreImpl element (selectClef [ root, target ]) 300
-    [ engravedEvent (if rootAccepted then "accepted" else "normal") [ root ]
-    , engravedEvent "incorrect" [ detected ]
-    ]
+incorrect :: Pitch -> Pitch -> Pitch -> Boolean -> Score
+incorrect root target detected rootAccepted =
+  { clef: selectClef [ root, target ]
+  , events:
+      [ engravedEvent (if rootAccepted then Accepted else Normal) [ root ]
+      , engravedEvent Incorrect [ detected ]
+      ]
+  , width: 300
+  }
 
-renderIntervalChoice :: Element -> Pitch -> Pitch -> Effect Unit
-renderIntervalChoice element root target =
-  renderScoreImpl element (selectClef [ root, target ]) 300
-    [ engravedEvent "normal" [ root ]
-    , engravedEvent "normal" [ target ]
-    , engravedEvent "normal" [ root, target ]
-    ]
+intervalChoice :: Pitch -> Pitch -> Score
+intervalChoice root target =
+  { clef: selectClef [ root, target ]
+  , events:
+      [ engravedEvent Normal [ root ]
+      , engravedEvent Normal [ target ]
+      , engravedEvent Normal [ root, target ]
+      ]
+  , width: 300
+  }
 
-engravedEvent :: String -> Array Pitch -> EngravedEvent
-engravedEvent appearance notes = { appearance, notes: map engravedNote notes }
+engravedEvent :: Appearance -> Array Pitch -> EngravedEvent
+engravedEvent appearance pitches = { appearance, notes: map engravedNote pitches }
 
-selectClef :: Array Pitch -> String
-selectClef notes =
+selectClef :: Array Pitch -> Clef
+selectClef pitches =
   let
-    midi = map midiNumber notes
+    midi = map midiNumber pitches
     lowest = Array.foldl min 127 midi
     highest = Array.foldl max 0 midi
   in
-    if highest > 67 then "treble"
-    else if lowest < 53 then "bass"
-    else if lowest + highest >= 120 then "treble"
-    else "bass"
+    if highest > 67 then Treble
+    else if lowest < 53 then Bass
+    else if lowest + highest >= 120 then Treble
+    else Bass
 
 engravedNote :: Pitch -> EngravedNote
 engravedNote (Pitch (PitchClass letter accidental) octave) =

@@ -15,6 +15,7 @@ import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
 import EarTrainer.Capability.Audio as AudioCapability
+import EarTrainer.Capability.Notation as NotationCapability
 import EarTrainer.Capability.PitchInput as PitchInput
 import EarTrainer.Config
   ( AnswerDisplay(..)
@@ -774,21 +775,22 @@ component =
     case maybeElement of
       Nothing -> pure unit
       Just htmlElement ->
-        H.liftEffect (Notation.renderPrompt (HTMLElement.toElement htmlElement) prompt.root prompt.target rootAccepted)
+        H.liftEffect (NotationCapability.render (HTMLElement.toElement htmlElement) (Notation.prompt prompt.root prompt.target rootAccepted))
 
   renderCompletedNotation prompt = do
     maybeElement <- H.getHTMLElementRef notationRef
     case maybeElement of
       Nothing -> pure unit
       Just htmlElement ->
-        H.liftEffect (Notation.renderCompleted (HTMLElement.toElement htmlElement) prompt.root prompt.target)
+        H.liftEffect (NotationCapability.render (HTMLElement.toElement htmlElement) (Notation.completed prompt.root prompt.target))
 
   renderGhostNotation prompt detected rootAccepted = do
     maybeElement <- H.getHTMLElementRef notationRef
     case maybeElement of
       Nothing -> pure unit
       Just htmlElement ->
-        H.liftEffect (Notation.renderGhost (HTMLElement.toElement htmlElement) prompt.root prompt.target detected rootAccepted)
+        H.liftEffect
+          (NotationCapability.render (HTMLElement.toElement htmlElement) (Notation.ghost prompt.root prompt.target detected rootAccepted))
 
   renderIncorrectNotation prompt detected rootAccepted = do
     maybeElement <- H.getHTMLElementRef notationRef
@@ -796,7 +798,10 @@ component =
       Nothing -> pure unit
       Just htmlElement ->
         H.liftEffect
-          (Notation.renderIncorrect (HTMLElement.toElement htmlElement) prompt.root prompt.target detected rootAccepted)
+          ( NotationCapability.render
+              (HTMLElement.toElement htmlElement)
+              (Notation.incorrect prompt.root prompt.target detected rootAccepted)
+          )
 
   renderChoiceNotation root choices =
     for_ (Array.mapWithIndex (\index choice -> { choice, index }) choices) \item -> do
@@ -804,4 +809,5 @@ component =
       case maybeElement of
         Nothing -> pure unit
         Just htmlElement ->
-          H.liftEffect (Notation.renderIntervalChoice (HTMLElement.toElement htmlElement) root item.choice.target)
+          H.liftEffect
+            (NotationCapability.render (HTMLElement.toElement htmlElement) (Notation.intervalChoice root item.choice.target))

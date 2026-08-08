@@ -39,6 +39,7 @@ import EarTrainer.Music
   , presetRange
   , transpose
   )
+import EarTrainer.Notation as Notation
 import EarTrainer.Quiz (Event(..), Phase(..), availableExactIntervals, availableIntervalSizes, makeChoices, makePrompt, transition)
 import EarTrainer.Recognition
   ( RecognitionPhase(..)
@@ -64,6 +65,9 @@ main = do
     melodicPlan = Audio.intervalPlan MelodicAscending c4 e4
     harmonicPlan = Audio.intervalPlan Harmonic c4 e4
     rootPlan = Audio.rootPlan c4
+    promptScore = Notation.prompt c4 e4 false
+    acceptedPromptScore = Notation.prompt c4 e4 true
+    choiceScore = Notation.intervalChoice c4 e4
     b4 = pitch B (Accidental 0) 4
     c4Sample = { frequency: 261.625565, clarity: 0.98 }
     c3Sample = { frequency: 130.812783, clarity: 0.98 }
@@ -496,6 +500,16 @@ main = do
         , map _.notes rootPlan.events == [ [ 60 ] ]
         ]
     , expected: [ true, true, true, true, true, true ]
+    }
+  assertEqual
+    { actual:
+        [ promptScore.clef == Notation.Treble
+        , map _.appearance promptScore.events == [ Notation.Normal, Notation.Hidden ]
+        , map _.appearance acceptedPromptScore.events == [ Notation.Accepted, Notation.Hidden ]
+        , Array.length choiceScore.events == 3
+        , map _.key (Array.concatMap _.notes choiceScore.events) == [ "c/4", "e/4", "c/4", "e/4" ]
+        ]
+    , expected: [ true, true, true, true, true ]
     }
   assertEqual
     { actual:

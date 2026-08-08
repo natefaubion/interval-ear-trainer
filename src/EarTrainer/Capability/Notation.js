@@ -7,6 +7,8 @@ import {
   Voice,
 } from "vexflow";
 
+// VexFlow owns its SVG nodes; PureScript supplies a complete score value.
+
 const svgNamespace = "http://www.w3.org/2000/svg";
 let renderSequence = 0;
 
