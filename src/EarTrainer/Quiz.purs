@@ -5,6 +5,7 @@ module EarTrainer.Quiz
   , Prompt
   , availableExactIntervals
   , availableIntervalSizes
+  , isPlayable
   , makeChoices
   , makePrompt
   , transition
@@ -15,7 +16,7 @@ import Prelude
 import Data.Array as Array
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Ord (abs)
-import EarTrainer.Config (AnswerCount(..), ExerciseConfig, IntervalSystem(..), QuizMode(..), exerciseRange)
+import EarTrainer.Config (AnswerCount(..), ExerciseConfig, IntervalSystem(..), QuizMode(..), exerciseRange, isValid)
 import EarTrainer.Music
   ( Accidental(..)
   , Direction(..)
@@ -44,6 +45,13 @@ type IntervalChoice =
   { interval :: Interval
   , target :: Pitch
   }
+
+isPlayable :: ExerciseConfig -> Boolean
+isPlayable config =
+  isValid config
+    && case config.intervalSystem of
+      ExactIntervals -> not (Array.null (Array.filter (flip Array.elem (availableExactIntervals config)) config.intervals))
+      FromSelectedNotes -> not (Array.null (Array.filter (flip Array.elem (availableIntervalSizes config)) config.availableIntervals))
 
 directionFor :: PlaybackMode -> Direction
 directionFor MelodicDescending = Descending

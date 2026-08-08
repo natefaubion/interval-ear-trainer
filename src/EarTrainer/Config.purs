@@ -6,11 +6,16 @@ module EarTrainer.Config
   , IntervalSystem(..)
   , QuizMode(..)
   , QuizProgression(..)
+  , RangeBoundary(..)
   , defaultConfig
   , exerciseRange
   , isValid
   , quizModeUsesRecognition
   , quizModeUsesSinging
+  , selectMajorKey
+  , selectedMajorKeyId
+  , setCustomPitchClass
+  , setCustomPitchOctave
   , toggleInterval
   , toggleIntervalSize
   , togglePlaybackMode
@@ -20,20 +25,24 @@ module EarTrainer.Config
 import Prelude
 
 import Data.Array as Array
+import Data.Maybe (Maybe(..))
 import EarTrainer.Music
   ( Accidental(..)
   , Interval
   , IntervalSize(..)
   , Letter(..)
   , OctavePolicy(..)
+  , Pitch
   , PitchClass
   , PlaybackMode(..)
   , VocalRange
   , VocalRangePreset(..)
+  , allMajorKeyPresets
   , defaultIntervals
   , defaultRootPitchClasses
   , midiNumber
   , pitch
+  , pitchFromMidi
   , presetRange
   )
 
@@ -60,6 +69,10 @@ derive instance Eq QuizMode
 data QuizProgression = ManualProgression | AutomaticProgression
 
 derive instance Eq QuizProgression
+
+data RangeBoundary = Lowest | Highest
+
+derive instance Eq RangeBoundary
 
 quizModeUsesSinging :: QuizMode -> Boolean
 quizModeUsesSinging RecognitionOnly = false
@@ -141,3 +154,41 @@ exerciseRange :: ExerciseConfig -> VocalRange
 exerciseRange config =
   if config.vocalRange == Custom then config.customRange
   else presetRange config.vocalRange
+
+selectedMajorKeyId :: Array PitchClass -> String
+selectedMajorKeyId roots = case Array.find (\preset -> samePitchClasses preset.roots roots) allMajorKeyPresets of
+  Just preset -> preset.id
+  Nothing -> "custom"
+
+selectMajorKey :: String -> ExerciseConfig -> ExerciseConfig
+selectMajorKey presetId config = case Array.find (\preset -> preset.id == presetId) allMajorKeyPresets of
+  Just preset -> config { rootPitchClasses = preset.roots }
+  Nothing -> config
+
+setCustomPitchClass :: RangeBoundary -> Int -> ExerciseConfig -> ExerciseConfig
+setCustomPitchClass boundary pitchClass config =
+  let
+    current = customBoundary boundary config
+    octave = midiNumber current `div` 12 - 1
+  in
+    setCustomBoundary boundary (pitchFromMidi (12 * (octave + 1) + pitchClass)) config
+
+setCustomPitchOctave :: RangeBoundary -> Int -> ExerciseConfig -> ExerciseConfig
+setCustomPitchOctave boundary octave config =
+  let
+    current = customBoundary boundary config
+    pitchClass = midiNumber current `mod` 12
+  in
+    setCustomBoundary boundary (pitchFromMidi (12 * (octave + 1) + pitchClass)) config
+
+customBoundary :: RangeBoundary -> ExerciseConfig -> Pitch
+customBoundary Lowest config = config.customRange.low
+customBoundary Highest config = config.customRange.high
+
+setCustomBoundary :: RangeBoundary -> Pitch -> ExerciseConfig -> ExerciseConfig
+setCustomBoundary Lowest value config = config { customRange = config.customRange { low = value } }
+setCustomBoundary Highest value config = config { customRange = config.customRange { high = value } }
+
+samePitchClasses :: Array PitchClass -> Array PitchClass -> Boolean
+samePitchClasses left right =
+  Array.length left == Array.length right && Array.all (flip Array.elem right) left

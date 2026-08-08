@@ -20,9 +20,13 @@ import EarTrainer.Config
   , IntervalSystem(..)
   , QuizMode(..)
   , QuizProgression(..)
+  , RangeBoundary(..)
   , defaultConfig
-  , isValid
   , quizModeUsesRecognition
+  , selectMajorKey
+  , selectedMajorKeyId
+  , setCustomPitchClass
+  , setCustomPitchOctave
   , toggleInterval
   , toggleIntervalSize
   , togglePlaybackMode
@@ -45,7 +49,6 @@ import EarTrainer.Music
   , intervalSizeName
   , midiNumber
   , pitchClassName
-  , pitchFromMidi
   , pitchName
   , playbackModeName
   , presetName
@@ -433,7 +436,7 @@ component =
           , Button.button
               { action: RootBeginPractice
               , classes: []
-              , disabled: not (rootConfigValid state.config) || not state.samplerReady
+              , disabled: not (Quiz.isPlayable state.config) || not state.samplerReady
               , variant: Button.Primary
               }
               [ HH.text "Begin practice" ]
@@ -562,27 +565,6 @@ component =
   rootMajorKeyOption preset =
     HH.option [ HP.value preset.id ] [ HH.text preset.name ]
 
-  selectedMajorKeyId roots = case Array.find (\preset -> samePitchClasses preset.roots roots) allMajorKeyPresets of
-    Just preset -> preset.id
-    Nothing -> "custom"
-
-  samePitchClasses left right =
-    Array.length left == Array.length right && Array.all (flip Array.elem right) left
-
-  rootConfigValid config =
-    isValid config
-      &&
-        if config.intervalSystem == ExactIntervals then
-          not
-            ( Array.null
-                (Array.filter (flip Array.elem (Quiz.availableExactIntervals config)) config.intervals)
-            )
-        else
-          not
-            ( Array.null
-                (Array.filter (flip Array.elem (Quiz.availableIntervalSizes config)) config.availableIntervals)
-            )
-
   rootRangeButton config preset =
     let
       label = case preset of
@@ -659,10 +641,10 @@ component =
     RootSelectAllRoots -> setupUpdateConfig (_ { rootPitchClasses = allRootPitchClasses })
     RootClearRoots -> setupUpdateConfig (_ { rootPitchClasses = [] })
     RootSelectRange preset -> setupUpdateConfig (_ { vocalRange = preset })
-    RootSelectCustomLowClass pitchClass -> setupUpdateConfig (setCustomLowClass pitchClass)
-    RootSelectCustomLowOctave octave -> setupUpdateConfig (setCustomLowOctave octave)
-    RootSelectCustomHighClass pitchClass -> setupUpdateConfig (setCustomHighClass pitchClass)
-    RootSelectCustomHighOctave octave -> setupUpdateConfig (setCustomHighOctave octave)
+    RootSelectCustomLowClass pitchClass -> setupUpdateConfig (setCustomPitchClass Lowest pitchClass)
+    RootSelectCustomLowOctave octave -> setupUpdateConfig (setCustomPitchOctave Lowest octave)
+    RootSelectCustomHighClass pitchClass -> setupUpdateConfig (setCustomPitchClass Highest pitchClass)
+    RootSelectCustomHighOctave octave -> setupUpdateConfig (setCustomPitchOctave Highest octave)
     RootSelectOctavePolicy policy -> setupUpdateConfig (_ { octavePolicy = policy })
     RootSelectGhostMode mode -> setupUpdateConfig (_ { ghostMode = mode })
     RootSelectPitchTuner shown -> setupUpdateConfig (_ { showPitchTuner = shown })
@@ -744,31 +726,3 @@ component =
     maybeElement <- H.getHTMLElementRef ref
     for_ (maybeElement >>= HTMLDialogElement.fromHTMLElement) \dialog ->
       H.liftEffect (HTMLDialogElement.close Nothing dialog)
-
-  setCustomLowClass pitchClass config =
-    let
-      octave = midiNumber config.customRange.low `div` 12 - 1
-    in
-      config { customRange = config.customRange { low = pitchFromMidi (12 * (octave + 1) + pitchClass) } }
-
-  setCustomLowOctave octave config =
-    let
-      pitchClass = midiNumber config.customRange.low `mod` 12
-    in
-      config { customRange = config.customRange { low = pitchFromMidi (12 * (octave + 1) + pitchClass) } }
-
-  setCustomHighClass pitchClass config =
-    let
-      octave = midiNumber config.customRange.high `div` 12 - 1
-    in
-      config { customRange = config.customRange { high = pitchFromMidi (12 * (octave + 1) + pitchClass) } }
-
-  setCustomHighOctave octave config =
-    let
-      pitchClass = midiNumber config.customRange.high `mod` 12
-    in
-      config { customRange = config.customRange { high = pitchFromMidi (12 * (octave + 1) + pitchClass) } }
-
-  selectMajorKey presetId config = case Array.find (\preset -> preset.id == presetId) allMajorKeyPresets of
-    Just preset -> config { rootPitchClasses = preset.roots }
-    Nothing -> config

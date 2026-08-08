@@ -12,10 +12,15 @@ import EarTrainer.Config
   , IntervalSystem(..)
   , QuizMode(..)
   , QuizProgression(..)
+  , RangeBoundary(..)
   , defaultConfig
   , isValid
   , quizModeUsesRecognition
   , quizModeUsesSinging
+  , selectMajorKey
+  , selectedMajorKeyId
+  , setCustomPitchClass
+  , setCustomPitchOctave
   , toggleInterval
   )
 import EarTrainer.Music
@@ -40,7 +45,7 @@ import EarTrainer.Music
   , transpose
   )
 import EarTrainer.Notation as Notation
-import EarTrainer.Quiz (Event(..), Phase(..), availableExactIntervals, availableIntervalSizes, makeChoices, makePrompt, transition)
+import EarTrainer.Quiz (Event(..), Phase(..), availableExactIntervals, availableIntervalSizes, isPlayable, makeChoices, makePrompt, transition)
 import EarTrainer.Recognition
   ( RecognitionPhase(..)
   , defaultCaptureSettings
@@ -68,6 +73,16 @@ main = do
     promptScore = Notation.prompt c4 e4 false
     acceptedPromptScore = Notation.prompt c4 e4 true
     choiceScore = Notation.intervalChoice c4 e4
+    narrowConfig = defaultConfig
+      { customRange = { low: c4, high: c4 }
+      , intervalSystem = ExactIntervals
+      , intervals = [ MajorThird ]
+      , rootPitchClasses = [ PitchClass C (Accidental 0) ]
+      , vocalRange = Custom
+      }
+    selectedGMajor = selectMajorKey "g" defaultConfig
+    classAdjustedRange = setCustomPitchClass Lowest 1 defaultConfig
+    octaveAdjustedRange = setCustomPitchOctave Highest 6 defaultConfig
     b4 = pitch B (Accidental 0) 4
     c4Sample = { frequency: 261.625565, clarity: 0.98 }
     c3Sample = { frequency: 130.812783, clarity: 0.98 }
@@ -465,6 +480,17 @@ main = do
   assertEqual
     { actual: isValid (toggleInterval MinorThird defaultConfig)
     , expected: true
+    }
+  assertEqual
+    { actual:
+        [ selectedMajorKeyId defaultConfig.rootPitchClasses == "c"
+        , selectedMajorKeyId selectedGMajor.rootPitchClasses == "g"
+        , midiNumber classAdjustedRange.customRange.low == 49
+        , midiNumber octaveAdjustedRange.customRange.high == 91
+        , isValid narrowConfig
+        , isPlayable narrowConfig
+        ]
+    , expected: [ true, true, true, true, true, false ]
     }
   assertEqual
     { actual: transition SingingFirstNote FirstPitchAccepted
