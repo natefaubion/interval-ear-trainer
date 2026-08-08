@@ -72,11 +72,12 @@ type State =
   , captureStatus :: CaptureStatus
   , choices :: Array Quiz.IntervalChoice
   , config :: ExerciseConfig
+  , ghostFiber :: Maybe H.ForkId
   , ghostMidi :: Maybe Int
-  , ghostRevision :: Int
   , monitor :: Maybe Detection.Monitor
+  , playbackFiber :: Maybe H.ForkId
   , prompt :: Quiz.Prompt
-  , promptRevision :: Int
+  , progressionFiber :: Maybe H.ForkId
   , recognition :: Detection.Recognition
   , sampler :: Audio.Sampler
   }
@@ -87,15 +88,15 @@ data Action
   | PlayPrompt
   | PlaybackStarted Int
   | AudioFailed Int String
-  | StartListening Int
+  | StartListening
   | PitchDetected Int Detection.PitchSample
-  | ClearGhost Int
-  | FinishSinging Int
+  | ClearGhost
+  | FinishSinging
   | MicrophoneFailed Int String
   | ChooseInterval Interval
   | NextPrompt
-  | AdvanceAutomatically Int
-  | RetryAutomatically Int
+  | AdvanceAutomatically
+  | RetryAutomatically
   | EditSetup
 
 notationRef :: H.RefLabel
@@ -139,11 +140,12 @@ component =
       , captureStatus: ReadyToPlay
       , choices: Quiz.makeChoices input.seed input.config prompt
       , config: input.config
+      , ghostFiber: Nothing
       , ghostMidi: Nothing
-      , ghostRevision: 0
       , monitor: Nothing
+      , playbackFiber: Nothing
       , prompt: prompt
-      , promptRevision: 0
+      , progressionFiber: Nothing
       , recognition: Detection.initialRecognition
       , sampler: input.sampler
       }
@@ -423,10 +425,12 @@ component =
         handleAction PlayPrompt
     Finalize -> do
       state <- H.get
+      cancelDelayedActions state
       stopMonitor state.monitor
       H.liftEffect (Audio.stop state.sampler)
     PlayPrompt -> do
       state <- H.get
+      cancelDelayedActions state
       stopMonitor state.monitor
       let
         activityRevision = state.activityRevision + 1
@@ -436,9 +440,11 @@ component =
       H.modify_ _
         { activityRevision = activityRevision
         , captureStatus = PlayingAudio destination
+        , ghostFiber = Nothing
         , ghostMidi = Nothing
-        , ghostRevision = state.ghostRevision + 1
         , monitor = Nothing
+        , playbackFiber = Nothing
+        , progressionFiber = Nothing
         , recognition = Detection.initialRecognition
         }
       renderPromptNotation state.prompt
@@ -460,36 +466,39 @@ component =
             && state.activityRevision == activityRevision
         )
         do
-          void $ H.fork do
+          cancelFiber state.playbackFiber
+          fiber <- H.fork do
             let
               playbackMilliseconds =
                 if state.config.quizMode == Audiation then Audio.rootPlaybackDurationMilliseconds
                 else Audio.playbackDurationMilliseconds state.prompt.mode
             H.liftAff (delay (Milliseconds (playbackMilliseconds + 350.0)))
-            handleAction (StartListening activityRevision)
+            handleAction StartListening
+          H.modify_ _ { playbackFiber = Just fiber }
     AudioFailed activityRevision message -> do
       state <- H.get
       when (state.activityRevision == activityRevision) do
-        H.modify_ _ { captureStatus = PlaybackFailed message }
-    StartListening activityRevision -> do
+        cancelFiber state.playbackFiber
+        H.modify_ _ { captureStatus = PlaybackFailed message, playbackFiber = Nothing }
+    StartListening -> do
       state <- H.get
-      when (state.activityRevision == activityRevision) do
-        case state.captureStatus of
-          PlayingAudio (ResumeAnswers revealed) -> do
-            H.modify_ _ { captureStatus = ChoosingAnswer revealed }
-            renderChoiceNotation state.prompt.root state.choices
-          PlayingAudio BeginSinging
-            | not (quizModeUsesSinging state.config.quizMode) -> do
-                H.modify_ _ { captureStatus = ChoosingAnswer [] }
-                renderChoiceNotation state.prompt.root state.choices
-          PlayingAudio BeginSinging -> do
-            { emitter, listener } <- H.liftEffect HS.create
-            void (H.subscribe emitter)
-            monitor <- H.liftEffect $ Detection.start
-              (HS.notify listener <<< PitchDetected activityRevision)
-              (HS.notify listener <<< MicrophoneFailed activityRevision)
-            H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
-          _ -> pure unit
+      H.modify_ _ { playbackFiber = Nothing }
+      case state.captureStatus of
+        PlayingAudio (ResumeAnswers revealed) -> do
+          H.modify_ _ { captureStatus = ChoosingAnswer revealed }
+          renderChoiceNotation state.prompt.root state.choices
+        PlayingAudio BeginSinging
+          | not (quizModeUsesSinging state.config.quizMode) -> do
+              H.modify_ _ { captureStatus = ChoosingAnswer [] }
+              renderChoiceNotation state.prompt.root state.choices
+        PlayingAudio BeginSinging -> do
+          { emitter, listener } <- H.liftEffect HS.create
+          void (H.subscribe emitter)
+          monitor <- H.liftEffect $ Detection.start
+            (HS.notify listener <<< PitchDetected state.activityRevision)
+            (HS.notify listener <<< MicrophoneFailed state.activityRevision)
+          H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
+        _ -> pure unit
     PitchDetected activityRevision sample -> do
       state <- H.get
       when (state.captureStatus == Listening && state.activityRevision == activityRevision) do
@@ -509,7 +518,6 @@ component =
           nextGhost = case detectedGhost of
             Nothing -> state.ghostMidi
             Just midi -> Just midi
-          revision = if detectedGhost == Nothing then state.ghostRevision else state.ghostRevision + 1
           completed =
             state.recognition.phase /= Detection.RecognitionComplete
               && next.phase == Detection.RecognitionComplete
@@ -518,7 +526,13 @@ component =
               && next.phase == Detection.RecognitionIncorrect
           firstAccepted = next.firstMidi /= Nothing
           firstJustAccepted = state.recognition.firstMidi == Nothing && firstAccepted
-        H.modify_ _ { ghostMidi = nextGhost, ghostRevision = revision, recognition = next }
+        when (detectedGhost /= Nothing) do
+          cancelFiber state.ghostFiber
+        H.modify_ _
+          { ghostFiber = if detectedGhost == Nothing then state.ghostFiber else Nothing
+          , ghostMidi = nextGhost
+          , recognition = next
+          }
         when ((detectedGhost /= Nothing && detectedGhost /= state.ghostMidi) || firstJustAccepted) do
           case nextGhost of
             Just midi ->
@@ -538,17 +552,22 @@ component =
               && state.ghostMidi /= Nothing
           )
           do
-            void $ H.fork do
+            cancelFiber state.ghostFiber
+            fiber <- H.fork do
               H.liftAff (delay (Milliseconds 700.0))
-              handleAction (ClearGhost revision)
+              handleAction ClearGhost
+            H.modify_ _ { ghostFiber = Just fiber }
         when completed do
+          cancelFiber state.ghostFiber
           stopMonitor state.monitor
-          H.modify_ _ { monitor = Nothing }
-          handleAction (FinishSinging revision)
+          H.modify_ _ { ghostFiber = Nothing, monitor = Nothing }
+          handleAction FinishSinging
         when incorrect do
+          cancelFiber state.ghostFiber
           stopMonitor state.monitor
           H.modify_ _
             { captureStatus = IntervalError AwaitingInput
+            , ghostFiber = Nothing
             , monitor = Nothing
             , recognition = next
             }
@@ -568,23 +587,22 @@ component =
                 firstAccepted
             Nothing -> pure unit
           scheduleAutomaticRetry state
-    ClearGhost revision -> do
+    ClearGhost -> do
       state <- H.get
+      H.modify_ _ { ghostFiber = Nothing }
       when
         ( state.captureStatus == Listening
-            && state.ghostRevision == revision
             && state.ghostMidi /= Nothing
         )
         do
           when (state.config.ghostMode == GhostOn) do
             H.modify_ _ { ghostMidi = Nothing }
             renderPromptNotation state.prompt (state.recognition.phase /= Detection.WaitingForFirst)
-    FinishSinging revision -> do
+    FinishSinging -> do
       state <- H.get
       when
         ( state.captureStatus == Listening
             && state.recognition.phase == Detection.RecognitionComplete
-            && state.ghostRevision == revision
         )
         do
           let persistGhost = state.config.ghostMode == GhostPersist
@@ -602,7 +620,8 @@ component =
     MicrophoneFailed activityRevision message -> do
       state <- H.get
       when (state.activityRevision == activityRevision) do
-        H.modify_ _ { captureStatus = CaptureFailed message, monitor = Nothing }
+        cancelFiber state.ghostFiber
+        H.modify_ _ { captureStatus = CaptureFailed message, ghostFiber = Nothing, monitor = Nothing }
     ChooseInterval interval -> do
       state <- H.get
       case state.captureStatus of
@@ -628,6 +647,7 @@ component =
         _ -> pure unit
     NextPrompt -> do
       state <- H.get
+      cancelDelayedActions state
       H.liftEffect (Audio.stop state.sampler)
       seed <- H.liftEffect (randomInt 0 2147483647)
       let
@@ -637,38 +657,51 @@ component =
         { activityRevision = state.activityRevision + 1
         , captureStatus = ReadyToPlay
         , choices = choices
+        , ghostFiber = Nothing
         , ghostMidi = Nothing
-        , ghostRevision = state.ghostRevision + 1
+        , playbackFiber = Nothing
         , prompt = prompt
-        , promptRevision = state.promptRevision + 1
+        , progressionFiber = Nothing
         , recognition = Detection.initialRecognition
         }
       resetPracticeScroll
       renderPromptNotation prompt false
-    AdvanceAutomatically revision -> do
+    AdvanceAutomatically -> do
       state <- H.get
+      H.modify_ _ { progressionFiber = Nothing }
       when
-        ( state.promptRevision == revision
-            && progressionScheduled state.captureStatus
+        ( progressionScheduled state.captureStatus
             && isAnswerComplete state.captureStatus
         )
         do
           handleAction NextPrompt
           handleAction PlayPrompt
-    RetryAutomatically revision -> do
+    RetryAutomatically -> do
       state <- H.get
+      H.modify_ _ { progressionFiber = Nothing }
       when
-        ( state.promptRevision == revision
-            && state.captureStatus == IntervalError Scheduled
-        )
+        (state.captureStatus == IntervalError Scheduled)
         do
           handleAction PlayPrompt
     EditSetup -> do
+      state <- H.get
+      cancelDelayedActions state
+      stopMonitor state.monitor
+      H.liftEffect (Audio.stop state.sampler)
       H.raise BackToSetup
 
   stopMonitor = case _ of
     Nothing -> pure unit
     Just monitor -> H.liftEffect (Detection.stop monitor)
+
+  cancelFiber = case _ of
+    Nothing -> pure unit
+    Just fiber -> H.kill fiber
+
+  cancelDelayedActions state = do
+    cancelFiber state.ghostFiber
+    cancelFiber state.playbackFiber
+    cancelFiber state.progressionFiber
 
   resetPracticeScroll = do
     maybeElement <- H.getHTMLElementRef practiceContentRef
@@ -678,29 +711,35 @@ component =
 
   scheduleAutomaticAdvance state =
     when (state.config.quizProgression == AutomaticProgression) do
+      currentState <- H.get
+      cancelFiber currentState.progressionFiber
       H.modify_ \current -> current
         { captureStatus = case current.captureStatus of
             AnswerComplete revealed _ -> AnswerComplete revealed Scheduled
             status -> status
         }
-      void $ H.fork do
+      fiber <- H.fork do
         let
           waitMilliseconds =
             if not (quizModeUsesRecognition state.config.quizMode) then 1200.0
             else Audio.playbackDurationMilliseconds state.prompt.mode + 500.0
         H.liftAff (delay (Milliseconds waitMilliseconds))
-        handleAction (AdvanceAutomatically state.promptRevision)
+        handleAction AdvanceAutomatically
+      H.modify_ _ { progressionFiber = Just fiber }
 
   scheduleAutomaticRetry state =
     when (state.config.quizProgression == AutomaticProgression) do
+      currentState <- H.get
+      cancelFiber currentState.progressionFiber
       H.modify_ \current -> current
         { captureStatus = case current.captureStatus of
             IntervalError _ -> IntervalError Scheduled
             status -> status
         }
-      void $ H.fork do
+      fiber <- H.fork do
         H.liftAff (delay (Milliseconds 1200.0))
-        handleAction (RetryAutomatically state.promptRevision)
+        handleAction RetryAutomatically
+      H.modify_ _ { progressionFiber = Just fiber }
 
   renderPromptNotation prompt rootAccepted = do
     maybeElement <- H.getHTMLElementRef notationRef
