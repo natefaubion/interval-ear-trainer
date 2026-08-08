@@ -75,6 +75,7 @@ type State =
   , ghostFiber :: Maybe H.ForkId
   , ghostMidi :: Maybe Int
   , monitor :: Maybe Detection.Monitor
+  , observation :: Detection.Observation
   , playbackFiber :: Maybe H.ForkId
   , prompt :: Quiz.Prompt
   , progressionFiber :: Maybe H.ForkId
@@ -89,6 +90,7 @@ data Action
   | PlaybackStarted Int
   | AudioFailed Int String
   | StartListening
+  | PitchObserved Int Detection.RawPitchSample
   | PitchDetected Int Detection.PitchSample
   | ClearGhost
   | FinishSinging
@@ -143,6 +145,7 @@ component =
       , ghostFiber: Nothing
       , ghostMidi: Nothing
       , monitor: Nothing
+      , observation: Detection.initialObservation
       , playbackFiber: Nothing
       , prompt: prompt
       , progressionFiber: Nothing
@@ -443,6 +446,7 @@ component =
         , ghostFiber = Nothing
         , ghostMidi = Nothing
         , monitor = Nothing
+        , observation = Detection.initialObservation
         , playbackFiber = Nothing
         , progressionFiber = Nothing
         , recognition = Detection.initialRecognition
@@ -495,10 +499,16 @@ component =
           { emitter, listener } <- H.liftEffect HS.create
           void (H.subscribe emitter)
           monitor <- H.liftEffect $ Detection.start
-            (HS.notify listener <<< PitchDetected state.activityRevision)
+            (HS.notify listener <<< PitchObserved state.activityRevision)
             (HS.notify listener <<< MicrophoneFailed state.activityRevision)
           H.modify_ _ { captureStatus = Listening, monitor = Just monitor }
         _ -> pure unit
+    PitchObserved activityRevision raw -> do
+      state <- H.get
+      when (state.captureStatus == Listening && state.activityRevision == activityRevision) do
+        let observed = Detection.observePitch Detection.defaultCaptureSettings raw state.observation
+        H.modify_ _ { observation = observed.observation }
+        for_ observed.sample (handleAction <<< PitchDetected activityRevision)
     PitchDetected activityRevision sample -> do
       state <- H.get
       when (state.captureStatus == Listening && state.activityRevision == activityRevision) do
@@ -662,6 +672,7 @@ component =
         , playbackFiber = Nothing
         , prompt = prompt
         , progressionFiber = Nothing
+        , observation = Detection.initialObservation
         , recognition = Detection.initialRecognition
         }
       resetPracticeScroll

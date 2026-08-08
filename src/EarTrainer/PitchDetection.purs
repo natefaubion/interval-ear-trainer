@@ -1,14 +1,20 @@
 module EarTrainer.PitchDetection
-  ( Feedback
+  ( CaptureSettings
+  , Feedback
   , Monitor
+  , Observation
   , PitchSample
+  , RawPitchSample
   , Recognition
   , RecognitionPhase(..)
   , RecognitionSettings
+  , defaultCaptureSettings
   , defaultRecognitionSettings
+  , initialObservation
   , initialRecognition
   , midiFrequency
   , nearestMidi
+  , observePitch
   , phaseInstruction
   , relativeMidi
   , start
@@ -18,8 +24,9 @@ module EarTrainer.PitchDetection
 
 import Prelude
 
+import Data.Array as Array
 import Data.Int as Int
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Number as Math
 import EarTrainer.Music (OctavePolicy(..), Pitch, midiNumber)
 import Effect (Effect)
@@ -28,6 +35,48 @@ type PitchSample =
   { clarity :: Number
   , frequency :: Number
   }
+
+type RawPitchSample =
+  { clarity :: Number
+  , decibels :: Number
+  , frequency :: Number
+  , time :: Number
+  }
+
+type TimedPitchSample =
+  { clarity :: Number
+  , frequency :: Number
+  , time :: Number
+  }
+
+newtype Observation = Observation
+  { lastValidAt :: Number
+  , samples :: Array TimedPitchSample
+  }
+
+type CaptureSettings =
+  { clarityThreshold :: Number
+  , maximumFrequency :: Number
+  , minimumFrequency :: Number
+  , minimumSamples :: Int
+  , sampleWindowMilliseconds :: Number
+  , silenceMilliseconds :: Number
+  , volumeThresholdDb :: Number
+  }
+
+defaultCaptureSettings :: CaptureSettings
+defaultCaptureSettings =
+  { clarityThreshold: 0.9
+  , maximumFrequency: 1200.0
+  , minimumFrequency: 70.0
+  , minimumSamples: 4
+  , sampleWindowMilliseconds: 300.0
+  , silenceMilliseconds: 180.0
+  , volumeThresholdDb: -50.0
+  }
+
+initialObservation :: Observation
+initialObservation = Observation { lastValidAt: 0.0, samples: [] }
 
 type Feedback =
   { cents :: Number
@@ -87,8 +136,56 @@ initialRecognition =
 
 foreign import data Monitor :: Type
 
-foreign import start :: (PitchSample -> Effect Unit) -> (String -> Effect Unit) -> Effect Monitor
+foreign import start :: (RawPitchSample -> Effect Unit) -> (String -> Effect Unit) -> Effect Monitor
 foreign import stop :: Monitor -> Effect Unit
+
+observePitch
+  :: CaptureSettings
+  -> RawPitchSample
+  -> Observation
+  -> { observation :: Observation, sample :: Maybe PitchSample }
+observePitch settings raw (Observation observation) =
+  let
+    valid =
+      raw.clarity >= settings.clarityThreshold
+        && raw.decibels >= settings.volumeThresholdDb
+        && raw.frequency >= settings.minimumFrequency
+        && raw.frequency <= settings.maximumFrequency
+    samples = Array.filter
+      (\timed -> raw.time - timed.time <= settings.sampleWindowMilliseconds)
+      if valid then
+        Array.snoc observation.samples
+          { clarity: raw.clarity
+          , frequency: raw.frequency
+          , time: raw.time
+          }
+      else
+        observation.samples
+    lastValidAt = if valid then raw.time else observation.lastValidAt
+    sample
+      | Array.length samples >= settings.minimumSamples = Just
+          { clarity: median (map _.clarity samples)
+          , frequency: median (map _.frequency samples)
+          }
+      | raw.time - lastValidAt >= settings.silenceMilliseconds = Just
+          { clarity: 0.0, frequency: 0.0 }
+      | otherwise = Nothing
+  in
+    { observation: Observation { lastValidAt, samples }
+    , sample
+    }
+
+median :: Array Number -> Number
+median values =
+  let
+    sorted = Array.sort values
+    middle = Array.length sorted / 2
+  in
+    if Array.length sorted `mod` 2 == 1 then fromMaybe 0.0 (Array.index sorted middle)
+    else
+      ( fromMaybe 0.0 (Array.index sorted (middle - 1))
+          + fromMaybe 0.0 (Array.index sorted middle)
+      ) / 2.0
 
 midiFrequency :: Int -> Number
 midiFrequency midi = 440.0 * Math.pow 2.0 (Int.toNumber (midi - 69) / 12.0)

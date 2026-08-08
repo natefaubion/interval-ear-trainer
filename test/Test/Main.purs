@@ -40,9 +40,12 @@ import EarTrainer.Music
   )
 import EarTrainer.PitchDetection
   ( RecognitionPhase(..)
+  , defaultCaptureSettings
   , defaultRecognitionSettings
+  , initialObservation
   , initialRecognition
   , nearestMidi
+  , observePitch
   , relativeMidi
   , stepRecognition
   )
@@ -67,6 +70,14 @@ main = do
     b2Sample = { frequency: 123.470825, clarity: 0.98 }
     b3Sample = { frequency: 246.941651, clarity: 0.98 }
     silence = { frequency: 0.0, clarity: 0.0 }
+    rawPitch time frequency = { clarity: 0.96, decibels: -20.0, frequency, time }
+    observed1 = observePitch defaultCaptureSettings (rawPitch 10.0 100.0) initialObservation
+    observed2 = observePitch defaultCaptureSettings (rawPitch 20.0 200.0) observed1.observation
+    observed3 = observePitch defaultCaptureSettings (rawPitch 30.0 300.0) observed2.observation
+    observed4 = observePitch defaultCaptureSettings (rawPitch 40.0 400.0) observed3.observation
+    observedSilence = observePitch defaultCaptureSettings
+      { clarity: 0.99, decibels: -80.0, frequency: 440.0, time: 400.0 }
+      observed4.observation
     stableSamples = defaultRecognitionSettings.stableFramesRequired
     step sample recognition =
       stepRecognition defaultRecognitionSettings AnyOctave c4 e4 sample recognition
@@ -470,4 +481,12 @@ main = do
   assertEqual
     { actual: decodedLegacyData <> [ rejectsFutureData, rejectsMalformedData, rejectsMalformedVersion ]
     , expected: [ true, true, true, true, true, true, true ]
+    }
+  assertEqual
+    { actual:
+        [ observed1.sample == Nothing
+        , observed4.sample == Just { clarity: 0.96, frequency: 250.0 }
+        , observedSilence.sample == Just { clarity: 0.0, frequency: 0.0 }
+        ]
+    , expected: [ true, true, true ]
     }
