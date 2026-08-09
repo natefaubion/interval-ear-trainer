@@ -141,6 +141,21 @@ button:active:not(:disabled) {
   padding-top: 0;
 }
 
+.notation-panel.compact .prompt-panel {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  margin-inline: calc(-1 * var(--practice-padding-inline));
+  padding: 0 var(--practice-padding-inline) clamp(0.75rem, 2vw, 1rem);
+  border-bottom: 1px solid var(--line);
+  background: var(--content-surface);
+}
+
+.notation-panel.compact .answer-panel {
+  margin-top: 0;
+  border-top: 0;
+}
+
 .practice-content {
   width: 100%;
   min-width: 0;
@@ -162,6 +177,26 @@ button:active:not(:disabled) {
   width: 100%;
   height: auto;
   margin-inline: auto;
+}
+
+@keyframes shrink-prompt-notation {
+  from {
+    max-width: 16rem;
+  }
+
+  to {
+    max-width: 10rem;
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  @media not (prefers-reduced-motion: reduce) {
+    .notation-panel.compact .notation-canvas {
+      animation: shrink-prompt-notation linear both;
+      animation-range: 0 6rem;
+      animation-timeline: scroll(nearest block);
+    }
+  }
 }
 
 .notation-panel p,

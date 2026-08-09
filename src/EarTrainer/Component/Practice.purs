@@ -203,15 +203,18 @@ component =
                   )
               ]
               [ HH.div
-                  [ HP.class_ (H.ClassName "notation-canvas") ]
-                  [ HH.slot_ notationSlot PromptNotation NotationComponent.component (promptNotation state) ]
-              , if shouldShowIntervalName state then
-                  HH.p
-                    [ HP.class_ (H.ClassName "completed-interval-name") ]
-                    [ HH.text (promptIntervalLabel state) ]
-                else
-                  HH.text ""
-              , renderPitchMeter state
+                  [ HP.class_ (H.ClassName "prompt-panel") ]
+                  [ HH.div
+                      [ HP.class_ (H.ClassName "notation-canvas") ]
+                      [ HH.slot_ notationSlot PromptNotation NotationComponent.component (promptNotation state) ]
+                  , if shouldShowIntervalName state then
+                      HH.p
+                        [ HP.class_ (H.ClassName "completed-interval-name") ]
+                        [ HH.text (promptIntervalLabel state) ]
+                    else
+                      HH.text ""
+                  , renderPitchMeter state
+                  ]
               , renderIntervalChoices state
               ]
           ]
