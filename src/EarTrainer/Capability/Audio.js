@@ -77,6 +77,14 @@ export const createSampler = () => {
   return sampler;
 };
 
+export const startImpl = (onError, onSuccess) => {
+  void Tone.start().then(onSuccess, (error) =>
+    onError(error instanceof Error ? error : new Error(String(error))),
+  );
+
+  return (_error, _onError, onCancel) => onCancel();
+};
+
 export const playImpl = (sampler) => (events) => (durationMilliseconds) => (onError, onSuccess) => {
   cancelPlayback(sampler);
   const state = { cancelled: false, timers: [] };

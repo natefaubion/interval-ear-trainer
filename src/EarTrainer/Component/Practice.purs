@@ -15,6 +15,7 @@ import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
 import EarTrainer.Audio as Audio
 import EarTrainer.Capability.Audio as AudioCapability
+import EarTrainer.Capability.AudioSession as AudioSession
 import EarTrainer.Capability.PitchInput as PitchInput
 import EarTrainer.Component.Notation as NotationComponent
 import EarTrainer.Config
@@ -490,6 +491,7 @@ component =
           | not (quizModeUsesSinging state.config.quizMode) -> do
               H.modify_ _ { captureStatus = ChoosingAnswer [] }
         PlayingAudio BeginSinging -> do
+          H.liftEffect (AudioSession.setType AudioSession.PlayAndRecord)
           { emitter, listener } <- H.liftEffect HS.create
           void (H.subscribe emitter)
           fiber <- H.fork do
@@ -597,7 +599,9 @@ component =
       state <- H.get
       case state.captureStatus of
         StartingCapture _ -> H.modify_ _ { captureStatus = Listening monitor }
-        _ -> H.liftEffect (PitchInput.stop monitor)
+        _ -> do
+          H.liftEffect (PitchInput.stop monitor)
+          H.liftEffect (AudioSession.setType AudioSession.Playback)
     MicrophoneFailed failure -> do
       state <- H.get
       case state.captureStatus of
@@ -669,17 +673,19 @@ component =
   captureFailed state failure = do
     cancelFiber state.ghostFiber
     case state.captureStatus of
-      Listening monitor -> H.liftEffect (PitchInput.stop monitor)
-      _ -> pure unit
+      Listening monitor -> stopCapture (Listening monitor)
+      _ -> H.liftEffect (AudioSession.setType AudioSession.Playback)
     H.modify_ _
       { captureStatus = CaptureFailed failure
       , ghostFiber = Nothing
       }
 
-  stopCapture = case _ of
-    StartingCapture fiber -> H.kill fiber
-    Listening monitor -> H.liftEffect (PitchInput.stop monitor)
-    _ -> pure unit
+  stopCapture captureStatus = do
+    case captureStatus of
+      StartingCapture fiber -> H.kill fiber
+      Listening monitor -> H.liftEffect (PitchInput.stop monitor)
+      _ -> pure unit
+    H.liftEffect (AudioSession.setType AudioSession.Playback)
 
   cancelFiber = case _ of
     Nothing -> pure unit

@@ -5,6 +5,7 @@ import Prelude
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import EarTrainer.Capability.Audio as Audio
+import EarTrainer.Capability.AudioSession as AudioSession
 import EarTrainer.Component.Practice as Practice
 import EarTrainer.Component.Setup as Setup
 import EarTrainer.Config (ExerciseConfig, defaultConfig)
@@ -122,6 +123,8 @@ component =
         Setup sampler -> case Quiz.promptSet state.config of
           Nothing -> pure unit
           Just prompts -> do
+            H.liftEffect (AudioSession.setType AudioSession.Playback)
+            void $ H.liftAff $ attempt Audio.start
             seed <- H.liftEffect (randomInt 0 2147483647)
             H.modify_ _ { phase = Practice { config: state.config, prompts, sampler, seed } }
         _ -> pure unit
