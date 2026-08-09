@@ -19,9 +19,9 @@ run = do
     melodicPlan = Audio.intervalPlan MelodicAscending c4 e4
     harmonicPlan = Audio.intervalPlan Harmonic c4 e4
     rootPlan = Audio.rootPlan c4
-    promptScore = Notation.prompt c4 e4 false
-    acceptedPromptScore = Notation.prompt c4 e4 true
-    choiceScore = Notation.intervalChoice c4 e4
+    promptScore = Notation.prompt Notation.Full c4 e4 false
+    acceptedPromptScore = Notation.prompt Notation.Full c4 e4 true
+    choiceScore = Notation.intervalChoice Notation.Compact c4 e4
   assertEqual { actual: PitchInput.decibelsFromRms 1.0, expected: 0.0 }
   assertTrue' "0.1 RMS is -20 dB" (abs (PitchInput.decibelsFromRms 0.1 + 20.0) < 1.0e-9)
   assertTrue' "silence is clamped to -160 dB" (abs (PitchInput.decibelsFromRms 0.0 + 160.0) < 1.0e-9)
@@ -36,6 +36,10 @@ run = do
     (map _.appearance promptScore.events == [ Notation.Normal, Notation.Hidden ])
   assertTrue' "accepted prompt root is highlighted"
     (map _.appearance acceptedPromptScore.events == [ Notation.Accepted, Notation.Hidden ])
+  assertEqual { actual: promptScore.width, expected: 240 }
+  assertEqual { actual: choiceScore.width, expected: 240 }
+  assertTrue' "prompt notation uses full layout" (promptScore.layout == Notation.Full)
+  assertTrue' "answer notation uses compact layout" (choiceScore.layout == Notation.Compact)
   assertEqual { actual: Array.length choiceScore.events, expected: 3 }
   assertEqual
     { actual: map _.key (Array.concatMap _.notes choiceScore.events)

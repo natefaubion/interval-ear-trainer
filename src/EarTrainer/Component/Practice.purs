@@ -193,7 +193,15 @@ component =
           , HP.class_ (H.ClassName "practice-content")
           ]
           [ HH.div
-              [ HP.class_ (H.ClassName "notation-panel") ]
+              [ HP.classes
+                  ( [ H.ClassName "notation-panel" ]
+                      <>
+                        if notationLayout state.captureStatus == Notation.Compact then
+                          [ H.ClassName "compact" ]
+                        else
+                          []
+                  )
+              ]
               [ HH.div
                   [ HP.class_ (H.ClassName "notation-canvas") ]
                   [ HH.slot_ notationSlot PromptNotation NotationComponent.component (promptNotation state) ]
@@ -310,7 +318,7 @@ component =
           HH.div
             [ HP.class_ (H.ClassName "choice-notation") ]
             [ HH.slot_ notationSlot (ChoiceNotation index) NotationComponent.component
-                (Notation.intervalChoice state.prompt.root choice.target)
+                (Notation.intervalChoice Notation.Compact state.prompt.root choice.target)
             ]
         else
           HH.text ""
@@ -728,6 +736,7 @@ component =
 
   promptNotation state = do
     let
+      layout = notationLayout state.captureStatus
       rootAccepted =
         Recognition.phase state.recognition /= Recognition.WaitingForFirst
           || (quizModeUsesSinging state.config.quizMode && isChoosingAnswer state.captureStatus)
@@ -738,10 +747,16 @@ component =
         (pitchFromMidiLike (spellingReference state.prompt))
         state.ghostMidi
     case state.captureStatus, detected of
-      AnswerComplete _, _ -> Notation.completed state.prompt.root state.prompt.target
-      IntervalError, Just pitch -> Notation.incorrect state.prompt.root state.prompt.target pitch rootAccepted
-      _, Just pitch -> Notation.ghost state.prompt.root state.prompt.target pitch rootAccepted
-      _, Nothing -> Notation.prompt state.prompt.root state.prompt.target rootAccepted
+      AnswerComplete _, _ -> Notation.completed layout state.prompt.root state.prompt.target
+      IntervalError, Just pitch -> Notation.incorrect layout state.prompt.root state.prompt.target pitch rootAccepted
+      _, Just pitch -> Notation.ghost layout state.prompt.root state.prompt.target pitch rootAccepted
+      _, Nothing -> Notation.prompt layout state.prompt.root state.prompt.target rootAccepted
+
+  notationLayout = case _ of
+    ChoosingAnswer _ -> Notation.Compact
+    AnswerComplete _ -> Notation.Compact
+    PlayingAudio (ResumeAnswers _) -> Notation.Compact
+    _ -> Notation.Full
 
   spellingReference prompt = case prompt.root, prompt.target of
     Pitch (PitchClass _ (Accidental rootAccidental)) _,

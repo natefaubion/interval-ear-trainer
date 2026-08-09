@@ -137,6 +137,10 @@ button:active:not(:disabled) {
   background: var(--content-surface);
 }
 
+.notation-panel.compact {
+  padding-top: 0;
+}
+
 .practice-content {
   width: 100%;
   min-width: 0;
@@ -149,8 +153,7 @@ button:active:not(:disabled) {
 .notation-canvas {
   width: 100%;
   min-width: 0;
-  max-width: 20rem;
-  min-height: 11.875rem;
+  max-width: 16rem;
   margin-inline: auto;
 }
 
@@ -283,10 +286,8 @@ button:active:not(:disabled) {
 }
 
 .choice-notation {
-  width: 100%;
-  max-width: 19rem;
+  width: min(100%, 15rem);
   min-width: 0;
-  min-height: 6.5rem;
   margin-inline: auto;
 }
 
@@ -971,8 +972,7 @@ button:active:not(:disabled) {
   }
 
   .notation-canvas {
-    max-width: 16rem;
-    min-height: 8.5rem;
+    max-width: 14rem;
   }
 
   .notation-panel .completed-interval-name,

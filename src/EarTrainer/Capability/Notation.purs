@@ -4,7 +4,7 @@ module EarTrainer.Capability.Notation
 
 import Prelude
 
-import EarTrainer.Notation (Appearance(..), Clef(..), EngravedEvent, EngravedNote, Score)
+import EarTrainer.Notation (Appearance(..), Clef(..), EngravedEvent, EngravedNote, NotationLayout(..), Score)
 import Effect (Effect)
 import Web.DOM.Element (Element)
 
@@ -15,12 +15,17 @@ type ForeignEvent =
   , notes :: Array EngravedNote
   }
 
-foreign import renderScoreImpl :: Element -> String -> Int -> Array ForeignEvent -> Effect Unit
+foreign import renderScoreImpl :: Element -> String -> String -> Int -> Array ForeignEvent -> Effect Unit
 
 render :: Element -> Score -> Effect Unit
 render element score =
-  renderScoreImpl element (encodeClef score.clef) score.width
+  renderScoreImpl element (encodeLayout score.layout) (encodeClef score.clef) score.width
     (map encodeEvent score.events)
+
+encodeLayout :: NotationLayout -> String
+encodeLayout = case _ of
+  Full -> "full"
+  Compact -> "compact"
 
 encodeClef :: Clef -> String
 encodeClef = case _ of

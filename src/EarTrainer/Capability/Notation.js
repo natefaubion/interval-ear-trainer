@@ -12,6 +12,20 @@ import {
 const svgNamespace = "http://www.w3.org/2000/svg";
 let renderSequence = 0;
 
+const scoreVerticalBounds = (svg, layout) => {
+  let top = layout === "full" ? 0 : 20;
+  let bottom = layout === "full" ? 190 : 124;
+
+  svg.querySelectorAll(".vf-stavenote > rect").forEach((rect) => {
+    const y = Number(rect.getAttribute("y"));
+    const height = Number(rect.getAttribute("height"));
+    top = Math.min(top, y - 14);
+    bottom = Math.max(bottom, y + height + 14);
+  });
+
+  return { top, height: bottom - top };
+};
+
 const addRecognizedFilter = (svg) => {
   const filterId = `recognized-note-halo-${renderSequence++}`;
   const defs = document.createElementNS(svgNamespace, "defs");
@@ -57,7 +71,7 @@ const addRecognizedHighlight = (group, filterId) => {
   group.parentNode.insertBefore(shadow, group);
 };
 
-export const renderScoreImpl = (element) => (clef) => (width) => (events) => () => {
+export const renderScoreImpl = (element) => (layout) => (clef) => (width) => (events) => () => {
   element.replaceChildren();
 
   const height = 190;
@@ -96,6 +110,7 @@ export const renderScoreImpl = (element) => (clef) => (width) => (events) => () 
   const svg = element.querySelector("svg");
   if (svg) {
     const noteGroups = svg.querySelectorAll(".vf-stavenote");
+    const verticalBounds = scoreVerticalBounds(svg, layout);
     const recognizedFilterId = addRecognizedFilter(svg);
     events.forEach((event, index) => {
       if (event.highlighted) {
@@ -106,7 +121,7 @@ export const renderScoreImpl = (element) => (clef) => (width) => (events) => () 
       }
     });
 
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("viewBox", `0 ${verticalBounds.top} ${width} ${verticalBounds.height}`);
     svg.removeAttribute("width");
     svg.removeAttribute("height");
     svg.style.removeProperty("width");

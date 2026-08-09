@@ -1,6 +1,7 @@
 module EarTrainer.Notation
   ( Appearance(..)
   , Clef(..)
+  , NotationLayout(..)
   , EngravedEvent
   , EngravedNote
   , Score
@@ -26,8 +27,11 @@ data Appearance
 
 data Clef = Treble | Bass
 
+data NotationLayout = Full | Compact
+
 derive instance Eq Appearance
 derive instance Eq Clef
+derive instance Eq NotationLayout
 
 type EngravedNote =
   { accidental :: String
@@ -42,62 +46,69 @@ type EngravedEvent =
 type Score =
   { clef :: Clef
   , events :: Array EngravedEvent
+  , layout :: NotationLayout
   , width :: Int
   }
 
-notes :: Array Pitch -> Score
-notes pitches =
+notes :: NotationLayout -> Array Pitch -> Score
+notes layout pitches =
   { clef: selectClef pitches
   , events: map (engravedEvent Normal <<< Array.singleton) pitches
-  , width: if Array.length pitches <= 1 then 240 else 300
+  , layout
+  , width: if Array.length pitches <= 1 then 200 else 240
   }
 
-prompt :: Pitch -> Pitch -> Boolean -> Score
-prompt root target rootAccepted =
+prompt :: NotationLayout -> Pitch -> Pitch -> Boolean -> Score
+prompt layout root target rootAccepted =
   { clef: selectClef [ root, target ]
   , events:
       [ engravedEvent (if rootAccepted then Accepted else Normal) [ root ]
       , engravedEvent Hidden [ target ]
       ]
-  , width: 300
+  , layout
+  , width: 240
   }
 
-completed :: Pitch -> Pitch -> Score
-completed root target =
+completed :: NotationLayout -> Pitch -> Pitch -> Score
+completed layout root target =
   { clef: selectClef [ root, target ]
   , events: [ engravedEvent Accepted [ root ], engravedEvent Accepted [ target ] ]
-  , width: 300
+  , layout
+  , width: 240
   }
 
-ghost :: Pitch -> Pitch -> Pitch -> Boolean -> Score
-ghost root target detected rootAccepted =
+ghost :: NotationLayout -> Pitch -> Pitch -> Pitch -> Boolean -> Score
+ghost layout root target detected rootAccepted =
   { clef: selectClef [ root, target ]
   , events:
       [ engravedEvent (if rootAccepted then Accepted else Normal) [ root ]
       , engravedEvent Dim [ detected ]
       ]
-  , width: 300
+  , layout
+  , width: 240
   }
 
-incorrect :: Pitch -> Pitch -> Pitch -> Boolean -> Score
-incorrect root target detected rootAccepted =
+incorrect :: NotationLayout -> Pitch -> Pitch -> Pitch -> Boolean -> Score
+incorrect layout root target detected rootAccepted =
   { clef: selectClef [ root, target ]
   , events:
       [ engravedEvent (if rootAccepted then Accepted else Normal) [ root ]
       , engravedEvent Incorrect [ detected ]
       ]
-  , width: 300
+  , layout
+  , width: 240
   }
 
-intervalChoice :: Pitch -> Pitch -> Score
-intervalChoice root target =
+intervalChoice :: NotationLayout -> Pitch -> Pitch -> Score
+intervalChoice layout root target =
   { clef: selectClef [ root, target ]
   , events:
       [ engravedEvent Normal [ root ]
       , engravedEvent Normal [ target ]
       , engravedEvent Normal [ root, target ]
       ]
-  , width: 300
+  , layout
+  , width: 240
   }
 
 engravedEvent :: Appearance -> Array Pitch -> EngravedEvent
