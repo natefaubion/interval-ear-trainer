@@ -41,6 +41,7 @@ import EarTrainer.Music (OctavePolicy(..), Pitch, midiNumber)
 type PitchSample =
   { clarity :: Number
   , frequency :: Number
+  , time :: Number
   }
 
 type TimedPitchSample =
@@ -103,8 +104,9 @@ instance Show RecognitionPhase where
 
 type StablePitch =
   { candidate :: Maybe Int
+  , confidenceMilliseconds :: Number
   , feedback :: Maybe Feedback
-  , stableFrames :: Int
+  , lastObservedAt :: Maybe Number
   }
 
 data Recognition
@@ -112,7 +114,7 @@ data Recognition
   | ReleasingFirst
       { feedback :: Maybe Feedback
       , firstMidi :: Int
-      , releaseFrames :: Int
+      , releasedAt :: Maybe Number
       }
   | MatchingSecond
       { firstMidi :: Int
@@ -130,16 +132,18 @@ data Recognition
 
 type RecognitionSettings =
   { clarityThreshold :: Number
-  , releaseFramesRequired :: Int
-  , stableFramesRequired :: Int
+  , maximumObservationGapMilliseconds :: Number
+  , releaseMillisecondsRequired :: Number
+  , stableMillisecondsRequired :: Number
   , toleranceCents :: Number
   }
 
 defaultRecognitionSettings :: RecognitionSettings
 defaultRecognitionSettings =
   { clarityThreshold: 0.9
-  , releaseFramesRequired: 2
-  , stableFramesRequired: 36
+  , maximumObservationGapMilliseconds: 50.0
+  , releaseMillisecondsRequired: 25.0
+  , stableMillisecondsRequired: 120.0
   , toleranceCents: 35.0
   }
 
@@ -147,7 +151,12 @@ initialRecognition :: Recognition
 initialRecognition = MatchingFirst initialStablePitch
 
 initialStablePitch :: StablePitch
-initialStablePitch = { candidate: Nothing, feedback: Nothing, stableFrames: 0 }
+initialStablePitch =
+  { candidate: Nothing
+  , confidenceMilliseconds: 0.0
+  , feedback: Nothing
+  , lastObservedAt: Nothing
+  }
 
 phase :: Recognition -> RecognitionPhase
 phase = case _ of
@@ -194,10 +203,11 @@ observePitch settings raw (Observation observation) = do
     nextSamples = if breakDetected then [] else samples
     sample
       | breakDetected = Just
-          { clarity: 0.0, frequency: 0.0 }
+          { clarity: 0.0, frequency: 0.0, time: raw.time }
       | Array.length samples >= settings.minimumSamples = Just
           { clarity: median (map _.clarity samples)
           , frequency: median (map _.frequency samples)
+          , time: raw.time
           }
       | otherwise = Nothing
   { observation: Observation { lastValidAt, samples: nextSamples }
@@ -249,14 +259,19 @@ matchesPitchIdentity allowOctaveEquivalent expected current =
 absolute :: Number -> Number
 absolute value = if value < 0.0 then -value else value
 
-stepStable :: Int -> Feedback -> StablePitch -> StablePitch
-stepStable required current stable = do
+stepStable :: RecognitionSettings -> Number -> Feedback -> StablePitch -> StablePitch
+stepStable settings observedAt current stable = do
   let
-    frames = if stable.candidate == Just current.midi then stable.stableFrames + 1 else 1
+    sameCandidate = stable.candidate == Just current.midi
+    elapsed = case stable.lastObservedAt of
+      Just previous | sameCandidate -> min settings.maximumObservationGapMilliseconds (max 0.0 (observedAt - previous))
+      _ -> 0.0
+    confidence = if sameCandidate then stable.confidenceMilliseconds + elapsed else 0.0
   stable
     { candidate = Just current.midi
+    , confidenceMilliseconds = min settings.stableMillisecondsRequired confidence
     , feedback = Just current
-    , stableFrames = min required frames
+    , lastObservedAt = Just observedAt
     }
 
 resetStable :: Maybe Feedback -> StablePitch
@@ -287,8 +302,8 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
       case currentFeedback allowOctaveEquivalent expectedMidi of
         Just current | clear -> do
           let
-            next = stepStable settings.stableFramesRequired current stable
-          if next.stableFrames < settings.stableFramesRequired then MatchingFirst next
+            next = stepStable settings sample.time current stable
+          if next.confidenceMilliseconds < settings.stableMillisecondsRequired then MatchingFirst next
           else continue current next
         current -> MatchingFirst (resetStable current)
   case recognition of
@@ -300,29 +315,31 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
         allowOctaveEquivalent = octavePolicy == AnyOctave
       updateStable writtenFirst allowOctaveEquivalent stable \current next ->
         if matches allowOctaveEquivalent writtenFirst then
-          ReleasingFirst { feedback: next.feedback, firstMidi: current.midi, releaseFrames: 0 }
+          ReleasingFirst { feedback: next.feedback, firstMidi: current.midi, releasedAt: Nothing }
         else if matchesPitchIdentity allowOctaveEquivalent writtenFirst current then MatchingFirst next
         else IncorrectFirst next.feedback
     ReleasingFirst state
       | matches false state.firstMidi -> ReleasingFirst state
           { feedback = currentFeedback false state.firstMidi
-          , releaseFrames = 0
+          , releasedAt = Nothing
           }
       | otherwise -> do
           let
-            frames = state.releaseFrames + 1
             current = currentFeedback false state.firstMidi
-          if frames >= settings.releaseFramesRequired then
+            releasedAt = case state.releasedAt of
+              Nothing -> sample.time
+              Just time -> time
+          if sample.time - releasedAt >= settings.releaseMillisecondsRequired then
             MatchingSecond { firstMidi: state.firstMidi, stable: resetStable current }
-          else ReleasingFirst state { feedback = current, releaseFrames = frames }
+          else ReleasingFirst state { feedback = current, releasedAt = Just releasedAt }
     MatchingSecond state -> do
       let
         expectedMidi = normalizedSecond state.firstMidi
       case currentFeedback false expectedMidi of
         Just current | clear -> do
           let
-            next = stepStable settings.stableFramesRequired current state.stable
-          if next.stableFrames < settings.stableFramesRequired then MatchingSecond state { stable = next }
+            next = stepStable settings sample.time current state.stable
+          if next.confidenceMilliseconds < settings.stableMillisecondsRequired then MatchingSecond state { stable = next }
           else if matches false expectedMidi then Complete { feedback: next.feedback, firstMidi: state.firstMidi }
           else if matchesPitchIdentity false expectedMidi current then MatchingSecond state { stable = next }
           else IncorrectSecond { feedback: next.feedback, firstMidi: state.firstMidi }
@@ -378,7 +395,7 @@ data SequenceRecognition
       { acceptedMidi :: Array Int
       , feedback :: Maybe Feedback
       , lastMidi :: Int
-      , releaseFrames :: Int
+      , releasedAt :: Maybe Number
       }
   | IncorrectSequence
       { acceptedMidi :: Array Int
@@ -446,10 +463,16 @@ stepSequenceRecognition settings octavePolicy expected sample recognition = do
         stillProducing = case current of
           Just currentPitch -> clear && matchesPitchIdentity false state.lastMidi currentPitch
           Nothing -> false
-        frames = if stillProducing then 0 else state.releaseFrames + 1
-      if frames >= settings.releaseFramesRequired then
+        releasedAt = case state.releasedAt, stillProducing of
+          _, true -> Nothing
+          Nothing, false -> Just sample.time
+          previous, false -> previous
+        releaseComplete = case releasedAt of
+          Nothing -> false
+          Just time -> sample.time - time >= settings.releaseMillisecondsRequired
+      if releaseComplete then
         MatchingSequence { acceptedMidi: state.acceptedMidi, stable: resetStable current }
-      else ReleasingSequence state { feedback = current, releaseFrames = frames }
+      else ReleasingSequence state { feedback = current, releasedAt = releasedAt }
     MatchingSequence state -> case expectedMidi of
       Nothing -> CompleteSequence { acceptedMidi: state.acceptedMidi, feedback: state.stable.feedback }
       Just midi -> do
@@ -458,8 +481,8 @@ stepSequenceRecognition settings octavePolicy expected sample recognition = do
           current = currentFeedback allowOctaveEquivalent midi
         case current of
           Just currentPitch | clear -> do
-            let next = stepStable settings.stableFramesRequired currentPitch state.stable
-            if next.stableFrames < settings.stableFramesRequired then
+            let next = stepStable settings sample.time currentPitch state.stable
+            if next.confidenceMilliseconds < settings.stableMillisecondsRequired then
               MatchingSequence state { stable = next }
             else if matchesExpected settings allowOctaveEquivalent midi currentPitch then do
               let nextAccepted = Array.snoc state.acceptedMidi currentPitch.midi
@@ -470,7 +493,7 @@ stepSequenceRecognition settings octavePolicy expected sample recognition = do
                   { acceptedMidi: nextAccepted
                   , feedback: next.feedback
                   , lastMidi: currentPitch.midi
-                  , releaseFrames: 0
+                  , releasedAt: Nothing
                   }
             else if matchesPitchIdentity allowOctaveEquivalent midi currentPitch then
               MatchingSequence state { stable = next }

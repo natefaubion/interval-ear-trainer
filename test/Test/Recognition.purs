@@ -5,6 +5,7 @@ import Prelude
 import Data.Array as Array
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Foldable (foldl)
+import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import EarTrainer.Music (Accidental(..), Letter(..), OctavePolicy(..), pitch)
 import EarTrainer.Recognition
@@ -35,132 +36,175 @@ run = do
     e4 = pitch E (Accidental 0) 4
     d4 = pitch D (Accidental 0) 4
     b4 = pitch B (Accidental 0) 4
-    c4Sample = { frequency: 261.625565, clarity: 0.98 }
-    c3Sample = { frequency: 130.812783, clarity: 0.98 }
-    c5Sample = { frequency: 523.251131, clarity: 0.98 }
-    c4SharpFortyCentsSample = { frequency: 267.744, clarity: 0.98 }
-    e4Sample = { frequency: 329.627557, clarity: 0.98 }
-    e3Sample = { frequency: 164.813778, clarity: 0.98 }
-    d4Sample = { frequency: 293.664768, clarity: 0.98 }
-    d3Sample = { frequency: 146.832384, clarity: 0.98 }
-    e4SharpFortyCentsSample = { frequency: 337.337, clarity: 0.98 }
-    b2Sample = { frequency: 123.470825, clarity: 0.98 }
-    b3Sample = { frequency: 246.941651, clarity: 0.98 }
-    silence = { frequency: 0.0, clarity: 0.0 }
-    stableSamples = defaultRecognitionSettings.stableFramesRequired
-    releaseSamples = defaultRecognitionSettings.releaseFramesRequired
-    step sample recognition = stepRecognition defaultRecognitionSettings AnyOctave c4 e4 sample recognition
-    advance sample recognition = foldl (\current _ -> step sample current) recognition (Array.replicate stableSamples unit)
-    beforeFirst = foldl (\current _ -> step c4Sample current) initialRecognition
-      (Array.replicate (stableSamples - 1) unit)
+    pitchSample frequency = { frequency, clarity: 0.98, time: 0.0 }
+    at time sample = sample { time = time }
+    c4Sample = pitchSample 261.625565
+    c3Sample = pitchSample 130.812783
+    c5Sample = pitchSample 523.251131
+    c4SharpFortyCentsSample = pitchSample 267.744
+    e4Sample = pitchSample 329.627557
+    e3Sample = pitchSample 164.813778
+    d4Sample = pitchSample 293.664768
+    d3Sample = pitchSample 146.832384
+    e4SharpFortyCentsSample = pitchSample 337.337
+    b2Sample = pitchSample 123.470825
+    b3Sample = pitchSample 246.941651
+    silence = { frequency: 0.0, clarity: 0.0, time: 0.0 }
+    testSettings = defaultRecognitionSettings
+      { maximumObservationGapMilliseconds = 20.0
+      , releaseMillisecondsRequired = 10.0
+      , stableMillisecondsRequired = 20.0
+      }
+    stableTimes start = [ start, start + 10.0, start + 20.0 ]
+    releaseTimes start = [ start, start + 10.0 ]
+    step sample recognition = stepRecognition testSettings AnyOctave c4 e4 sample recognition
+    advanceAt start sample recognition = foldl (\current time -> step (at time sample) current) recognition
+      (stableTimes start)
+    releaseAt start recognition = foldl (\current time -> step (at time silence) current) recognition
+      (releaseTimes start)
+    advance = advanceAt 0.0
+    beforeFirst = foldl (\current time -> step (at time c4Sample) current) initialRecognition [ 0.0, 10.0 ]
     afterFirst = advance c4Sample initialRecognition
-    afterRelease = foldl (\current _ -> step silence current) afterFirst (Array.replicate releaseSamples unit)
-    afterSecond = advance e4Sample afterRelease
+    afterRelease = releaseAt 30.0 afterFirst
+    afterSecond = advanceAt 50.0 e4Sample afterRelease
     wrongFirst = advance e4Sample initialRecognition
     wrongSecond = advance b3Sample afterRelease
     detunedFirst = advance c4SharpFortyCentsSample initialRecognition
     detunedSecond = advance e4SharpFortyCentsSample afterRelease
     anyOctaveFirst = advance c5Sample initialRecognition
     octaveBelowFirst = advance c3Sample initialRecognition
-    majorSeventhStep sample recognition =
-      stepRecognition defaultRecognitionSettings AnyOctave c4 b4 sample recognition
-    majorSeventhFirst = foldl (\current _ -> majorSeventhStep c3Sample current) initialRecognition
-      (Array.replicate stableSamples unit)
-    majorSeventhRelease = foldl (\current _ -> majorSeventhStep silence current) majorSeventhFirst
-      (Array.replicate releaseSamples unit)
-    wrongOctaveSecond = foldl (\current _ -> majorSeventhStep b2Sample current) majorSeventhRelease
-      (Array.replicate stableSamples unit)
-    correctNormalizedSecond = foldl (\current _ -> majorSeventhStep b3Sample current) majorSeventhRelease
-      (Array.replicate stableSamples unit)
+    majorSeventhStep sample recognition = stepRecognition testSettings AnyOctave c4 b4 sample recognition
+    majorSeventhAdvance start sample recognition = foldl
+      (\current time -> majorSeventhStep (at time sample) current)
+      recognition
+      (stableTimes start)
+    majorSeventhFirst = majorSeventhAdvance 0.0 c3Sample initialRecognition
+    majorSeventhRelease = foldl (\current time -> majorSeventhStep (at time silence) current)
+      majorSeventhFirst
+      (releaseTimes 30.0)
+    wrongOctaveSecond = majorSeventhAdvance 50.0 b2Sample majorSeventhRelease
+    correctNormalizedSecond = majorSeventhAdvance 50.0 b3Sample majorSeventhRelease
     writtenOctaveFirst = foldl
-      (\current _ -> stepRecognition defaultRecognitionSettings WrittenOctave c4 e4 c5Sample current)
+      (\current time -> stepRecognition testSettings WrittenOctave c4 e4 (at time c5Sample) current)
       initialRecognition
-      (Array.replicate stableSamples unit)
+      (stableTimes 0.0)
     sequenceStep sample recognition = stepSequenceRecognition
-      defaultRecognitionSettings
+      testSettings
       AnyOctave
       (nonEmpty [ c4, e4, d4 ])
       sample
       recognition
-    sequenceAdvance sample recognition = foldl (\current _ -> sequenceStep sample current) recognition
-      (Array.replicate stableSamples unit)
-    sequenceFirst = sequenceAdvance c4Sample initialSequenceRecognition
-    sequenceFirstRelease = foldl (\current _ -> sequenceStep silence current) sequenceFirst
-      (Array.replicate releaseSamples unit)
-    sequenceSecond = sequenceAdvance e4Sample sequenceFirstRelease
-    sequenceSecondRelease = foldl (\current _ -> sequenceStep silence current) sequenceSecond
-      (Array.replicate releaseSamples unit)
-    sequenceComplete = sequenceAdvance d4Sample sequenceSecondRelease
-    sequenceContinuedFirst = sequenceStep c4Sample sequenceFirst
-    sequenceWrongMiddle = sequenceAdvance b3Sample sequenceFirstRelease
-    sequenceWrongFinal = sequenceAdvance b3Sample sequenceSecondRelease
-    sequencePartial = foldl (\current _ -> sequenceStep c4Sample current) initialSequenceRecognition
-      (Array.replicate (stableSamples - 1) unit)
-    sequencePartialSilence = sequenceStep silence sequencePartial
-    sequenceAfterInterruptedPitch = foldl (\current _ -> sequenceStep c4Sample current) sequencePartialSilence
-      (Array.replicate (stableSamples - 1) unit)
+    sequenceAdvance start sample recognition = foldl (\current time -> sequenceStep (at time sample) current) recognition
+      (stableTimes start)
+    sequenceRelease start recognition = foldl (\current time -> sequenceStep (at time silence) current) recognition
+      (releaseTimes start)
+    sequenceFirst = sequenceAdvance 0.0 c4Sample initialSequenceRecognition
+    sequenceFirstRelease = sequenceRelease 30.0 sequenceFirst
+    sequenceSecond = sequenceAdvance 50.0 e4Sample sequenceFirstRelease
+    sequenceSecondRelease = sequenceRelease 80.0 sequenceSecond
+    sequenceComplete = sequenceAdvance 100.0 d4Sample sequenceSecondRelease
+    sequenceContinuedFirst = sequenceStep (at 30.0 c4Sample) sequenceFirst
+    sequenceWrongMiddle = sequenceAdvance 50.0 b3Sample sequenceFirstRelease
+    sequenceWrongFinal = sequenceAdvance 100.0 b3Sample sequenceSecondRelease
+    sequencePartial = foldl (\current time -> sequenceStep (at time c4Sample) current) initialSequenceRecognition
+      [ 0.0, 10.0 ]
+    sequencePartialSilence = sequenceStep (at 20.0 silence) sequencePartial
+    sequenceAfterInterruptedPitch = foldl (\current time -> sequenceStep (at time c4Sample) current)
+      sequencePartialSilence
+      [ 30.0, 40.0 ]
     repeatedStep sample recognition = stepSequenceRecognition
-      defaultRecognitionSettings
+      testSettings
       AnyOctave
       (nonEmpty [ c4, c4 ])
       sample
       recognition
-    repeatedFirst = foldl (\current _ -> repeatedStep c4Sample current) initialSequenceRecognition
-      (Array.replicate stableSamples unit)
-    repeatedContinued = repeatedStep c4Sample repeatedFirst
-    repeatedRelease = foldl (\current _ -> repeatedStep silence current) repeatedFirst
-      (Array.replicate releaseSamples unit)
-    repeatedComplete = foldl (\current _ -> repeatedStep c4Sample current) repeatedRelease
-      (Array.replicate stableSamples unit)
+    repeatedAdvance start sample recognition = foldl (\current time -> repeatedStep (at time sample) current) recognition
+      (stableTimes start)
+    repeatedFirst = repeatedAdvance 0.0 c4Sample initialSequenceRecognition
+    repeatedContinued = repeatedStep (at 30.0 c4Sample) repeatedFirst
+    repeatedRelease = foldl (\current time -> repeatedStep (at time silence) current) repeatedFirst
+      (releaseTimes 30.0)
+    repeatedComplete = repeatedAdvance 50.0 c4Sample repeatedRelease
     writtenSequenceFirst = foldl
-      ( \current _ -> stepSequenceRecognition
-          defaultRecognitionSettings
+      ( \current time -> stepSequenceRecognition
+          testSettings
           WrittenOctave
           (nonEmpty [ c4, e4 ])
-          c5Sample
+          (at time c5Sample)
           current
       )
       initialSequenceRecognition
-      (Array.replicate stableSamples unit)
+      (stableTimes 0.0)
     octaveSequenceStep sample recognition = stepSequenceRecognition
-      defaultRecognitionSettings
+      testSettings
       AnyOctave
       (nonEmpty [ c4, e4, d4 ])
       sample
       recognition
-    octaveFirst = foldl (\current _ -> octaveSequenceStep c3Sample current) initialSequenceRecognition
-      (Array.replicate stableSamples unit)
-    octaveFirstRelease = foldl (\current _ -> octaveSequenceStep silence current) octaveFirst
-      (Array.replicate releaseSamples unit)
-    octaveSecond = foldl (\current _ -> octaveSequenceStep e3Sample current) octaveFirstRelease
-      (Array.replicate stableSamples unit)
-    octaveSecondRelease = foldl (\current _ -> octaveSequenceStep silence current) octaveSecond
-      (Array.replicate releaseSamples unit)
-    octaveComplete = foldl (\current _ -> octaveSequenceStep d3Sample current) octaveSecondRelease
-      (Array.replicate stableSamples unit)
-    octaveShiftedSecond = foldl (\current _ -> octaveSequenceStep e4Sample current) octaveFirstRelease
-      (Array.replicate stableSamples unit)
+    octaveAdvance start sample recognition = foldl
+      (\current time -> octaveSequenceStep (at time sample) current)
+      recognition
+      (stableTimes start)
+    octaveRelease start recognition = foldl
+      (\current time -> octaveSequenceStep (at time silence) current)
+      recognition
+      (releaseTimes start)
+    octaveFirst = octaveAdvance 0.0 c3Sample initialSequenceRecognition
+    octaveFirstRelease = octaveRelease 30.0 octaveFirst
+    octaveSecond = octaveAdvance 50.0 e3Sample octaveFirstRelease
+    octaveSecondRelease = octaveRelease 80.0 octaveSecond
+    octaveComplete = octaveAdvance 100.0 d3Sample octaveSecondRelease
+    octaveShiftedSecond = octaveAdvance 50.0 e4Sample octaveFirstRelease
     completeRepeatedSequence count = do
       let
         expected = nonEmpty (Array.replicate count c4)
         stepExpected sample recognition = stepSequenceRecognition
-          defaultRecognitionSettings
+          testSettings
           AnyOctave
           expected
           sample
           recognition
-        singNote recognition = foldl (\current _ -> stepExpected c4Sample current) recognition
-          (Array.replicate stableSamples unit)
-        releaseNote recognition = foldl (\current _ -> stepExpected silence current) recognition
-          (Array.replicate releaseSamples unit)
+        singNote index recognition = foldl
+          (\current time -> stepExpected (at time c4Sample) current)
+          recognition
+          (stableTimes (Int.toNumber index * 50.0))
+        releaseNote index recognition = foldl
+          (\current time -> stepExpected (at time silence) current)
+          recognition
+          (releaseTimes (Int.toNumber index * 50.0 + 30.0))
       foldl
         ( \recognition index -> do
-            let accepted = singNote recognition
-            if index == count - 1 then accepted else releaseNote accepted
+            let accepted = singNote index recognition
+            if index == count - 1 then accepted else releaseNote index accepted
         )
         initialSequenceRecognition
         (Array.range 0 (count - 1))
     sequenceLengths = map (sequencePhase <<< completeRepeatedSequence) (Array.range 3 8)
+    acceptedAtRate interval count = foldl
+      ( \current index -> stepRecognition
+          defaultRecognitionSettings
+          AnyOctave
+          c4
+          e4
+          (at (Int.toNumber index * interval) c4Sample)
+          current
+      )
+      initialRecognition
+      (Array.range 0 count)
+    acceptedAt30Hz = acceptedAtRate (1000.0 / 30.0) 4
+    acceptedAt60Hz = acceptedAtRate (1000.0 / 60.0) 8
+    acceptedAt120Hz = acceptedAtRate (1000.0 / 120.0) 15
+    afterSchedulingGap = foldl
+      ( \current time -> stepRecognition
+          defaultRecognitionSettings
+          AnyOctave
+          c4
+          e4
+          (at time c4Sample)
+          current
+      )
+      initialRecognition
+      [ 0.0, 1000.0 ]
     rawPitch time frequency = { clarity: 0.96, decibels: -20.0, frequency, time }
     observed1 = observePitch defaultCaptureSettings (rawPitch 10.0 100.0) initialObservation
     observed2 = observePitch defaultCaptureSettings (rawPitch 20.0 200.0) observed1.observation
@@ -196,12 +240,12 @@ run = do
   assertEqual { actual: relativeMidi AnyOctave c4 wrongFirst 64, expected: 64 }
   assertEqual { actual: relativeMidi WrittenOctave c4 octaveBelowFirst 57, expected: 57 }
   assertEqual { actual: observed1.sample, expected: Nothing }
-  assertEqual { actual: observed4.sample, expected: Just { clarity: 0.96, frequency: 250.0 } }
-  assertEqual { actual: observedSilence.sample, expected: Just { clarity: 0.0, frequency: 0.0 } }
-  assertEqual { actual: observedConsonant.sample, expected: Just { clarity: 0.0, frequency: 0.0 } }
-  assertEqual { actual: observedBriefDrop.sample, expected: Just { clarity: 0.96, frequency: 250.0 } }
+  assertEqual { actual: observed4.sample, expected: Just { clarity: 0.96, frequency: 250.0, time: 40.0 } }
+  assertEqual { actual: observedSilence.sample, expected: Just { clarity: 0.0, frequency: 0.0, time: 400.0 } }
+  assertEqual { actual: observedConsonant.sample, expected: Just { clarity: 0.0, frequency: 0.0, time: 76.0 } }
+  assertEqual { actual: observedBriefDrop.sample, expected: Just { clarity: 0.96, frequency: 250.0, time: 60.0 } }
   assertEqual { actual: observedNew3.sample, expected: Nothing }
-  assertEqual { actual: observedNew4.sample, expected: Just { clarity: 0.96, frequency: 500.0 } }
+  assertEqual { actual: observedNew4.sample, expected: Just { clarity: 0.96, frequency: 500.0, time: 110.0 } }
   assertEqual { actual: sequenceAcceptedCount sequenceSecond, expected: 2 }
   assertEqual { actual: sequencePhase sequenceComplete, expected: SequenceComplete }
   assertEqual { actual: sequencePhase sequenceContinuedFirst, expected: SequenceReleasing }
@@ -217,3 +261,7 @@ run = do
   assertEqual { actual: sequencePhase octaveShiftedSecond, expected: SequenceIncorrect }
   assertEqual { actual: sequenceLengths, expected: Array.replicate 6 SequenceComplete }
   assertEqual { actual: sequenceAcceptedCount initialSequenceRecognition, expected: 0 }
+  assertEqual { actual: phase acceptedAt30Hz, expected: WaitingForRelease }
+  assertEqual { actual: phase acceptedAt60Hz, expected: WaitingForRelease }
+  assertEqual { actual: phase acceptedAt120Hz, expected: WaitingForRelease }
+  assertEqual { actual: phase afterSchedulingGap, expected: WaitingForFirst }
