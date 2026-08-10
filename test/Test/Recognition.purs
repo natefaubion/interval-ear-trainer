@@ -16,6 +16,7 @@ import EarTrainer.Recognition
   , SequencePhase(..)
   , defaultCaptureSettings
   , defaultRecognitionSettings
+  , feedback
   , initialObservation
   , initialRecognition
   , initialSequenceRecognition
@@ -26,6 +27,7 @@ import EarTrainer.Recognition
   , relativeMidi
   , selectPitchCandidate
   , sequenceAcceptedCount
+  , sequenceFeedback
   , sequencePhase
   , sequencePitchExpectation
   , stepRecognition
@@ -60,7 +62,8 @@ run = do
       if sample.frequency <= 0.0 then ArticulationBreak sample.time
       else ObservedPitch sample
     testSettings = defaultRecognitionSettings
-      { incorrectMillisecondsRequired = 20.0
+      { articulationPitchMillisecondsRequired = 20.0
+      , incorrectMillisecondsRequired = 20.0
       , maximumObservationGapMilliseconds = 20.0
       , stableMillisecondsRequired = 20.0
       }
@@ -74,12 +77,32 @@ run = do
     advance = advanceAt 0.0
     beforeFirst = foldl (\current time -> step (at time c4Sample) current) initialRecognition [ 0.0, 10.0 ]
     afterFirst = advance c4Sample initialRecognition
-    secondWithoutArticulation = foldl
+    secondFromPitchChange = foldl
       (\current time -> step (at time e4Sample) current)
       afterFirst
       [ 30.0, 80.0, 130.0, 180.0, 230.0, 280.0, 330.0, 380.0 ]
+    oneChangedPitchSample = step (at 30.0 e4Sample) afterFirst
+    returnedToFirstPitch = foldl
+      (\current sample -> step sample current)
+      afterFirst
+      [ at 30.0 e4Sample
+      , at 40.0 e4Sample
+      , at 50.0 c4Sample
+      , at 60.0 e4Sample
+      , at 70.0 e4Sample
+      ]
     afterRelease = releaseAt 30.0 afterFirst
     afterSecond = advanceAt 50.0 e4Sample afterRelease
+    unisonStep sample recognition = stepRecognition testSettings AnyOctave c4 c4 (observation sample) recognition
+    unisonAdvance start sample recognition = foldl
+      (\current time -> unisonStep (at time sample) current)
+      recognition
+      (stableTimes start)
+    unisonFirst = unisonAdvance 0.0 c4Sample initialRecognition
+    unisonWithoutArticulation = foldl
+      (\current time -> unisonStep (at time c4Sample) current)
+      unisonFirst
+      [ 30.0, 80.0, 130.0, 180.0 ]
     wrongFirst = advance e4Sample initialRecognition
     wrongSecond = advance b3Sample afterRelease
     detunedFirst = advance c4SharpFortyCentsSample initialRecognition
@@ -117,7 +140,8 @@ run = do
     sequenceSecondRelease = sequenceRelease 80.0 sequenceSecond
     sequenceComplete = sequenceAdvance 100.0 d4Sample sequenceSecondRelease
     sequenceContinuedFirst = sequenceStep (at 30.0 c4Sample) sequenceFirst
-    sequenceSecondWithoutArticulation = sequenceAdvance 30.0 e4Sample sequenceFirst
+    sequencePitchChange = sequenceAdvance 30.0 e4Sample sequenceFirst
+    sequenceSecondAfterPitchChange = sequenceStep (at 60.0 e4Sample) sequencePitchChange
     sequenceWrongMiddle = sequenceAdvance 50.0 b3Sample sequenceFirstRelease
     sequenceWrongFinal = sequenceAdvance 100.0 b3Sample sequenceSecondRelease
     sequencePartial = foldl (\current time -> sequenceStep (at time c4Sample) current) initialSequenceRecognition
@@ -270,6 +294,23 @@ run = do
     multiWindow4 = observe
       ((rawPitch 40.0 110.0) { candidates = [ { clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
       multiWindow3.observation
+    sustainedCandidates time =
+      { candidates:
+          [ { clarity: 0.82, frequency: 261.625565, windowSize: 8192 }
+          , { clarity: 0.99, frequency: 329.627557, windowSize: 2048 }
+          ]
+      , decibels: -20.0
+      , time
+      }
+    sustainedFirst1 = observePitch defaultCaptureSettings DetectingPitch (ExactPitch 60)
+      (sustainedCandidates 10.0)
+      initialObservation
+    sustainedFirst2 = observePitch defaultCaptureSettings DetectingPitch (ExactPitch 60)
+      (sustainedCandidates 20.0)
+      sustainedFirst1.observation
+    sustainedAfterExpectationChange = observePitch defaultCaptureSettings AwaitingArticulation (ExactPitch 64)
+      (sustainedCandidates 30.0)
+      sustainedFirst2.observation
     lowFundamental = { clarity: 0.82, frequency: 130.812783, windowSize: 8192 }
     octaveHarmonic = { clarity: 0.99, frequency: 261.625565, windowSize: 2048 }
     expectedLowCandidate = selectPitchCandidate defaultCaptureSettings
@@ -370,9 +411,13 @@ run = do
   assertEqual { actual: nearestMidi 440.0, expected: 69 }
   assertEqual { actual: phase beforeFirst, expected: WaitingForFirst }
   assertEqual { actual: phase afterFirst, expected: WaitingForRelease }
-  assertEqual { actual: phase secondWithoutArticulation, expected: WaitingForRelease }
+  assertEqual { actual: feedback afterFirst, expected: Nothing }
+  assertEqual { actual: phase secondFromPitchChange, expected: RecognitionComplete }
+  assertEqual { actual: phase oneChangedPitchSample, expected: WaitingForRelease }
+  assertEqual { actual: phase returnedToFirstPitch, expected: WaitingForRelease }
   assertEqual { actual: phase afterRelease, expected: WaitingForSecond }
   assertEqual { actual: phase afterSecond, expected: RecognitionComplete }
+  assertEqual { actual: phase unisonWithoutArticulation, expected: WaitingForRelease }
   assertEqual { actual: phase wrongFirst, expected: RecognitionIncorrect }
   assertEqual { actual: phase wrongSecond, expected: RecognitionIncorrect }
   assertEqual { actual: phase detunedFirst, expected: WaitingForFirst }
@@ -395,7 +440,9 @@ run = do
   assertEqual { actual: sequenceAcceptedCount sequenceSecond, expected: 2 }
   assertEqual { actual: sequencePhase sequenceComplete, expected: SequenceComplete }
   assertEqual { actual: sequencePhase sequenceContinuedFirst, expected: SequenceReleasing }
-  assertEqual { actual: sequencePhase sequenceSecondWithoutArticulation, expected: SequenceReleasing }
+  assertEqual { actual: sequenceFeedback sequenceFirst, expected: Nothing }
+  assertEqual { actual: sequencePhase sequencePitchChange, expected: SequenceMatching }
+  assertEqual { actual: sequenceAcceptedCount sequenceSecondAfterPitchChange, expected: 2 }
   assertEqual { actual: sequencePhase sequenceWrongMiddle, expected: SequenceIncorrect }
   assertEqual { actual: sequenceAcceptedCount sequenceWrongMiddle, expected: 1 }
   assertEqual { actual: sequencePhase sequenceWrongFinal, expected: SequenceIncorrect }
@@ -415,6 +462,10 @@ run = do
   assertEqual
     { actual: multiWindow4.event
     , expected: ObservedPitch { clarity: 0.98, frequency: 110.0, time: 40.0 }
+    }
+  assertEqual
+    { actual: sustainedAfterExpectationChange.event
+    , expected: ObservedPitch { clarity: 0.82, frequency: 261.625565, time: 30.0 }
     }
   assertEqual { actual: expectedLowCandidate, expected: Just lowFundamental }
   assertEqual { actual: octaveEquivalentCandidate, expected: Just octaveHarmonic }

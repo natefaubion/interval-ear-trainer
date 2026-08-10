@@ -29,9 +29,10 @@ import EarTrainer.Config
   )
 import EarTrainer.Music
   ( Accidental(..)
-  , Interval
+  , Interval(..)
   , Pitch(..)
   , PitchClass(..)
+  , PlaybackMode(..)
   , intervalName
   , pitchFromMidiLike
   , playbackModeName
@@ -274,7 +275,7 @@ component =
               [ HP.class_ (H.ClassName "pitch-feedback") ]
               [ HH.span
                   [ HP.class_ (H.ClassName "tuner-readout") ]
-                  [ HH.text (feedbackName (currentFeedback state)) ]
+                  [ HH.text (pitchFeedbackName state) ]
               ]
           , HH.div
               [ HP.class_ (H.ClassName "tuner-track") ]
@@ -413,7 +414,7 @@ component =
         count = Array.length (NonEmptyArray.toArray (Quiz.melodyPitches exercise.prompt))
         current = min count (Recognition.sequenceAcceptedCount exercise.recognition + 1)
       case Recognition.sequencePhase exercise.recognition of
-        Recognition.SequenceReleasing -> "Release, then sing or play note " <> show current <> " of " <> show count <> "."
+        Recognition.SequenceReleasing -> "Articulate note " <> show current <> " of " <> show count <> "."
         Recognition.SequenceIncorrect -> "Incorrect note " <> show current <> "."
         Recognition.SequenceComplete -> "Melody complete."
         Recognition.SequenceMatching -> "Sing or play note " <> show current <> " of " <> show count <> "."
@@ -473,6 +474,10 @@ component =
       else
         "↑ " <> show (-cents) <> "¢"
 
+  pitchFeedbackName state
+    | isAwaitingArticulation state = ""
+    | otherwise = feedbackName (currentFeedback state)
+
   feedbackPosition cents = 50.0 + max (-50.0) (min 50.0 cents)
 
   quizModeTitle = case _ of
@@ -496,8 +501,13 @@ component =
         intervalName prompt.interval
           <>
             if state.config.quizMode == Audiation || state.config.quizMode == ImitationOnly then
-              " · " <> playbackModeName prompt.mode
+              playbackModeLabel prompt.interval prompt.mode
             else ""
+
+  playbackModeLabel interval mode = case interval, mode of
+    PerfectUnison, MelodicAscending -> ""
+    PerfectUnison, MelodicDescending -> ""
+    _, _ -> " · " <> playbackModeName mode
 
   feedbackInRange feedback =
     feedback.clarity >= Recognition.defaultRecognitionSettings.clarityThreshold
@@ -866,6 +876,10 @@ component =
     IntervalPractice exercise -> Recognition.feedback exercise.recognition
     MelodyPractice exercise -> Recognition.sequenceFeedback exercise.recognition
 
+  isAwaitingArticulation state = case state.exercise of
+    IntervalPractice exercise -> Recognition.phase exercise.recognition == Recognition.WaitingForRelease
+    MelodyPractice exercise -> Recognition.sequencePhase exercise.recognition == Recognition.SequenceReleasing
+
   imitationComplete state = case state.exercise of
     IntervalPractice exercise -> Recognition.phase exercise.recognition == Recognition.RecognitionComplete
     MelodyPractice exercise -> Recognition.sequencePhase exercise.recognition == Recognition.SequenceComplete
@@ -914,6 +928,7 @@ component =
 
   notationLayout state
     | isMelody state = Notation.Full
+    | not (quizModeUsesRecognition state.config.quizMode) = Notation.Full
     | otherwise = case state.captureStatus of
         ChoosingAnswer _ -> Notation.Compact
         AnswerComplete _ -> Notation.Compact

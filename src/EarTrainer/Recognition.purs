@@ -159,8 +159,8 @@ type StablePitch =
 data Recognition
   = MatchingFirst StablePitch
   | ReleasingFirst
-      { feedback :: Maybe Feedback
-      , firstMidi :: Int
+      { firstMidi :: Int
+      , transition :: StablePitch
       }
   | MatchingSecond
       { firstMidi :: Int
@@ -177,7 +177,9 @@ data Recognition
       }
 
 type RecognitionSettings =
-  { clarityThreshold :: Number
+  { articulationPitchDepartureCents :: Number
+  , articulationPitchMillisecondsRequired :: Number
+  , clarityThreshold :: Number
   , incorrectMillisecondsRequired :: Number
   , maximumObservationGapMilliseconds :: Number
   , stableMillisecondsRequired :: Number
@@ -186,7 +188,9 @@ type RecognitionSettings =
 
 defaultRecognitionSettings :: RecognitionSettings
 defaultRecognitionSettings =
-  { clarityThreshold: 0.8
+  { articulationPitchDepartureCents: 60.0
+  , articulationPitchMillisecondsRequired: 75.0
+  , clarityThreshold: 0.8
   , incorrectMillisecondsRequired: 350.0
   , maximumObservationGapMilliseconds: 50.0
   , stableMillisecondsRequired: 120.0
@@ -216,7 +220,7 @@ phase = case _ of
 feedback :: Recognition -> Maybe Feedback
 feedback = case _ of
   MatchingFirst stable -> stable.feedback
-  ReleasingFirst state -> state.feedback
+  ReleasingFirst _ -> Nothing
   MatchingSecond state -> state.stable.feedback
   IncorrectFirst current -> current
   IncorrectSecond state -> state.feedback
@@ -231,7 +235,9 @@ observePitch
   -> { event :: PitchObservation, observation :: Observation }
 observePitch settings capturePhase expectation raw (Observation observation) = do
   let
-    candidate = selectPitchCandidate settings expectation raw.candidates
+    candidate = case capturePhase of
+      DetectingPitch -> selectPitchCandidate settings expectation raw.candidates
+      AwaitingArticulation -> selectContinuousPitchCandidate settings observation.samples raw.candidates
     clarity = fromMaybe 0.0 (map _.clarity candidate)
     frequency = fromMaybe 0.0 (map _.frequency candidate)
     valid =
@@ -301,6 +307,33 @@ selectPitchCandidate settings expectation candidates =
         )
       expectedBonus = if expectationDistance expectation candidate.frequency <= 60.0 then 2.0 else 0.0
     candidate.clarity + expectedBonus + Int.toNumber agreement * 0.1
+
+selectContinuousPitchCandidate
+  :: CaptureSettings
+  -> Array TimedPitchSample
+  -> Array PitchInput.PitchCandidate
+  -> Maybe PitchInput.PitchCandidate
+selectContinuousPitchCandidate settings samples candidates = do
+  let
+    previousFrequency = map _.frequency (Array.last samples)
+    inRange = Array.filter
+      (\candidate -> candidate.frequency >= settings.minimumFrequency && candidate.frequency <= settings.maximumFrequency)
+      candidates
+    score candidate = do
+      let
+        agreement = Array.length
+          ( Array.filter
+              (\other -> absolute (centsBetween candidate.frequency other.frequency) <= 35.0)
+              candidates
+          )
+        continuityBonus = case previousFrequency of
+          Just previous | absolute (centsBetween candidate.frequency previous) <= 60.0 -> 2.0
+          _ -> 0.0
+      candidate.clarity + continuityBonus + Int.toNumber agreement * 0.1
+    prefer current candidate = case current of
+      Just previous | score previous >= score candidate -> current
+      _ -> Just candidate
+  Array.foldl prefer Nothing inRange
 
 expectationDistance :: PitchExpectation -> Number -> Number
 expectationDistance expectation frequency = do
@@ -382,7 +415,9 @@ stepStable settings observedAt current stable = do
   stable
     { candidate = Just current.midi
     , confidenceMilliseconds = min
-        (max settings.stableMillisecondsRequired settings.incorrectMillisecondsRequired)
+        ( max settings.articulationPitchMillisecondsRequired
+            (max settings.stableMillisecondsRequired settings.incorrectMillisecondsRequired)
+        )
         confidence
     , feedback = Just current
     , lastObservedAt = Just observedAt
@@ -390,6 +425,33 @@ stepStable settings observedAt current stable = do
 
 resetStable :: Maybe Feedback -> StablePitch
 resetStable current = initialStablePitch { feedback = current }
+
+data ReleaseTransition
+  = ContinueRelease StablePitch
+  | BeginNextPitch StablePitch
+
+stepReleaseTransition
+  :: RecognitionSettings
+  -> Int
+  -> Int
+  -> PitchObservation
+  -> StablePitch
+  -> ReleaseTransition
+stepReleaseTransition settings previousMidi nextMidi observation transition = do
+  case observation of
+    ArticulationBreak _ -> BeginNextPitch initialStablePitch
+    ObservedPitch sample
+      | previousMidi /= nextMidi
+      , sample.clarity >= settings.clarityThreshold
+      , Just previous <- feedbackFor false previousMidi sample
+      , absolute previous.cents >= settings.articulationPitchDepartureCents
+      , Just next <- feedbackFor false nextMidi sample -> do
+          let advanced = stepStable settings sample.time next transition
+          if advanced.confidenceMilliseconds >= settings.articulationPitchMillisecondsRequired then
+            BeginNextPitch advanced
+          else ContinueRelease advanced
+    ObservedPitch _ -> ContinueRelease initialStablePitch
+    NoEvidence -> ContinueRelease transition
 
 stepRecognition
   :: RecognitionSettings
@@ -435,16 +497,17 @@ stepRecognition settings octavePolicy firstPitch secondPitch observation recogni
         if
           matches allowOctaveEquivalent writtenFirst
             && next.confidenceMilliseconds >= settings.stableMillisecondsRequired then
-          ReleasingFirst { feedback: next.feedback, firstMidi: current.midi }
+          ReleasingFirst { firstMidi: current.midi, transition: initialStablePitch }
         else if
           not (matchesPitchIdentity allowOctaveEquivalent writtenFirst current)
             && next.confidenceMilliseconds >= settings.incorrectMillisecondsRequired then
           IncorrectFirst next.feedback
         else MatchingFirst next
-    ArticulationBreak _, ReleasingFirst state ->
-      MatchingSecond { firstMidi: state.firstMidi, stable: initialStablePitch }
-    ObservedPitch _, ReleasingFirst state -> ReleasingFirst state
-      { feedback = currentFeedback false state.firstMidi }
+    _, ReleasingFirst state -> do
+      let expectedMidi = normalizedSecond state.firstMidi
+      case stepReleaseTransition settings state.firstMidi expectedMidi observation state.transition of
+        ContinueRelease transition -> ReleasingFirst state { transition = transition }
+        BeginNextPitch stable -> MatchingSecond { firstMidi: state.firstMidi, stable }
     _, MatchingSecond state -> do
       let
         expectedMidi = normalizedSecond state.firstMidi
@@ -464,7 +527,7 @@ stepRecognition settings octavePolicy firstPitch secondPitch observation recogni
 phaseInstruction :: RecognitionPhase -> String
 phaseInstruction = case _ of
   WaitingForFirst -> "Sing or play the first note."
-  WaitingForRelease -> "Release, then sing or play the second note."
+  WaitingForRelease -> "Articulate the second note."
   WaitingForSecond -> "Sing or play the second note."
   RecognitionIncorrect -> "Incorrect pitch."
   RecognitionComplete -> "Both notes accepted."
@@ -528,8 +591,8 @@ data SequenceRecognition
       }
   | ReleasingSequence
       { acceptedMidi :: Array Int
-      , feedback :: Maybe Feedback
       , lastMidi :: Int
+      , transition :: StablePitch
       }
   | IncorrectSequence
       { acceptedMidi :: Array Int
@@ -560,7 +623,7 @@ sequenceAcceptedCount = Array.length <<< case _ of
 sequenceFeedback :: SequenceRecognition -> Maybe Feedback
 sequenceFeedback = case _ of
   MatchingSequence state -> state.stable.feedback
-  ReleasingSequence state -> state.feedback
+  ReleasingSequence _ -> Nothing
   IncorrectSequence state -> state.feedback
   CompleteSequence state -> state.feedback
 
@@ -596,10 +659,12 @@ stepSequenceRecognition settings octavePolicy expected observation recognition =
       { feedback = expectedMidi >>= currentFeedback false }
     _, CompleteSequence state -> CompleteSequence state
       { feedback = map midiNumber (Array.last expectedPitches) >>= currentFeedback false }
-    ArticulationBreak _, ReleasingSequence state ->
-      MatchingSequence { acceptedMidi: state.acceptedMidi, stable: initialStablePitch }
-    ObservedPitch _, ReleasingSequence state -> ReleasingSequence state
-      { feedback = currentFeedback false state.lastMidi }
+    _, ReleasingSequence state -> case expectedMidi of
+      Nothing -> CompleteSequence { acceptedMidi: state.acceptedMidi, feedback: Nothing }
+      Just midi ->
+        case stepReleaseTransition settings state.lastMidi midi observation state.transition of
+          ContinueRelease transition -> ReleasingSequence state { transition = transition }
+          BeginNextPitch stable -> MatchingSequence { acceptedMidi: state.acceptedMidi, stable }
     _, MatchingSequence state -> case expectedMidi of
       Nothing -> CompleteSequence { acceptedMidi: state.acceptedMidi, feedback: state.stable.feedback }
       Just midi -> do
@@ -618,8 +683,8 @@ stepSequenceRecognition settings octavePolicy expected observation recognition =
               else
                 ReleasingSequence
                   { acceptedMidi: nextAccepted
-                  , feedback: next.feedback
                   , lastMidi: currentPitch.midi
+                  , transition: initialStablePitch
                   }
             else if
               not (matchesPitchIdentity allowOctaveEquivalent midi currentPitch)
