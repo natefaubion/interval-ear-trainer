@@ -279,6 +279,54 @@ run = do
     detectedOnset = observePitch defaultCaptureSettings AwaitingArticulation expectedC
       ((rawPitch 200.0 261.625565) { decibels = -20.0 })
       beforeOnset.observation
+    ignoredOnsetWhileMatching = observePitch defaultCaptureSettings DetectingPitch expectedC
+      ((rawPitch 200.0 261.625565) { decibels = -20.0 })
+      beforeOnset.observation
+    tooSoonBeforeOnset = observePitch defaultCaptureSettings AwaitingArticulation expectedC
+      ((rawPitch 30.0 261.625565) { decibels = -42.0 })
+      initialObservation
+    ignoredRapidOnset = observePitch defaultCaptureSettings AwaitingArticulation expectedC
+      ((rawPitch 60.0 261.625565) { decibels = -20.0 })
+      tooSoonBeforeOnset.observation
+    unrelatedCandidate = { clarity: 0.95, frequency: 196.0, windowSize: 2048 }
+    selectedWrongNote = selectPitchCandidate defaultCaptureSettings
+      (ExactPitch 60)
+      [ unrelatedCandidate ]
+    selectedHighNote = selectPitchCandidate defaultCaptureSettings
+      (ExactPitch 103)
+      [ { clarity: 0.9, frequency: 3135.963488, windowSize: 2048 } ]
+    rejectedOutOfRange = selectPitchCandidate defaultCaptureSettings
+      (ExactPitch 108)
+      [ { clarity: 0.99, frequency: 5000.0, windowSize: 2048 } ]
+    shortTransient = foldl
+      ( \current time -> stepRecognition
+          defaultRecognitionSettings
+          AnyOctave
+          c4
+          e4
+          (ObservedPitch (at time c4Sample))
+          current
+      )
+      initialRecognition
+      [ 0.0, 30.0, 60.0, 90.0 ]
+    interruptedEvidence = stepRecognition
+      defaultRecognitionSettings
+      AnyOctave
+      c4
+      e4
+      (ArticulationBreak 70.0)
+      ( foldl
+          ( \current time -> stepRecognition
+              defaultRecognitionSettings
+              AnyOctave
+              c4
+              e4
+              (ObservedPitch (at time c4Sample))
+              current
+          )
+          initialRecognition
+          [ 0.0, 30.0, 60.0 ]
+      )
   assertEqual { actual: nearestMidi 440.0, expected: 69 }
   assertEqual { actual: phase beforeFirst, expected: WaitingForFirst }
   assertEqual { actual: phase afterFirst, expected: WaitingForRelease }
@@ -329,6 +377,22 @@ run = do
   assertEqual { actual: expectedLowCandidate, expected: Just lowFundamental }
   assertEqual { actual: octaveEquivalentCandidate, expected: Just octaveHarmonic }
   assertEqual { actual: detectedOnset.event, expected: ArticulationBreak 200.0 }
+  assertEqual
+    { actual: ignoredOnsetWhileMatching.event
+    , expected: ObservedPitch { clarity: 0.96, frequency: 261.625565, time: 200.0 }
+    }
+  assertEqual
+    { actual: ignoredRapidOnset.event
+    , expected: ObservedPitch { clarity: 0.96, frequency: 261.625565, time: 60.0 }
+    }
+  assertEqual { actual: selectedWrongNote, expected: Just unrelatedCandidate }
+  assertEqual
+    { actual: map _.frequency selectedHighNote
+    , expected: Just 3135.963488
+    }
+  assertEqual { actual: rejectedOutOfRange, expected: Nothing }
+  assertEqual { actual: phase shortTransient, expected: WaitingForRelease }
+  assertEqual { actual: phase interruptedEvidence, expected: WaitingForFirst }
   assertEqual
     { actual: intervalPitchExpectation AnyOctave c4 e4 initialRecognition
     , expected: OctaveEquivalentPitch 60
