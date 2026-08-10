@@ -16,6 +16,8 @@ const scoreVerticalBounds = (svg, layout) => {
   let top = layout === "full" ? 0 : 20;
   let bottom = layout === "full" ? 190 : 124;
 
+  // VexFlow's transparent hit rectangle tracks the rendered note geometry
+  // without the oversized font metrics reported by its notehead text.
   svg.querySelectorAll(".vf-stavenote > rect").forEach((rect) => {
     const y = Number(rect.getAttribute("y"));
     const height = Number(rect.getAttribute("height"));
