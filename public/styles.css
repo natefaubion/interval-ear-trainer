@@ -221,9 +221,11 @@ button:active:not(:disabled) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 1.25rem;
   margin-top: 1rem;
   color: #64716b;
   font-size: 0.9rem;
+  line-height: 1.25rem;
 }
 
 .tuner-readout {
@@ -259,6 +261,7 @@ button:active:not(:disabled) {
 .tuner-dot {
   position: absolute;
   top: 50%;
+  box-sizing: border-box;
   width: 1rem;
   height: 1rem;
   border-radius: 50%;
