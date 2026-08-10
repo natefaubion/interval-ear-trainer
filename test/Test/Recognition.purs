@@ -6,10 +6,11 @@ import Data.Array as Array
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Foldable (foldl)
 import Data.Int as Int
-import Data.Maybe (fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe)
 import EarTrainer.Music (Accidental(..), Letter(..), OctavePolicy(..), pitch)
 import EarTrainer.Recognition
-  ( PitchObservation(..)
+  ( PitchExpectation(..)
+  , PitchObservation(..)
   , RecognitionPhase(..)
   , SequencePhase(..)
   , defaultCaptureSettings
@@ -17,12 +18,15 @@ import EarTrainer.Recognition
   , initialObservation
   , initialRecognition
   , initialSequenceRecognition
+  , intervalPitchExpectation
   , nearestMidi
   , observePitch
   , phase
   , relativeMidi
+  , selectPitchCandidate
   , sequenceAcceptedCount
   , sequencePhase
+  , sequencePitchExpectation
   , stepRecognition
   , stepSequenceRecognition
   )
@@ -214,33 +218,34 @@ run = do
       , decibels: -20.0
       , time
       }
-    observed1 = observePitch defaultCaptureSettings (rawPitch 10.0 100.0) initialObservation
-    observed2 = observePitch defaultCaptureSettings (rawPitch 20.0 200.0) observed1.observation
-    observed3 = observePitch defaultCaptureSettings (rawPitch 30.0 300.0) observed2.observation
-    observed4 = observePitch defaultCaptureSettings (rawPitch 40.0 400.0) observed3.observation
-    observedSilence = observePitch defaultCaptureSettings
+    expectedC = OctaveEquivalentPitch 60
+    observed1 = observePitch defaultCaptureSettings expectedC (rawPitch 10.0 100.0) initialObservation
+    observed2 = observePitch defaultCaptureSettings expectedC (rawPitch 20.0 200.0) observed1.observation
+    observed3 = observePitch defaultCaptureSettings expectedC (rawPitch 30.0 300.0) observed2.observation
+    observed4 = observePitch defaultCaptureSettings expectedC (rawPitch 40.0 400.0) observed3.observation
+    observedSilence = observePitch defaultCaptureSettings expectedC
       { candidates: [ { clarity: 0.99, frequency: 440.0, windowSize: 2048 } ]
       , decibels: -80.0
       , time: 400.0
       }
       observed4.observation
-    observedConsonant = observePitch defaultCaptureSettings
+    observedConsonant = observePitch defaultCaptureSettings expectedC
       { candidates: [ { clarity: 0.2, frequency: 180.0, windowSize: 2048 } ]
       , decibels: -18.0
       , time: 76.0
       }
       observed4.observation
-    observedBriefDrop = observePitch defaultCaptureSettings
+    observedBriefDrop = observePitch defaultCaptureSettings expectedC
       { candidates: [ { clarity: 0.2, frequency: 180.0, windowSize: 2048 } ]
       , decibels: -18.0
       , time: 60.0
       }
       observed4.observation
-    observedNew1 = observePitch defaultCaptureSettings (rawPitch 80.0 500.0) observedConsonant.observation
-    observedNew2 = observePitch defaultCaptureSettings (rawPitch 90.0 500.0) observedNew1.observation
-    observedNew3 = observePitch defaultCaptureSettings (rawPitch 100.0 500.0) observedNew2.observation
-    observedNew4 = observePitch defaultCaptureSettings (rawPitch 110.0 500.0) observedNew3.observation
-    multiWindow1 = observePitch defaultCaptureSettings
+    observedNew1 = observePitch defaultCaptureSettings expectedC (rawPitch 80.0 500.0) observedConsonant.observation
+    observedNew2 = observePitch defaultCaptureSettings expectedC (rawPitch 90.0 500.0) observedNew1.observation
+    observedNew3 = observePitch defaultCaptureSettings expectedC (rawPitch 100.0 500.0) observedNew2.observation
+    observedNew4 = observePitch defaultCaptureSettings expectedC (rawPitch 110.0 500.0) observedNew3.observation
+    multiWindow1 = observePitch defaultCaptureSettings expectedC
       { candidates:
           [ { clarity: 0.91, frequency: 220.0, windowSize: 2048 }
           , { clarity: 0.98, frequency: 110.0, windowSize: 8192 }
@@ -249,15 +254,23 @@ run = do
       , time: 10.0
       }
       initialObservation
-    multiWindow2 = observePitch defaultCaptureSettings
+    multiWindow2 = observePitch defaultCaptureSettings expectedC
       ((rawPitch 20.0 110.0) { candidates = [ { clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
       multiWindow1.observation
-    multiWindow3 = observePitch defaultCaptureSettings
+    multiWindow3 = observePitch defaultCaptureSettings expectedC
       ((rawPitch 30.0 110.0) { candidates = [ { clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
       multiWindow2.observation
-    multiWindow4 = observePitch defaultCaptureSettings
+    multiWindow4 = observePitch defaultCaptureSettings expectedC
       ((rawPitch 40.0 110.0) { candidates = [ { clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
       multiWindow3.observation
+    lowFundamental = { clarity: 0.82, frequency: 130.812783, windowSize: 8192 }
+    octaveHarmonic = { clarity: 0.99, frequency: 261.625565, windowSize: 2048 }
+    expectedLowCandidate = selectPitchCandidate defaultCaptureSettings
+      (ExactPitch 48)
+      [ octaveHarmonic, lowFundamental ]
+    octaveEquivalentCandidate = selectPitchCandidate defaultCaptureSettings
+      (OctaveEquivalentPitch 48)
+      [ octaveHarmonic, lowFundamental ]
   assertEqual { actual: nearestMidi 440.0, expected: 69 }
   assertEqual { actual: phase beforeFirst, expected: WaitingForFirst }
   assertEqual { actual: phase afterFirst, expected: WaitingForRelease }
@@ -303,4 +316,18 @@ run = do
   assertEqual
     { actual: multiWindow4.event
     , expected: ObservedPitch { clarity: 0.98, frequency: 110.0, time: 40.0 }
+    }
+  assertEqual { actual: expectedLowCandidate, expected: Just lowFundamental }
+  assertEqual { actual: octaveEquivalentCandidate, expected: Just octaveHarmonic }
+  assertEqual
+    { actual: intervalPitchExpectation AnyOctave c4 e4 initialRecognition
+    , expected: OctaveEquivalentPitch 60
+    }
+  assertEqual
+    { actual: intervalPitchExpectation AnyOctave c4 e4 afterFirst
+    , expected: ExactPitch 64
+    }
+  assertEqual
+    { actual: sequencePitchExpectation AnyOctave (nonEmpty [ c4, e4, d4 ]) sequenceFirst
+    , expected: ExactPitch 64
     }

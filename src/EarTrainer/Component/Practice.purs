@@ -566,7 +566,12 @@ component =
     PitchObserved raw -> do
       state <- H.get
       when (isListening state.captureStatus) do
-        let observed = Recognition.observePitch Recognition.defaultCaptureSettings raw state.observation
+        let
+          observed = Recognition.observePitch
+            Recognition.defaultCaptureSettings
+            (pitchExpectation state)
+            raw
+            state.observation
         H.modify_ _ { observation = observed.observation }
         handleAction (PitchDetected observed.event)
     PitchDetected sample -> do
@@ -830,6 +835,19 @@ component =
   intervalPrompt state = case state.exercise of
     IntervalPractice exercise -> Just exercise.prompt
     MelodyPractice _ -> Nothing
+
+  pitchExpectation state = case state.exercise of
+    IntervalPractice exercise ->
+      Recognition.intervalPitchExpectation
+        state.config.octavePolicy
+        exercise.prompt.root
+        exercise.prompt.target
+        exercise.recognition
+    MelodyPractice exercise ->
+      Recognition.sequencePitchExpectation
+        state.config.octavePolicy
+        (Quiz.melodyPitches exercise.prompt)
+        exercise.recognition
 
   isMelody state = case state.exercise of
     IntervalPractice _ -> false

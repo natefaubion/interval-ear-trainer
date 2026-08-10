@@ -3,6 +3,7 @@ module EarTrainer.Recognition
   , Feedback
   , Observation
   , PitchObservation(..)
+  , PitchExpectation(..)
   , PitchSample
   , Recognition
   , RecognitionPhase(..)
@@ -15,6 +16,7 @@ module EarTrainer.Recognition
   , initialObservation
   , initialRecognition
   , initialSequenceRecognition
+  , intervalPitchExpectation
   , midiFrequency
   , nearestMidi
   , observePitch
@@ -23,10 +25,12 @@ module EarTrainer.Recognition
   , relativeMidi
   , sequenceAcceptedCount
   , sequenceFeedback
+  , sequencePitchExpectation
   , sequencePhase
   , sequenceRelativeMidi
   , stepSequenceRecognition
   , stepRecognition
+  , selectPitchCandidate
   ) where
 
 import Prelude
@@ -58,6 +62,17 @@ instance Show PitchObservation where
     ObservedPitch sample -> "ObservedPitch " <> show sample
     ArticulationBreak time -> "ArticulationBreak " <> show time
 
+data PitchExpectation
+  = ExactPitch Int
+  | OctaveEquivalentPitch Int
+
+derive instance Eq PitchExpectation
+
+instance Show PitchExpectation where
+  show = case _ of
+    ExactPitch midi -> "ExactPitch " <> show midi
+    OctaveEquivalentPitch midi -> "OctaveEquivalentPitch " <> show midi
+
 type TimedPitchSample =
   { clarity :: Number
   , frequency :: Number
@@ -81,9 +96,9 @@ type CaptureSettings =
 
 defaultCaptureSettings :: CaptureSettings
 defaultCaptureSettings =
-  { clarityThreshold: 0.9
-  , maximumFrequency: 1200.0
-  , minimumFrequency: 70.0
+  { clarityThreshold: 0.8
+  , maximumFrequency: 4200.0
+  , minimumFrequency: 40.0
   , minimumSamples: 4
   , sampleWindowMilliseconds: 300.0
   , silenceMilliseconds: 35.0
@@ -154,7 +169,7 @@ type RecognitionSettings =
 
 defaultRecognitionSettings :: RecognitionSettings
 defaultRecognitionSettings =
-  { clarityThreshold: 0.9
+  { clarityThreshold: 0.8
   , maximumObservationGapMilliseconds: 50.0
   , releaseMillisecondsRequired: 25.0
   , stableMillisecondsRequired: 120.0
@@ -192,12 +207,13 @@ feedback = case _ of
 
 observePitch
   :: CaptureSettings
+  -> PitchExpectation
   -> PitchInput.Sample
   -> Observation
   -> { event :: PitchObservation, observation :: Observation }
-observePitch settings raw (Observation observation) = do
+observePitch settings expectation raw (Observation observation) = do
   let
-    candidate = Array.foldl preferClearer Nothing raw.candidates
+    candidate = selectPitchCandidate settings expectation raw.candidates
     clarity = fromMaybe 0.0 (map _.clarity candidate)
     frequency = fromMaybe 0.0 (map _.frequency candidate)
     valid =
@@ -230,10 +246,44 @@ observePitch settings raw (Observation observation) = do
   , event
   }
 
-preferClearer :: Maybe PitchInput.PitchCandidate -> PitchInput.PitchCandidate -> Maybe PitchInput.PitchCandidate
-preferClearer current candidate = case current of
-  Just previous | previous.clarity >= candidate.clarity -> current
-  _ -> Just candidate
+selectPitchCandidate
+  :: CaptureSettings
+  -> PitchExpectation
+  -> Array PitchInput.PitchCandidate
+  -> Maybe PitchInput.PitchCandidate
+selectPitchCandidate settings expectation candidates =
+  Array.foldl preferCandidate Nothing
+    ( Array.filter
+        (\candidate -> candidate.frequency >= settings.minimumFrequency && candidate.frequency <= settings.maximumFrequency)
+        candidates
+    )
+  where
+  preferCandidate current candidate = case current of
+    Just previous | candidateScore previous >= candidateScore candidate -> current
+    _ -> Just candidate
+
+  candidateScore candidate = do
+    let
+      agreement = Array.length
+        ( Array.filter
+            (\other -> absolute (centsBetween candidate.frequency other.frequency) <= 35.0)
+            candidates
+        )
+      expectedBonus = if expectationDistance expectation candidate.frequency <= 60.0 then 2.0 else 0.0
+    candidate.clarity + expectedBonus + Int.toNumber agreement * 0.1
+
+expectationDistance :: PitchExpectation -> Number -> Number
+expectationDistance expectation frequency = do
+  let
+    detectedMidi = 69.0 + 12.0 * Math.log (frequency / 440.0) / Math.log 2.0
+    expectedMidi = case expectation of
+      ExactPitch midi -> Int.toNumber midi
+      OctaveEquivalentPitch midi ->
+        Int.toNumber midi + 12.0 * Int.toNumber (Int.round ((detectedMidi - Int.toNumber midi) / 12.0))
+  absolute (100.0 * (detectedMidi - expectedMidi))
+
+centsBetween :: Number -> Number -> Number
+centsBetween left right = 1200.0 * Math.log (left / right) / Math.log 2.0
 
 median :: Array Number -> Number
 median values = do
@@ -408,6 +458,25 @@ firstMidi = case _ of
   IncorrectSecond state -> Just state.firstMidi
   Complete state -> Just state.firstMidi
 
+intervalPitchExpectation :: OctavePolicy -> Pitch -> Pitch -> Recognition -> PitchExpectation
+intervalPitchExpectation octavePolicy firstPitch secondPitch recognition = do
+  let
+    writtenFirst = midiNumber firstPitch
+    writtenSecond = midiNumber secondPitch
+    firstExpectation = case octavePolicy of
+      AnyOctave -> OctaveEquivalentPitch writtenFirst
+      WrittenOctave -> ExactPitch writtenFirst
+    secondExpectation acceptedFirst = case octavePolicy of
+      AnyOctave -> ExactPitch (acceptedFirst + writtenSecond - writtenFirst)
+      WrittenOctave -> ExactPitch writtenSecond
+  case recognition of
+    MatchingFirst _ -> firstExpectation
+    IncorrectFirst _ -> firstExpectation
+    ReleasingFirst state -> secondExpectation state.firstMidi
+    MatchingSecond state -> secondExpectation state.firstMidi
+    IncorrectSecond state -> secondExpectation state.firstMidi
+    Complete state -> secondExpectation state.firstMidi
+
 data SequencePhase
   = SequenceMatching
   | SequenceReleasing
@@ -559,3 +628,26 @@ firstAcceptedMidi = Array.head <<< case _ of
   ReleasingSequence state -> state.acceptedMidi
   IncorrectSequence state -> state.acceptedMidi
   CompleteSequence state -> state.acceptedMidi
+
+sequencePitchExpectation
+  :: OctavePolicy
+  -> NonEmptyArray.NonEmptyArray Pitch
+  -> SequenceRecognition
+  -> PitchExpectation
+sequencePitchExpectation octavePolicy expected recognition = do
+  let
+    pitches = NonEmptyArray.toArray expected
+    accepted = case recognition of
+      MatchingSequence state -> state.acceptedMidi
+      ReleasingSequence state -> state.acceptedMidi
+      IncorrectSequence state -> state.acceptedMidi
+      CompleteSequence state -> state.acceptedMidi
+    first = midiNumber (NonEmptyArray.head expected)
+    offset = case octavePolicy, Array.head accepted of
+      AnyOctave, Just acceptedFirst -> acceptedFirst - first
+      _, _ -> 0
+    current = fromMaybe (midiNumber (NonEmptyArray.last expected))
+      (map ((+) offset <<< midiNumber) (Array.index pitches (Array.length accepted)))
+  case octavePolicy, Array.null accepted of
+    AnyOctave, true -> OctaveEquivalentPitch first
+    _, _ -> ExactPitch current
