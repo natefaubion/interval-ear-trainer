@@ -10,7 +10,6 @@ import Prelude
 import Data.Array as Array
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Either (Either(..))
-import Data.Foldable (for_)
 import Data.Int as Int
 import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
@@ -103,7 +102,7 @@ data Action
   | StartListening
   | AudioFailed String
   | PitchObserved PitchInput.Sample
-  | PitchDetected Recognition.PitchSample
+  | PitchDetected Recognition.PitchObservation
   | MicrophoneStarted PitchInput.Monitor
   | ClearGhost
   | FinishImitation
@@ -569,7 +568,7 @@ component =
       when (isListening state.captureStatus) do
         let observed = Recognition.observePitch Recognition.defaultCaptureSettings raw state.observation
         H.modify_ _ { observation = observed.observation }
-        for_ observed.sample (handleAction <<< PitchDetected)
+        handleAction (PitchDetected observed.event)
     PitchDetected sample -> do
       state <- H.get
       when (isListening state.captureStatus) do
@@ -675,16 +674,18 @@ component =
       H.liftEffect (AudioCapability.stop state.sampler)
       H.raise BackToSetup
 
-  handleIntervalPitch state exercise sample = do
+  handleIntervalPitch state exercise observation = do
     let
       prompt = exercise.prompt
-      detectedMidi = if sample.frequency > 0.0 then Just (Recognition.nearestMidi sample.frequency) else Nothing
+      detectedMidi = case observation of
+        Recognition.ObservedPitch sample -> Just (Recognition.nearestMidi sample.frequency)
+        _ -> Nothing
       next = Recognition.stepRecognition
         Recognition.defaultRecognitionSettings
         state.config.octavePolicy
         prompt.root
         prompt.target
-        sample
+        observation
         exercise.recognition
       detectedGhost =
         if state.config.ghostMode == GhostOff then Nothing
@@ -702,15 +703,17 @@ component =
       finishIncorrect state
         (map (Recognition.relativeMidi state.config.octavePolicy prompt.root next <<< _.midi) (Recognition.feedback next))
 
-  handleMelodyPitch state exercise sample = do
+  handleMelodyPitch state exercise observation = do
     let
       pitches = Quiz.melodyPitches exercise.prompt
-      detectedMidi = if sample.frequency > 0.0 then Just (Recognition.nearestMidi sample.frequency) else Nothing
+      detectedMidi = case observation of
+        Recognition.ObservedPitch sample -> Just (Recognition.nearestMidi sample.frequency)
+        _ -> Nothing
       next = Recognition.stepSequenceRecognition
         Recognition.defaultRecognitionSettings
         state.config.octavePolicy
         pitches
-        sample
+        observation
         exercise.recognition
       detectedGhost =
         if state.config.ghostMode == GhostOff then Nothing

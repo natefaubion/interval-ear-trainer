@@ -2,6 +2,7 @@ module EarTrainer.Recognition
   ( CaptureSettings
   , Feedback
   , Observation
+  , PitchObservation(..)
   , PitchSample
   , Recognition
   , RecognitionPhase(..)
@@ -43,6 +44,19 @@ type PitchSample =
   , frequency :: Number
   , time :: Number
   }
+
+data PitchObservation
+  = NoEvidence
+  | ObservedPitch PitchSample
+  | ArticulationBreak Number
+
+derive instance Eq PitchObservation
+
+instance Show PitchObservation where
+  show = case _ of
+    NoEvidence -> "NoEvidence"
+    ObservedPitch sample -> "ObservedPitch " <> show sample
+    ArticulationBreak time -> "ArticulationBreak " <> show time
 
 type TimedPitchSample =
   { clarity :: Number
@@ -180,7 +194,7 @@ observePitch
   :: CaptureSettings
   -> PitchInput.Sample
   -> Observation
-  -> { observation :: Observation, sample :: Maybe PitchSample }
+  -> { event :: PitchObservation, observation :: Observation }
 observePitch settings raw (Observation observation) = do
   let
     valid =
@@ -201,17 +215,16 @@ observePitch settings raw (Observation observation) = do
     lastValidAt = if valid then raw.time else observation.lastValidAt
     breakDetected = not valid && raw.time - lastValidAt >= settings.silenceMilliseconds
     nextSamples = if breakDetected then [] else samples
-    sample
-      | breakDetected = Just
-          { clarity: 0.0, frequency: 0.0, time: raw.time }
-      | Array.length samples >= settings.minimumSamples = Just
+    event
+      | breakDetected = ArticulationBreak raw.time
+      | Array.length samples >= settings.minimumSamples = ObservedPitch
           { clarity: median (map _.clarity samples)
           , frequency: median (map _.frequency samples)
           , time: raw.time
           }
-      | otherwise = Nothing
+      | otherwise = NoEvidence
   { observation: Observation { lastValidAt, samples: nextSamples }
-  , sample
+  , event
   }
 
 median :: Array Number -> Number
@@ -245,6 +258,17 @@ feedbackFor allowOctaveEquivalent expectedMidi sample
         cents = 100.0 * (detectedMidi - Int.toNumber comparisonMidi)
         midi = Int.round detectedMidi
       Just { cents, clarity: sample.clarity, midi }
+
+observationSample :: PitchObservation -> Maybe PitchSample
+observationSample = case _ of
+  ObservedPitch sample -> Just sample
+  _ -> Nothing
+
+observationTime :: PitchObservation -> Maybe Number
+observationTime = case _ of
+  ObservedPitch sample -> Just sample.time
+  ArticulationBreak time -> Just time
+  NoEvidence -> Nothing
 
 matchesExpected :: RecognitionSettings -> Boolean -> Int -> Feedback -> Boolean
 matchesExpected settings allowOctaveEquivalent expected current =
@@ -282,19 +306,23 @@ stepRecognition
   -> OctavePolicy
   -> Pitch
   -> Pitch
-  -> PitchSample
+  -> PitchObservation
   -> Recognition
   -> Recognition
-stepRecognition settings octavePolicy firstPitch secondPitch sample recognition = do
+stepRecognition settings octavePolicy firstPitch secondPitch observation recognition = do
   let
     writtenFirst = midiNumber firstPitch
     writtenSecond = midiNumber secondPitch
-    clear = sample.clarity >= settings.clarityThreshold
+    sample = observationSample observation
+    observedAt = fromMaybe 0.0 (observationTime observation)
+    clear = case sample of
+      Just current -> current.clarity >= settings.clarityThreshold
+      Nothing -> false
     normalizedSecond acceptedMidi = case octavePolicy of
       AnyOctave -> acceptedMidi + writtenSecond - writtenFirst
       WrittenOctave -> writtenSecond
     currentFeedback allowOctaveEquivalent expectedMidi =
-      feedbackFor allowOctaveEquivalent expectedMidi sample
+      sample >>= feedbackFor allowOctaveEquivalent expectedMidi
     matches allowOctaveEquivalent expectedMidi = case currentFeedback allowOctaveEquivalent expectedMidi of
       Just current -> clear && matchesExpected settings allowOctaveEquivalent expectedMidi current
       Nothing -> false
@@ -302,15 +330,16 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
       case currentFeedback allowOctaveEquivalent expectedMidi of
         Just current | clear -> do
           let
-            next = stepStable settings sample.time current stable
+            next = stepStable settings observedAt current stable
           if next.confidenceMilliseconds < settings.stableMillisecondsRequired then MatchingFirst next
           else continue current next
         current -> MatchingFirst (resetStable current)
-  case recognition of
-    Complete state -> Complete state { feedback = currentFeedback false (normalizedSecond state.firstMidi) }
-    IncorrectFirst _ -> IncorrectFirst (currentFeedback (octavePolicy == AnyOctave) writtenFirst)
-    IncorrectSecond state -> IncorrectSecond state { feedback = currentFeedback false (normalizedSecond state.firstMidi) }
-    MatchingFirst stable -> do
+  case observation, recognition of
+    NoEvidence, _ -> recognition
+    _, Complete state -> Complete state { feedback = currentFeedback false (normalizedSecond state.firstMidi) }
+    _, IncorrectFirst _ -> IncorrectFirst (currentFeedback (octavePolicy == AnyOctave) writtenFirst)
+    _, IncorrectSecond state -> IncorrectSecond state { feedback = currentFeedback false (normalizedSecond state.firstMidi) }
+    _, MatchingFirst stable -> do
       let
         allowOctaveEquivalent = octavePolicy == AnyOctave
       updateStable writtenFirst allowOctaveEquivalent stable \current next ->
@@ -318,7 +347,7 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
           ReleasingFirst { feedback: next.feedback, firstMidi: current.midi, releasedAt: Nothing }
         else if matchesPitchIdentity allowOctaveEquivalent writtenFirst current then MatchingFirst next
         else IncorrectFirst next.feedback
-    ReleasingFirst state
+    _, ReleasingFirst state
       | matches false state.firstMidi -> ReleasingFirst state
           { feedback = currentFeedback false state.firstMidi
           , releasedAt = Nothing
@@ -327,18 +356,18 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
           let
             current = currentFeedback false state.firstMidi
             releasedAt = case state.releasedAt of
-              Nothing -> sample.time
+              Nothing -> observedAt
               Just time -> time
-          if sample.time - releasedAt >= settings.releaseMillisecondsRequired then
+          if observedAt - releasedAt >= settings.releaseMillisecondsRequired then
             MatchingSecond { firstMidi: state.firstMidi, stable: resetStable current }
           else ReleasingFirst state { feedback = current, releasedAt = Just releasedAt }
-    MatchingSecond state -> do
+    _, MatchingSecond state -> do
       let
         expectedMidi = normalizedSecond state.firstMidi
       case currentFeedback false expectedMidi of
         Just current | clear -> do
           let
-            next = stepStable settings sample.time current state.stable
+            next = stepStable settings observedAt current state.stable
           if next.confidenceMilliseconds < settings.stableMillisecondsRequired then MatchingSecond state { stable = next }
           else if matches false expectedMidi then Complete { feedback: next.feedback, firstMidi: state.firstMidi }
           else if matchesPitchIdentity false expectedMidi current then MatchingSecond state { stable = next }
@@ -434,10 +463,10 @@ stepSequenceRecognition
   :: RecognitionSettings
   -> OctavePolicy
   -> NonEmptyArray.NonEmptyArray Pitch
-  -> PitchSample
+  -> PitchObservation
   -> SequenceRecognition
   -> SequenceRecognition
-stepSequenceRecognition settings octavePolicy expected sample recognition = do
+stepSequenceRecognition settings octavePolicy expected observation recognition = do
   let
     expectedPitches = NonEmptyArray.toArray expected
     accepted = case recognition of
@@ -450,14 +479,19 @@ stepSequenceRecognition settings octavePolicy expected sample recognition = do
       AnyOctave, Just first -> first - writtenFirst
       _, _ -> 0
     expectedMidi = map ((+) offset <<< midiNumber) (Array.index expectedPitches (Array.length accepted))
-    clear = sample.clarity >= settings.clarityThreshold
-    currentFeedback allowOctaveEquivalent midi = feedbackFor allowOctaveEquivalent midi sample
-  case recognition of
-    IncorrectSequence state -> IncorrectSequence state
+    sample = observationSample observation
+    observedAt = fromMaybe 0.0 (observationTime observation)
+    clear = case sample of
+      Just current -> current.clarity >= settings.clarityThreshold
+      Nothing -> false
+    currentFeedback allowOctaveEquivalent midi = sample >>= feedbackFor allowOctaveEquivalent midi
+  case observation, recognition of
+    NoEvidence, _ -> recognition
+    _, IncorrectSequence state -> IncorrectSequence state
       { feedback = expectedMidi >>= currentFeedback false }
-    CompleteSequence state -> CompleteSequence state
+    _, CompleteSequence state -> CompleteSequence state
       { feedback = map midiNumber (Array.last expectedPitches) >>= currentFeedback false }
-    ReleasingSequence state -> do
+    _, ReleasingSequence state -> do
       let
         current = currentFeedback false state.lastMidi
         stillProducing = case current of
@@ -465,15 +499,15 @@ stepSequenceRecognition settings octavePolicy expected sample recognition = do
           Nothing -> false
         releasedAt = case state.releasedAt, stillProducing of
           _, true -> Nothing
-          Nothing, false -> Just sample.time
+          Nothing, false -> Just observedAt
           previous, false -> previous
         releaseComplete = case releasedAt of
           Nothing -> false
-          Just time -> sample.time - time >= settings.releaseMillisecondsRequired
+          Just time -> observedAt - time >= settings.releaseMillisecondsRequired
       if releaseComplete then
         MatchingSequence { acceptedMidi: state.acceptedMidi, stable: resetStable current }
       else ReleasingSequence state { feedback = current, releasedAt = releasedAt }
-    MatchingSequence state -> case expectedMidi of
+    _, MatchingSequence state -> case expectedMidi of
       Nothing -> CompleteSequence { acceptedMidi: state.acceptedMidi, feedback: state.stable.feedback }
       Just midi -> do
         let
@@ -481,7 +515,7 @@ stepSequenceRecognition settings octavePolicy expected sample recognition = do
           current = currentFeedback allowOctaveEquivalent midi
         case current of
           Just currentPitch | clear -> do
-            let next = stepStable settings sample.time currentPitch state.stable
+            let next = stepStable settings observedAt currentPitch state.stable
             if next.confidenceMilliseconds < settings.stableMillisecondsRequired then
               MatchingSequence state { stable = next }
             else if matchesExpected settings allowOctaveEquivalent midi currentPitch then do

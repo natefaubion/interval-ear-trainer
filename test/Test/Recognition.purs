@@ -6,10 +6,11 @@ import Data.Array as Array
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Foldable (foldl)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (fromMaybe)
 import EarTrainer.Music (Accidental(..), Letter(..), OctavePolicy(..), pitch)
 import EarTrainer.Recognition
-  ( RecognitionPhase(..)
+  ( PitchObservation(..)
+  , RecognitionPhase(..)
   , SequencePhase(..)
   , defaultCaptureSettings
   , defaultRecognitionSettings
@@ -50,6 +51,9 @@ run = do
     b2Sample = pitchSample 123.470825
     b3Sample = pitchSample 246.941651
     silence = { frequency: 0.0, clarity: 0.0, time: 0.0 }
+    observation sample =
+      if sample.frequency <= 0.0 then ArticulationBreak sample.time
+      else ObservedPitch sample
     testSettings = defaultRecognitionSettings
       { maximumObservationGapMilliseconds = 20.0
       , releaseMillisecondsRequired = 10.0
@@ -57,7 +61,7 @@ run = do
       }
     stableTimes start = [ start, start + 10.0, start + 20.0 ]
     releaseTimes start = [ start, start + 10.0 ]
-    step sample recognition = stepRecognition testSettings AnyOctave c4 e4 sample recognition
+    step sample recognition = stepRecognition testSettings AnyOctave c4 e4 (observation sample) recognition
     advanceAt start sample recognition = foldl (\current time -> step (at time sample) current) recognition
       (stableTimes start)
     releaseAt start recognition = foldl (\current time -> step (at time silence) current) recognition
@@ -73,7 +77,7 @@ run = do
     detunedSecond = advance e4SharpFortyCentsSample afterRelease
     anyOctaveFirst = advance c5Sample initialRecognition
     octaveBelowFirst = advance c3Sample initialRecognition
-    majorSeventhStep sample recognition = stepRecognition testSettings AnyOctave c4 b4 sample recognition
+    majorSeventhStep sample recognition = stepRecognition testSettings AnyOctave c4 b4 (observation sample) recognition
     majorSeventhAdvance start sample recognition = foldl
       (\current time -> majorSeventhStep (at time sample) current)
       recognition
@@ -85,14 +89,14 @@ run = do
     wrongOctaveSecond = majorSeventhAdvance 50.0 b2Sample majorSeventhRelease
     correctNormalizedSecond = majorSeventhAdvance 50.0 b3Sample majorSeventhRelease
     writtenOctaveFirst = foldl
-      (\current time -> stepRecognition testSettings WrittenOctave c4 e4 (at time c5Sample) current)
+      (\current time -> stepRecognition testSettings WrittenOctave c4 e4 (ObservedPitch (at time c5Sample)) current)
       initialRecognition
       (stableTimes 0.0)
     sequenceStep sample recognition = stepSequenceRecognition
       testSettings
       AnyOctave
       (nonEmpty [ c4, e4, d4 ])
-      sample
+      (observation sample)
       recognition
     sequenceAdvance start sample recognition = foldl (\current time -> sequenceStep (at time sample) current) recognition
       (stableTimes start)
@@ -116,7 +120,7 @@ run = do
       testSettings
       AnyOctave
       (nonEmpty [ c4, c4 ])
-      sample
+      (observation sample)
       recognition
     repeatedAdvance start sample recognition = foldl (\current time -> repeatedStep (at time sample) current) recognition
       (stableTimes start)
@@ -130,7 +134,7 @@ run = do
           testSettings
           WrittenOctave
           (nonEmpty [ c4, e4 ])
-          (at time c5Sample)
+          (ObservedPitch (at time c5Sample))
           current
       )
       initialSequenceRecognition
@@ -139,7 +143,7 @@ run = do
       testSettings
       AnyOctave
       (nonEmpty [ c4, e4, d4 ])
-      sample
+      (observation sample)
       recognition
     octaveAdvance start sample recognition = foldl
       (\current time -> octaveSequenceStep (at time sample) current)
@@ -162,7 +166,7 @@ run = do
           testSettings
           AnyOctave
           expected
-          sample
+          (observation sample)
           recognition
         singNote index recognition = foldl
           (\current time -> stepExpected (at time c4Sample) current)
@@ -186,7 +190,7 @@ run = do
           AnyOctave
           c4
           e4
-          (at (Int.toNumber index * interval) c4Sample)
+          (ObservedPitch (at (Int.toNumber index * interval) c4Sample))
           current
       )
       initialRecognition
@@ -200,7 +204,7 @@ run = do
           AnyOctave
           c4
           e4
-          (at time c4Sample)
+          (ObservedPitch (at time c4Sample))
           current
       )
       initialRecognition
@@ -239,13 +243,13 @@ run = do
   assertEqual { actual: relativeMidi AnyOctave c4 octaveBelowFirst 57, expected: 69 }
   assertEqual { actual: relativeMidi AnyOctave c4 wrongFirst 64, expected: 64 }
   assertEqual { actual: relativeMidi WrittenOctave c4 octaveBelowFirst 57, expected: 57 }
-  assertEqual { actual: observed1.sample, expected: Nothing }
-  assertEqual { actual: observed4.sample, expected: Just { clarity: 0.96, frequency: 250.0, time: 40.0 } }
-  assertEqual { actual: observedSilence.sample, expected: Just { clarity: 0.0, frequency: 0.0, time: 400.0 } }
-  assertEqual { actual: observedConsonant.sample, expected: Just { clarity: 0.0, frequency: 0.0, time: 76.0 } }
-  assertEqual { actual: observedBriefDrop.sample, expected: Just { clarity: 0.96, frequency: 250.0, time: 60.0 } }
-  assertEqual { actual: observedNew3.sample, expected: Nothing }
-  assertEqual { actual: observedNew4.sample, expected: Just { clarity: 0.96, frequency: 500.0, time: 110.0 } }
+  assertEqual { actual: observed1.event, expected: NoEvidence }
+  assertEqual { actual: observed4.event, expected: ObservedPitch { clarity: 0.96, frequency: 250.0, time: 40.0 } }
+  assertEqual { actual: observedSilence.event, expected: ArticulationBreak 400.0 }
+  assertEqual { actual: observedConsonant.event, expected: ArticulationBreak 76.0 }
+  assertEqual { actual: observedBriefDrop.event, expected: ObservedPitch { clarity: 0.96, frequency: 250.0, time: 60.0 } }
+  assertEqual { actual: observedNew3.event, expected: NoEvidence }
+  assertEqual { actual: observedNew4.event, expected: ObservedPitch { clarity: 0.96, frequency: 500.0, time: 110.0 } }
   assertEqual { actual: sequenceAcceptedCount sequenceSecond, expected: 2 }
   assertEqual { actual: sequencePhase sequenceComplete, expected: SequenceComplete }
   assertEqual { actual: sequencePhase sequenceContinuedFirst, expected: SequenceReleasing }
