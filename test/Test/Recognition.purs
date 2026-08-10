@@ -209,24 +209,55 @@ run = do
       )
       initialRecognition
       [ 0.0, 1000.0 ]
-    rawPitch time frequency = { clarity: 0.96, decibels: -20.0, frequency, time }
+    rawPitch time frequency =
+      { candidates: [ { clarity: 0.96, frequency, windowSize: 2048 } ]
+      , decibels: -20.0
+      , time
+      }
     observed1 = observePitch defaultCaptureSettings (rawPitch 10.0 100.0) initialObservation
     observed2 = observePitch defaultCaptureSettings (rawPitch 20.0 200.0) observed1.observation
     observed3 = observePitch defaultCaptureSettings (rawPitch 30.0 300.0) observed2.observation
     observed4 = observePitch defaultCaptureSettings (rawPitch 40.0 400.0) observed3.observation
     observedSilence = observePitch defaultCaptureSettings
-      { clarity: 0.99, decibels: -80.0, frequency: 440.0, time: 400.0 }
+      { candidates: [ { clarity: 0.99, frequency: 440.0, windowSize: 2048 } ]
+      , decibels: -80.0
+      , time: 400.0
+      }
       observed4.observation
     observedConsonant = observePitch defaultCaptureSettings
-      { clarity: 0.2, decibels: -18.0, frequency: 180.0, time: 76.0 }
+      { candidates: [ { clarity: 0.2, frequency: 180.0, windowSize: 2048 } ]
+      , decibels: -18.0
+      , time: 76.0
+      }
       observed4.observation
     observedBriefDrop = observePitch defaultCaptureSettings
-      { clarity: 0.2, decibels: -18.0, frequency: 180.0, time: 60.0 }
+      { candidates: [ { clarity: 0.2, frequency: 180.0, windowSize: 2048 } ]
+      , decibels: -18.0
+      , time: 60.0
+      }
       observed4.observation
     observedNew1 = observePitch defaultCaptureSettings (rawPitch 80.0 500.0) observedConsonant.observation
     observedNew2 = observePitch defaultCaptureSettings (rawPitch 90.0 500.0) observedNew1.observation
     observedNew3 = observePitch defaultCaptureSettings (rawPitch 100.0 500.0) observedNew2.observation
     observedNew4 = observePitch defaultCaptureSettings (rawPitch 110.0 500.0) observedNew3.observation
+    multiWindow1 = observePitch defaultCaptureSettings
+      { candidates:
+          [ { clarity: 0.91, frequency: 220.0, windowSize: 2048 }
+          , { clarity: 0.98, frequency: 110.0, windowSize: 8192 }
+          ]
+      , decibels: -20.0
+      , time: 10.0
+      }
+      initialObservation
+    multiWindow2 = observePitch defaultCaptureSettings
+      ((rawPitch 20.0 110.0) { candidates = [ { clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
+      multiWindow1.observation
+    multiWindow3 = observePitch defaultCaptureSettings
+      ((rawPitch 30.0 110.0) { candidates = [ { clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
+      multiWindow2.observation
+    multiWindow4 = observePitch defaultCaptureSettings
+      ((rawPitch 40.0 110.0) { candidates = [ { clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
+      multiWindow3.observation
   assertEqual { actual: nearestMidi 440.0, expected: 69 }
   assertEqual { actual: phase beforeFirst, expected: WaitingForFirst }
   assertEqual { actual: phase afterFirst, expected: WaitingForRelease }
@@ -269,3 +300,7 @@ run = do
   assertEqual { actual: phase acceptedAt60Hz, expected: WaitingForRelease }
   assertEqual { actual: phase acceptedAt120Hz, expected: WaitingForRelease }
   assertEqual { actual: phase afterSchedulingGap, expected: WaitingForFirst }
+  assertEqual
+    { actual: multiWindow4.event
+    , expected: ObservedPitch { clarity: 0.98, frequency: 110.0, time: 40.0 }
+    }

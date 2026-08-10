@@ -197,17 +197,20 @@ observePitch
   -> { event :: PitchObservation, observation :: Observation }
 observePitch settings raw (Observation observation) = do
   let
+    candidate = Array.foldl preferClearer Nothing raw.candidates
+    clarity = fromMaybe 0.0 (map _.clarity candidate)
+    frequency = fromMaybe 0.0 (map _.frequency candidate)
     valid =
-      raw.clarity >= settings.clarityThreshold
+      clarity >= settings.clarityThreshold
         && raw.decibels >= settings.volumeThresholdDb
-        && raw.frequency >= settings.minimumFrequency
-        && raw.frequency <= settings.maximumFrequency
+        && frequency >= settings.minimumFrequency
+        && frequency <= settings.maximumFrequency
     samples = Array.filter
       (\timed -> raw.time - timed.time <= settings.sampleWindowMilliseconds)
       if valid then
         Array.snoc observation.samples
-          { clarity: raw.clarity
-          , frequency: raw.frequency
+          { clarity
+          , frequency
           , time: raw.time
           }
       else
@@ -226,6 +229,11 @@ observePitch settings raw (Observation observation) = do
   { observation: Observation { lastValidAt, samples: nextSamples }
   , event
   }
+
+preferClearer :: Maybe PitchInput.PitchCandidate -> PitchInput.PitchCandidate -> Maybe PitchInput.PitchCandidate
+preferClearer current candidate = case current of
+  Just previous | previous.clarity >= candidate.clarity -> current
+  _ -> Just candidate
 
 median :: Array Number -> Number
 median values = do

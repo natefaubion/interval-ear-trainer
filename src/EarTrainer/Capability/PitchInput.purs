@@ -1,5 +1,6 @@
 module EarTrainer.Capability.PitchInput
   ( Monitor
+  , PitchCandidate
   , Sample
   , decibelsFromRms
   , start
@@ -16,15 +17,19 @@ import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
 foreign import data Monitor :: Type
 
 type Sample =
-  { clarity :: Number
+  { candidates :: Array PitchCandidate
   , decibels :: Number
-  , frequency :: Number
   , time :: Number
   }
 
-type RawSample =
+type PitchCandidate =
   { clarity :: Number
   , frequency :: Number
+  , windowSize :: Int
+  }
+
+type RawSample =
+  { candidates :: Array PitchCandidate
   , rms :: Number
   , time :: Number
   }
@@ -37,9 +42,8 @@ start onSample = fromEffectFnAff (startImpl (onSample <<< fromRawSample))
 
 fromRawSample :: RawSample -> Sample
 fromRawSample sample =
-  { clarity: sample.clarity
+  { candidates: sample.candidates
   , decibels: decibelsFromRms sample.rms
-  , frequency: sample.frequency
   , time: sample.time
   }
 

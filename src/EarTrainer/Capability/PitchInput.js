@@ -41,24 +41,35 @@ export const startImpl = (onSample) => (onError, onSuccess) => {
       }
 
       const audioContext = new AudioContext();
+      const windowSizes = [2048, 4096, 8192];
       const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 2048;
+      analyser.fftSize = 8192;
       audioContext.createMediaStreamSource(stream).connect(analyser);
 
       const input = new Float32Array(analyser.fftSize);
-      const detector = PitchDetector.forFloat32Array(analyser.fftSize);
+      const analyses = windowSizes.map((windowSize) => ({
+        detector: PitchDetector.forFloat32Array(windowSize),
+        input: new Float32Array(windowSize),
+        windowSize,
+      }));
       monitor.audioContext = audioContext;
       monitor.stream = stream;
 
       const readPitch = () => {
         if (monitor.stopped) return;
         analyser.getFloatTimeDomainData(input);
-        const [frequency, clarity] = detector.findPitch(input, audioContext.sampleRate);
+        const candidates = analyses.map((analysis) => {
+          analysis.input.set(input.subarray(input.length - analysis.windowSize));
+          const [frequency, clarity] = analysis.detector.findPitch(
+            analysis.input,
+            audioContext.sampleRate,
+          );
+          return { clarity, frequency, windowSize: analysis.windowSize };
+        });
         const now = performance.now();
         onSample({
-          clarity,
-          frequency,
-          rms: rootMeanSquare(input),
+          candidates,
+          rms: rootMeanSquare(analyses[0].input),
           time: now,
         })();
         monitor.animationFrame = requestAnimationFrame(readPitch);
