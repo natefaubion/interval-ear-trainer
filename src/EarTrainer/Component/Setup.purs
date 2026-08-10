@@ -475,7 +475,7 @@ component =
               , disabled: not (Quiz.isPlayable state.config) || not state.samplerReady
               , variant: Button.Primary
               }
-              [ HH.text "Begin practice" ]
+              [ HH.text "Begin" ]
           ]
       , renderSavePresetDialog state
       , renderDeletePresetDialog state
