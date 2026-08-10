@@ -14,7 +14,7 @@ module EarTrainer.Config
   , melodyLength
   , mkMelodyLength
   , quizModeUsesRecognition
-  , quizModeUsesSinging
+  , quizModeUsesPitchInput
   , selectMajorKey
   , selectedMajorKeyId
   , setCustomPitchClass
@@ -78,7 +78,7 @@ mkMelodyLength value
   | value >= 3 && value <= 8 = Just (MelodyLength value)
   | otherwise = Nothing
 
-data QuizMode = SingingOnly | RecognitionOnly | SingingAndRecognition | Audiation | MelodyImitation
+data QuizMode = ImitationOnly | RecognitionOnly | ImitationAndRecognition | Audiation | MelodyImitation
 
 derive instance Eq QuizMode
 
@@ -90,14 +90,14 @@ data RangeBoundary = Lowest | Highest
 
 derive instance Eq RangeBoundary
 
-quizModeUsesSinging :: QuizMode -> Boolean
-quizModeUsesSinging = case _ of
+quizModeUsesPitchInput :: QuizMode -> Boolean
+quizModeUsesPitchInput = case _ of
   RecognitionOnly -> false
   _ -> true
 
 quizModeUsesRecognition :: QuizMode -> Boolean
 quizModeUsesRecognition = case _ of
-  SingingOnly -> false
+  ImitationOnly -> false
   Audiation -> false
   MelodyImitation -> false
   _ -> true
@@ -133,7 +133,7 @@ defaultConfig =
   , octavePolicy: AnyOctave
   , playbackModes: [ MelodicAscending ]
   , showPitchTuner: true
-  , quizMode: SingingAndRecognition
+  , quizMode: ImitationAndRecognition
   , quizProgression: AutomaticProgression
   , rootPitchClasses: defaultRootPitchClasses
   , vocalRange: Tenor

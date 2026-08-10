@@ -108,13 +108,13 @@ type StablePitch =
   }
 
 data Recognition
-  = SingingFirst StablePitch
+  = MatchingFirst StablePitch
   | ReleasingFirst
       { feedback :: Maybe Feedback
       , firstMidi :: Int
       , releaseFrames :: Int
       }
-  | SingingSecond
+  | MatchingSecond
       { firstMidi :: Int
       , stable :: StablePitch
       }
@@ -144,25 +144,25 @@ defaultRecognitionSettings =
   }
 
 initialRecognition :: Recognition
-initialRecognition = SingingFirst initialStablePitch
+initialRecognition = MatchingFirst initialStablePitch
 
 initialStablePitch :: StablePitch
 initialStablePitch = { candidate: Nothing, feedback: Nothing, stableFrames: 0 }
 
 phase :: Recognition -> RecognitionPhase
 phase = case _ of
-  SingingFirst _ -> WaitingForFirst
+  MatchingFirst _ -> WaitingForFirst
   ReleasingFirst _ -> WaitingForRelease
-  SingingSecond _ -> WaitingForSecond
+  MatchingSecond _ -> WaitingForSecond
   IncorrectFirst _ -> RecognitionIncorrect
   IncorrectSecond _ -> RecognitionIncorrect
   Complete _ -> RecognitionComplete
 
 feedback :: Recognition -> Maybe Feedback
 feedback = case _ of
-  SingingFirst stable -> stable.feedback
+  MatchingFirst stable -> stable.feedback
   ReleasingFirst state -> state.feedback
-  SingingSecond state -> state.stable.feedback
+  MatchingSecond state -> state.stable.feedback
   IncorrectFirst current -> current
   IncorrectSecond state -> state.feedback
   Complete state -> state.feedback
@@ -288,20 +288,20 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
         Just current | clear -> do
           let
             next = stepStable settings.stableFramesRequired current stable
-          if next.stableFrames < settings.stableFramesRequired then SingingFirst next
+          if next.stableFrames < settings.stableFramesRequired then MatchingFirst next
           else continue current next
-        current -> SingingFirst (resetStable current)
+        current -> MatchingFirst (resetStable current)
   case recognition of
     Complete state -> Complete state { feedback = currentFeedback false (normalizedSecond state.firstMidi) }
     IncorrectFirst _ -> IncorrectFirst (currentFeedback (octavePolicy == AnyOctave) writtenFirst)
     IncorrectSecond state -> IncorrectSecond state { feedback = currentFeedback false (normalizedSecond state.firstMidi) }
-    SingingFirst stable -> do
+    MatchingFirst stable -> do
       let
         allowOctaveEquivalent = octavePolicy == AnyOctave
       updateStable writtenFirst allowOctaveEquivalent stable \current next ->
         if matches allowOctaveEquivalent writtenFirst then
           ReleasingFirst { feedback: next.feedback, firstMidi: current.midi, releaseFrames: 0 }
-        else if matchesPitchIdentity allowOctaveEquivalent writtenFirst current then SingingFirst next
+        else if matchesPitchIdentity allowOctaveEquivalent writtenFirst current then MatchingFirst next
         else IncorrectFirst next.feedback
     ReleasingFirst state
       | matches false state.firstMidi -> ReleasingFirst state
@@ -313,26 +313,26 @@ stepRecognition settings octavePolicy firstPitch secondPitch sample recognition 
             frames = state.releaseFrames + 1
             current = currentFeedback false state.firstMidi
           if frames >= settings.releaseFramesRequired then
-            SingingSecond { firstMidi: state.firstMidi, stable: resetStable current }
+            MatchingSecond { firstMidi: state.firstMidi, stable: resetStable current }
           else ReleasingFirst state { feedback = current, releaseFrames = frames }
-    SingingSecond state -> do
+    MatchingSecond state -> do
       let
         expectedMidi = normalizedSecond state.firstMidi
       case currentFeedback false expectedMidi of
         Just current | clear -> do
           let
             next = stepStable settings.stableFramesRequired current state.stable
-          if next.stableFrames < settings.stableFramesRequired then SingingSecond state { stable = next }
+          if next.stableFrames < settings.stableFramesRequired then MatchingSecond state { stable = next }
           else if matches false expectedMidi then Complete { feedback: next.feedback, firstMidi: state.firstMidi }
-          else if matchesPitchIdentity false expectedMidi current then SingingSecond state { stable = next }
+          else if matchesPitchIdentity false expectedMidi current then MatchingSecond state { stable = next }
           else IncorrectSecond { feedback: next.feedback, firstMidi: state.firstMidi }
-        current -> SingingSecond state { stable = resetStable current }
+        current -> MatchingSecond state { stable = resetStable current }
 
 phaseInstruction :: RecognitionPhase -> String
 phaseInstruction = case _ of
-  WaitingForFirst -> "Sing the first note."
-  WaitingForRelease -> "Sing the second note."
-  WaitingForSecond -> "Sing the second note."
+  WaitingForFirst -> "Sing or play the first note."
+  WaitingForRelease -> "Release, then sing or play the second note."
+  WaitingForSecond -> "Sing or play the second note."
   RecognitionIncorrect -> "Incorrect pitch."
   RecognitionComplete -> "Both notes accepted."
 
@@ -347,15 +347,15 @@ relativeMidi octavePolicy root recognition detectedMidi = case octavePolicy of
 
 firstMidi :: Recognition -> Maybe Int
 firstMidi = case _ of
-  SingingFirst _ -> Nothing
+  MatchingFirst _ -> Nothing
   ReleasingFirst state -> Just state.firstMidi
-  SingingSecond state -> Just state.firstMidi
+  MatchingSecond state -> Just state.firstMidi
   IncorrectFirst _ -> Nothing
   IncorrectSecond state -> Just state.firstMidi
   Complete state -> Just state.firstMidi
 
 data SequencePhase
-  = SequenceSinging
+  = SequenceMatching
   | SequenceReleasing
   | SequenceIncorrect
   | SequenceComplete
@@ -364,13 +364,13 @@ derive instance Eq SequencePhase
 
 instance Show SequencePhase where
   show = case _ of
-    SequenceSinging -> "SequenceSinging"
+    SequenceMatching -> "SequenceMatching"
     SequenceReleasing -> "SequenceReleasing"
     SequenceIncorrect -> "SequenceIncorrect"
     SequenceComplete -> "SequenceComplete"
 
 data SequenceRecognition
-  = SingingSequence
+  = MatchingSequence
       { acceptedMidi :: Array Int
       , stable :: StablePitch
       }
@@ -390,25 +390,25 @@ data SequenceRecognition
       }
 
 initialSequenceRecognition :: SequenceRecognition
-initialSequenceRecognition = SingingSequence { acceptedMidi: [], stable: initialStablePitch }
+initialSequenceRecognition = MatchingSequence { acceptedMidi: [], stable: initialStablePitch }
 
 sequencePhase :: SequenceRecognition -> SequencePhase
 sequencePhase = case _ of
-  SingingSequence _ -> SequenceSinging
+  MatchingSequence _ -> SequenceMatching
   ReleasingSequence _ -> SequenceReleasing
   IncorrectSequence _ -> SequenceIncorrect
   CompleteSequence _ -> SequenceComplete
 
 sequenceAcceptedCount :: SequenceRecognition -> Int
 sequenceAcceptedCount = Array.length <<< case _ of
-  SingingSequence state -> state.acceptedMidi
+  MatchingSequence state -> state.acceptedMidi
   ReleasingSequence state -> state.acceptedMidi
   IncorrectSequence state -> state.acceptedMidi
   CompleteSequence state -> state.acceptedMidi
 
 sequenceFeedback :: SequenceRecognition -> Maybe Feedback
 sequenceFeedback = case _ of
-  SingingSequence state -> state.stable.feedback
+  MatchingSequence state -> state.stable.feedback
   ReleasingSequence state -> state.feedback
   IncorrectSequence state -> state.feedback
   CompleteSequence state -> state.feedback
@@ -424,7 +424,7 @@ stepSequenceRecognition settings octavePolicy expected sample recognition = do
   let
     expectedPitches = NonEmptyArray.toArray expected
     accepted = case recognition of
-      SingingSequence state -> state.acceptedMidi
+      MatchingSequence state -> state.acceptedMidi
       ReleasingSequence state -> state.acceptedMidi
       IncorrectSequence state -> state.acceptedMidi
       CompleteSequence state -> state.acceptedMidi
@@ -443,14 +443,14 @@ stepSequenceRecognition settings octavePolicy expected sample recognition = do
     ReleasingSequence state -> do
       let
         current = currentFeedback false state.lastMidi
-        stillSinging = case current of
+        stillProducing = case current of
           Just currentPitch -> clear && matchesPitchIdentity false state.lastMidi currentPitch
           Nothing -> false
-        frames = if stillSinging then 0 else state.releaseFrames + 1
+        frames = if stillProducing then 0 else state.releaseFrames + 1
       if frames >= settings.releaseFramesRequired then
-        SingingSequence { acceptedMidi: state.acceptedMidi, stable: resetStable current }
+        MatchingSequence { acceptedMidi: state.acceptedMidi, stable: resetStable current }
       else ReleasingSequence state { feedback = current, releaseFrames = frames }
-    SingingSequence state -> case expectedMidi of
+    MatchingSequence state -> case expectedMidi of
       Nothing -> CompleteSequence { acceptedMidi: state.acceptedMidi, feedback: state.stable.feedback }
       Just midi -> do
         let
@@ -460,7 +460,7 @@ stepSequenceRecognition settings octavePolicy expected sample recognition = do
           Just currentPitch | clear -> do
             let next = stepStable settings.stableFramesRequired currentPitch state.stable
             if next.stableFrames < settings.stableFramesRequired then
-              SingingSequence state { stable = next }
+              MatchingSequence state { stable = next }
             else if matchesExpected settings allowOctaveEquivalent midi currentPitch then do
               let nextAccepted = Array.snoc state.acceptedMidi currentPitch.midi
               if Array.length nextAccepted == Array.length expectedPitches then
@@ -473,9 +473,9 @@ stepSequenceRecognition settings octavePolicy expected sample recognition = do
                   , releaseFrames: 0
                   }
             else if matchesPitchIdentity allowOctaveEquivalent midi currentPitch then
-              SingingSequence state { stable = next }
+              MatchingSequence state { stable = next }
             else IncorrectSequence { acceptedMidi: state.acceptedMidi, feedback: next.feedback }
-          _ -> SingingSequence state { stable = resetStable current }
+          _ -> MatchingSequence state { stable = resetStable current }
 
 sequenceRelativeMidi :: OctavePolicy -> NonEmptyArray.NonEmptyArray Pitch -> SequenceRecognition -> Int -> Int
 sequenceRelativeMidi octavePolicy expected recognition detectedMidi = case octavePolicy of
@@ -490,7 +490,7 @@ sequenceRelativeMidi octavePolicy expected recognition detectedMidi = case octav
 
 firstAcceptedMidi :: SequenceRecognition -> Maybe Int
 firstAcceptedMidi = Array.head <<< case _ of
-  SingingSequence state -> state.acceptedMidi
+  MatchingSequence state -> state.acceptedMidi
   ReleasingSequence state -> state.acceptedMidi
   IncorrectSequence state -> state.acceptedMidi
   CompleteSequence state -> state.acceptedMidi

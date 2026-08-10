@@ -322,17 +322,17 @@ readBoundedInt name lower upper value = do
 
 encodeQuizMode :: QuizMode -> String
 encodeQuizMode = case _ of
-  SingingOnly -> "singing"
+  ImitationOnly -> "singing"
   RecognitionOnly -> "recognition"
-  SingingAndRecognition -> "singing-and-recognition"
+  ImitationAndRecognition -> "singing-and-recognition"
   Audiation -> "audiation"
   MelodyImitation -> "melody-imitation"
 
 decodeQuizMode :: String -> Maybe QuizMode
 decodeQuizMode = case _ of
-  "singing" -> Just SingingOnly
+  "singing" -> Just ImitationOnly
   "recognition" -> Just RecognitionOnly
-  "singing-and-recognition" -> Just SingingAndRecognition
+  "singing-and-recognition" -> Just ImitationAndRecognition
   "audiation" -> Just Audiation
   "melody-imitation" -> Just MelodyImitation
   _ -> Nothing

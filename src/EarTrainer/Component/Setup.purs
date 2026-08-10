@@ -211,10 +211,10 @@ component =
               , validation: Nothing
               }
               [ rootChoiceButton
-                  (state.config.quizMode == SingingAndRecognition)
-                  (RootSelectQuizMode SingingAndRecognition)
-                  "Singing and recognition"
-              , rootChoiceButton (state.config.quizMode == SingingOnly) (RootSelectQuizMode SingingOnly) "Singing only"
+                  (state.config.quizMode == ImitationAndRecognition)
+                  (RootSelectQuizMode ImitationAndRecognition)
+                  "Imitation and recognition"
+              , rootChoiceButton (state.config.quizMode == ImitationOnly) (RootSelectQuizMode ImitationOnly) "Imitation only"
               , rootChoiceButton (state.config.quizMode == RecognitionOnly) (RootSelectQuizMode RecognitionOnly) "Recognition only"
               , rootChoiceButton (state.config.quizMode == Audiation) (RootSelectQuizMode Audiation) "Audiation"
               , rootChoiceButton
@@ -394,9 +394,9 @@ component =
           , SettingGroup.settingGroup
               { description:
                   if state.config.quizMode == MelodyImitation then
-                    "Choose whether the first sung note must match the written register. Later notes must preserve the written melody from it."
+                    "Choose whether the first performed note must match the written register. Later notes must preserve the written melody from it."
                   else
-                    "Choose whether the first sung note must match the written register. The second note must always form the written interval from it."
+                    "Choose whether the first performed note must match the written register. The second note must always form the written interval from it."
               , title: "Octave matching"
               , validation: Nothing
               }
@@ -410,8 +410,8 @@ component =
                   "Written octave"
               ]
           , SettingGroup.settingGroup
-              { description: "Choose how the pitch you are currently singing appears on the staff."
-              , title: "Sung pitch on staff"
+              { description: "Choose how the pitch you are currently producing appears on the staff."
+              , title: "Detected pitch on staff"
               , validation: Nothing
               }
               [ rootChoiceButton (state.config.ghostMode == GhostOn) (RootSelectGhostMode GhostOn) "Show briefly"
@@ -422,7 +422,7 @@ component =
               , rootChoiceButton (state.config.ghostMode == GhostOff) (RootSelectGhostMode GhostOff) "Hidden"
               ]
           , SettingGroup.settingGroup
-              { description: "Choose whether to show cents feedback while singing."
+              { description: "Choose whether to show cents feedback during imitation."
               , title: "Pitch tuner"
               , validation: Nothing
               }

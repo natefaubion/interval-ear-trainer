@@ -25,8 +25,8 @@ import EarTrainer.Config
   , GhostMode(..)
   , QuizMode(..)
   , QuizProgression(..)
+  , quizModeUsesPitchInput
   , quizModeUsesRecognition
-  , quizModeUsesSinging
   )
 import EarTrainer.Music
   ( Accidental(..)
@@ -66,7 +66,7 @@ data CaptureStatus
   | AnswerComplete (Array Interval)
 
 data PlaybackDestination
-  = BeginSinging
+  = BeginImitation
   | ResumeAnswers (Array Interval)
 
 derive instance Eq PlaybackDestination
@@ -106,7 +106,7 @@ data Action
   | PitchDetected Recognition.PitchSample
   | MicrophoneStarted PitchInput.Monitor
   | ClearGhost
-  | FinishSinging
+  | FinishImitation
   | MicrophoneFailed String
   | ChooseInterval Interval
   | NextPrompt
@@ -368,13 +368,13 @@ component =
   footerButtonDisabled state =
     hasFiber state.progressionFiber
       || isBusy state.captureStatus
-      || (isListening state.captureStatus && singingComplete state)
+      || (isListening state.captureStatus && imitationComplete state)
 
   footerButtonLabel state
     | isPlaying state.captureStatus = "Playing…"
     | isStartingCapture state.captureStatus = "Requesting…"
     | isAnswerComplete state.captureStatus = if isMelody state then "Next melody" else "Next interval"
-    | isListening state.captureStatus && singingComplete state = if isMelody state then "Next melody" else "Next interval"
+    | isListening state.captureStatus && imitationComplete state = if isMelody state then "Next melody" else "Next interval"
     | state.config.quizMode == Audiation = "Play root"
     | isMelody state = "Play melody"
     | otherwise = "Play interval"
@@ -387,16 +387,16 @@ component =
   practiceInstruction state = case state.captureStatus of
     ReadyToPlay ->
       if isMelody state then
-        "Listen to the melody, then sing it back."
+        "Listen to the melody, then sing or play it back."
       else if state.config.quizMode == Audiation then
-        "Listen to the root, then sing the interval."
-      else if quizModeUsesSinging state.config.quizMode then
-        "Listen to the interval, then sing."
+        "Listen to the root, then sing or play the interval."
+      else if quizModeUsesPitchInput state.config.quizMode then
+        "Listen to the interval, then sing or play it back."
       else
         "Listen to the interval, then choose."
     PlayingAudio _ -> "Listen carefully."
     StartingCapture _ -> "Requesting microphone access."
-    Listening _ -> singingInstruction state
+    Listening _ -> imitationInstruction state
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
     IntervalError -> "Incorrect pitch."
@@ -407,17 +407,17 @@ component =
         "Not quite. Try Again."
     AnswerComplete _ -> "Correct!"
 
-  singingInstruction state = case state.exercise of
+  imitationInstruction state = case state.exercise of
     IntervalPractice exercise -> Recognition.phaseInstruction (Recognition.phase exercise.recognition)
     MelodyPractice exercise -> do
       let
         count = Array.length (NonEmptyArray.toArray (Quiz.melodyPitches exercise.prompt))
         current = min count (Recognition.sequenceAcceptedCount exercise.recognition + 1)
       case Recognition.sequencePhase exercise.recognition of
-        Recognition.SequenceReleasing -> "Release, then sing note " <> show current <> " of " <> show count <> "."
+        Recognition.SequenceReleasing -> "Release, then sing or play note " <> show current <> " of " <> show count <> "."
         Recognition.SequenceIncorrect -> "Incorrect note " <> show current <> "."
         Recognition.SequenceComplete -> "Melody complete."
-        Recognition.SequenceSinging -> "Sing note " <> show current <> " of " <> show count <> "."
+        Recognition.SequenceMatching -> "Sing or play note " <> show current <> " of " <> show count <> "."
 
   isPlaying = case _ of
     PlayingAudio _ -> true
@@ -477,9 +477,9 @@ component =
   feedbackPosition cents = 50.0 + max (-50.0) (min 50.0 cents)
 
   quizModeTitle = case _ of
-    SingingOnly -> "Singing"
+    ImitationOnly -> "Imitation"
     RecognitionOnly -> "Recognition"
-    SingingAndRecognition -> "Singing & Recognition"
+    ImitationAndRecognition -> "Imitation & Recognition"
     Audiation -> "Audiation"
     MelodyImitation -> "Melody imitation"
 
@@ -487,7 +487,7 @@ component =
     state.config.quizMode /= MelodyImitation
       &&
         ( state.config.quizMode == Audiation
-            || (state.config.quizMode == SingingOnly && isAnswerComplete state.captureStatus)
+            || (state.config.quizMode == ImitationOnly && isAnswerComplete state.captureStatus)
         )
 
   promptIntervalLabel state =
@@ -496,7 +496,7 @@ component =
       Just prompt ->
         intervalName prompt.interval
           <>
-            if state.config.quizMode == Audiation || state.config.quizMode == SingingOnly then
+            if state.config.quizMode == Audiation || state.config.quizMode == ImitationOnly then
               " · " <> playbackModeName prompt.mode
             else ""
 
@@ -521,7 +521,7 @@ component =
       let
         destination = case state.captureStatus of
           ChoosingAnswer revealed -> ResumeAnswers revealed
-          _ -> BeginSinging
+          _ -> BeginImitation
       H.modify_ _
         { captureStatus = PlayingAudio destination
         , ghostFiber = Nothing
@@ -550,10 +550,10 @@ component =
       case state.captureStatus of
         PlayingAudio (ResumeAnswers revealed) -> do
           H.modify_ _ { captureStatus = ChoosingAnswer revealed }
-        PlayingAudio BeginSinging
-          | not (quizModeUsesSinging state.config.quizMode) -> do
+        PlayingAudio BeginImitation
+          | not (quizModeUsesPitchInput state.config.quizMode) -> do
               H.modify_ _ { captureStatus = ChoosingAnswer [] }
-        PlayingAudio BeginSinging -> do
+        PlayingAudio BeginImitation -> do
           H.liftEffect (AudioSession.setType AudioSession.PlayAndRecord)
           { emitter, listener } <- H.liftEffect HS.create
           void (H.subscribe emitter)
@@ -586,11 +586,11 @@ component =
         do
           when (state.config.ghostMode == GhostOn) do
             H.modify_ _ { ghostMidi = Nothing }
-    FinishSinging -> do
+    FinishImitation -> do
       state <- H.get
       when
         ( isListening state.captureStatus
-            && singingComplete state
+            && imitationComplete state
         )
         do
           let persistGhost = state.config.ghostMode == GhostPersist
@@ -756,7 +756,7 @@ component =
     cancelFiber state.ghostFiber
     stopCapture state.captureStatus
     H.modify_ _ { ghostFiber = Nothing }
-    handleAction FinishSinging
+    handleAction FinishImitation
 
   finishIncorrect state incorrectMidi = do
     cancelFiber state.ghostFiber
@@ -836,7 +836,7 @@ component =
     IntervalPractice exercise -> Recognition.feedback exercise.recognition
     MelodyPractice exercise -> Recognition.sequenceFeedback exercise.recognition
 
-  singingComplete state = case state.exercise of
+  imitationComplete state = case state.exercise of
     IntervalPractice exercise -> Recognition.phase exercise.recognition == Recognition.RecognitionComplete
     MelodyPractice exercise -> Recognition.sequencePhase exercise.recognition == Recognition.SequenceComplete
 
@@ -858,9 +858,9 @@ component =
       layout = notationLayout state
       rootAccepted =
         Recognition.phase recognition /= Recognition.WaitingForFirst
-          || (quizModeUsesSinging state.config.quizMode && isChoosingAnswer state.captureStatus)
+          || (quizModeUsesPitchInput state.config.quizMode && isChoosingAnswer state.captureStatus)
           || case state.captureStatus of
-            PlayingAudio (ResumeAnswers _) -> quizModeUsesSinging state.config.quizMode
+            PlayingAudio (ResumeAnswers _) -> quizModeUsesPitchInput state.config.quizMode
             _ -> false
       detected = map
         (pitchFromMidiLike (spellingReference prompt))

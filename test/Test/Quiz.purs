@@ -14,8 +14,8 @@ import EarTrainer.Config
   , RangeBoundary(..)
   , defaultConfig
   , isValid
+  , quizModeUsesPitchInput
   , quizModeUsesRecognition
-  , quizModeUsesSinging
   , selectMajorKey
   , selectedMajorKeyId
   , setCustomPitchClass
@@ -208,15 +208,15 @@ run = do
   assertTrue' "generated target is above range floor" (midiNumber generatedPrompt.target >= midiNumber generatedRange.low)
   assertTrue' "generated root is below range ceiling" (midiNumber generatedPrompt.root <= midiNumber generatedRange.high)
   assertTrue' "generated target is below range ceiling" (midiNumber generatedPrompt.target <= midiNumber generatedRange.high)
-  assertTrue' "singing mode uses singing" (quizModeUsesSinging SingingOnly)
-  assertFalse' "singing mode does not use recognition" (quizModeUsesRecognition SingingOnly)
-  assertFalse' "recognition mode does not use singing" (quizModeUsesSinging RecognitionOnly)
+  assertTrue' "imitation mode uses pitch input" (quizModeUsesPitchInput ImitationOnly)
+  assertFalse' "imitation mode does not use recognition" (quizModeUsesRecognition ImitationOnly)
+  assertFalse' "recognition mode does not use pitch input" (quizModeUsesPitchInput RecognitionOnly)
   assertTrue' "recognition mode uses recognition" (quizModeUsesRecognition RecognitionOnly)
-  assertTrue' "combined mode uses singing" (quizModeUsesSinging SingingAndRecognition)
-  assertTrue' "combined mode uses recognition" (quizModeUsesRecognition SingingAndRecognition)
-  assertTrue' "audiation uses singing" (quizModeUsesSinging Audiation)
+  assertTrue' "combined mode uses pitch input" (quizModeUsesPitchInput ImitationAndRecognition)
+  assertTrue' "combined mode uses recognition" (quizModeUsesRecognition ImitationAndRecognition)
+  assertTrue' "audiation uses pitch input" (quizModeUsesPitchInput Audiation)
   assertFalse' "audiation does not use recognition" (quizModeUsesRecognition Audiation)
-  assertTrue' "melody imitation uses singing" (quizModeUsesSinging MelodyImitation)
+  assertTrue' "melody imitation uses pitch input" (quizModeUsesPitchInput MelodyImitation)
   assertFalse' "melody imitation does not use interval recognition" (quizModeUsesRecognition MelodyImitation)
   assertTrue' "automatic progression is the default" (defaultConfig.quizProgression == AutomaticProgression)
   assertTrue' "collection prompts use selected thirds and pitch classes" $ Array.all

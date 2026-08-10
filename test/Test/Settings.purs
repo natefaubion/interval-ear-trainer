@@ -5,7 +5,7 @@ import Prelude
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
-import EarTrainer.Config (AnswerCount(..), QuizProgression(..), defaultConfig, melodyLength)
+import EarTrainer.Config (AnswerCount(..), QuizMode(..), QuizProgression(..), defaultConfig, melodyLength)
 import EarTrainer.Settings
   ( DecodeError(..)
   , NameError(..)
@@ -158,6 +158,8 @@ run = do
     Left _ -> assertTrue' "version 1 settings migrate" false
     Right value -> do
       assertEqual { actual: melodyLength value.config.melodyLength, expected: 4 }
+      assertTrue' "version 1 singing mode migrates to imitation"
+        (value.config.quizMode == ImitationOnly)
       assertTrue' "version 1 active preset ID migrates"
         (value.activePresetId == Just (presetId "version-1-preset"))
       case Array.head value.presets of
