@@ -207,7 +207,7 @@ component =
                 )
           , SettingGroup.settingGroup
               { description: "Choose which parts of the exercise to practice."
-              , title: "Quiz mode"
+              , title: "Exercise mode"
               , validation: Nothing
               }
               [ rootChoiceButton
@@ -227,7 +227,7 @@ component =
                   if state.config.quizMode == MelodyImitation then
                     "Choose how the next melody begins after a correct performance."
                   else "Choose how the next interval begins after a correct answer."
-              , title: "Quiz progression"
+              , title: "Exercise progression"
               , validation: Nothing
               }
               [ rootChoiceButton
