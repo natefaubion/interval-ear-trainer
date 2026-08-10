@@ -222,21 +222,6 @@ component =
                   (RootSelectQuizMode MelodyImitation)
                   "Melody imitation"
               ]
-          , if state.config.quizMode == MelodyImitation then
-              SettingGroup.settingGroup
-                { description: "Choose how many notes are played in each melody."
-                , title: "Number of notes"
-                , validation: Nothing
-                }
-                ( map
-                    ( \count -> rootChoiceButton
-                        (melodyLength state.config.melodyLength == count)
-                        (RootSelectMelodyLength count)
-                        (show count)
-                    )
-                    (Array.range 3 8)
-                )
-            else HH.text ""
           , SettingGroup.settingGroup
               { description:
                   if state.config.quizMode == MelodyImitation then
@@ -254,6 +239,21 @@ component =
                   (RootSelectQuizProgression ManualProgression)
                   "Manual"
               ]
+          , if state.config.quizMode == MelodyImitation then
+              SettingGroup.settingGroup
+                { description: "Choose how many notes are played in each melody."
+                , title: "Number of notes"
+                , validation: Nothing
+                }
+                ( map
+                    ( \count -> rootChoiceButton
+                        (melodyLength state.config.melodyLength == count)
+                        (RootSelectMelodyLength count)
+                        (show count)
+                    )
+                    (Array.range 3 8)
+                )
+            else HH.text ""
           , if quizModeUsesRecognition state.config.quizMode then
               SettingGroup.settingGroup
                 { description: "Choose how many interval choices are shown."
