@@ -8,6 +8,7 @@ module EarTrainer.Component.Practice
 import Prelude
 
 import Data.Array as Array
+import Data.Array.NonEmpty as NonEmptyArray
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Int as Int
@@ -70,19 +71,28 @@ data PlaybackDestination
 
 derive instance Eq PlaybackDestination
 
+data PracticeExercise
+  = IntervalPractice
+      { choices :: Array Quiz.IntervalChoice
+      , prompt :: Quiz.Prompt
+      , recognition :: Recognition.Recognition
+      }
+  | MelodyPractice
+      { prompt :: Quiz.MelodyPrompt
+      , recognition :: Recognition.SequenceRecognition
+      }
+
 type State =
   { captureStatus :: CaptureStatus
-  , choices :: Array Quiz.IntervalChoice
   , config :: ExerciseConfig
+  , exercise :: PracticeExercise
   , ghostFiber :: Maybe H.ForkId
   , ghostMidi :: Maybe Int
   , observation :: Recognition.Observation
   , playbackFiber :: Maybe H.ForkId
-  , prompt :: Quiz.Prompt
   , prompts :: Quiz.PromptSet
   , progressionFiber :: Maybe H.ForkId
   , previewFiber :: Maybe H.ForkId
-  , recognition :: Recognition.Recognition
   , sampler :: AudioCapability.Sampler
   }
 
@@ -148,21 +158,38 @@ component =
   where
   initialState input = do
     let
-      prompt = Quiz.makePrompt input.seed input.prompts
+      promptMode = Quiz.makePrompt input.seed input.prompts
     { captureStatus: ReadyToPlay
-    , choices: Quiz.makeChoices input.seed input.config prompt
     , config: input.config
+    , exercise: makePracticeExercise input.seed input.config promptMode
     , ghostFiber: Nothing
     , ghostMidi: Nothing
     , observation: Recognition.initialObservation
     , playbackFiber: Nothing
-    , prompt: prompt
     , prompts: input.prompts
     , progressionFiber: Nothing
     , previewFiber: Nothing
-    , recognition: Recognition.initialRecognition
     , sampler: input.sampler
     }
+
+  makePracticeExercise seed config = case _ of
+    Quiz.IntervalPrompt prompt ->
+      IntervalPractice
+        { choices: Quiz.makeChoices seed config prompt
+        , prompt
+        , recognition: Recognition.initialRecognition
+        }
+    Quiz.MelodyPromptMode prompt ->
+      MelodyPractice
+        { prompt
+        , recognition: Recognition.initialSequenceRecognition
+        }
+
+  resetPracticeExercise = case _ of
+    IntervalPractice exercise ->
+      IntervalPractice (exercise { recognition = Recognition.initialRecognition })
+    MelodyPractice exercise ->
+      MelodyPractice (exercise { recognition = Recognition.initialSequenceRecognition })
 
   render :: State -> H.ComponentHTML Action Slots m
   render = renderPractice
@@ -196,10 +223,10 @@ component =
               [ HP.classes
                   ( [ H.ClassName "notation-panel" ]
                       <>
-                        if notationLayout state.captureStatus == Notation.Compact then
+                        if notationLayout state == Notation.Compact then
                           [ H.ClassName "compact" ]
-                        else
-                          []
+                        else if isMelody state then [ H.ClassName "melody" ]
+                        else []
                   )
               ]
               [ HH.div
@@ -248,12 +275,12 @@ component =
               [ HP.class_ (H.ClassName "pitch-feedback") ]
               [ HH.span
                   [ HP.class_ (H.ClassName "tuner-readout") ]
-                  [ HH.text (feedbackName (Recognition.feedback state.recognition)) ]
+                  [ HH.text (feedbackName (currentFeedback state)) ]
               ]
           , HH.div
               [ HP.class_ (H.ClassName "tuner-track") ]
               [ HH.div [ HP.class_ (H.ClassName "tuner-center") ] []
-              , case Recognition.feedback state.recognition of
+              , case currentFeedback state of
                   Nothing -> HH.text ""
                   Just feedback ->
                     HH.div
@@ -272,63 +299,68 @@ component =
     | not (isChoosingAnswer state.captureStatus)
         && not (isAnswerComplete state.captureStatus)
         && not (isResumingAnswers state.captureStatus) = HH.text ""
-    | otherwise =
-        HH.section
-          [ HP.class_ (H.ClassName "answer-panel") ]
-          [ HH.div
-              [ HP.class_ (H.ClassName "answer-grid") ]
-              (Array.mapWithIndex (renderIntervalChoice state) state.choices)
-          ]
+    | otherwise = case state.exercise of
+        IntervalPractice exercise ->
+          HH.section
+            [ HP.class_ (H.ClassName "answer-panel") ]
+            [ HH.div
+                [ HP.class_ (H.ClassName "answer-grid") ]
+                (Array.mapWithIndex (renderIntervalChoice state) exercise.choices)
+            ]
+        MelodyPractice _ -> HH.text ""
 
   renderIntervalChoice state index choice = do
-    let
-      revealed = Array.elem choice.interval (revealedChoices state.captureStatus)
-      correct = revealed && choice.interval == state.prompt.interval
-      incorrect = revealed && not correct
-      showNotation = state.config.answerDisplay /= AnswerName
-      showName = state.config.answerDisplay /= AnswerNotation || revealed
-      resultClasses =
-        if correct then [ H.ClassName "answer-correct" ]
-        else if incorrect then [ H.ClassName "answer-incorrect" ]
-        else []
-    Button.button
-      { action: ChooseInterval choice.interval
-      , classes:
-          [ H.ClassName "interval-answer" ]
-            <>
-              ( if state.config.answerDisplay == AnswerName then [ H.ClassName "name-only" ]
-                else []
-              )
-            <>
-              ( if state.config.answerDisplay /= AnswerNotation then [ H.ClassName "names-visible" ]
-                else []
-              )
-            <> resultClasses
-      , disabled: isAnswerComplete state.captureStatus || isBusy state.captureStatus
-      , variant: Button.Unstyled
-      }
-      [ if revealed then
-          HH.span
-            [ HP.classes
-                [ H.ClassName "choice-result-icon"
-                , H.ClassName if correct then "result-correct" else "result-incorrect"
+    case intervalPrompt state of
+      Nothing -> HH.text ""
+      Just prompt -> do
+        let
+          revealed = Array.elem choice.interval (revealedChoices state.captureStatus)
+          correct = revealed && choice.interval == prompt.interval
+          incorrect = revealed && not correct
+          showNotation = state.config.answerDisplay /= AnswerName
+          showName = state.config.answerDisplay /= AnswerNotation || revealed
+          resultClasses =
+            if correct then [ H.ClassName "answer-correct" ]
+            else if incorrect then [ H.ClassName "answer-incorrect" ]
+            else []
+        Button.button
+          { action: ChooseInterval choice.interval
+          , classes:
+              [ H.ClassName "interval-answer" ]
+                <>
+                  ( if state.config.answerDisplay == AnswerName then [ H.ClassName "name-only" ]
+                    else []
+                  )
+                <>
+                  ( if state.config.answerDisplay /= AnswerNotation then [ H.ClassName "names-visible" ]
+                    else []
+                  )
+                <> resultClasses
+          , disabled: isAnswerComplete state.captureStatus || isBusy state.captureStatus
+          , variant: Button.Unstyled
+          }
+          [ if revealed then
+              HH.span
+                [ HP.classes
+                    [ H.ClassName "choice-result-icon"
+                    , H.ClassName if correct then "result-correct" else "result-incorrect"
+                    ]
                 ]
-            ]
-            []
-        else
-          HH.text ""
-      , if showNotation then
-          HH.div
-            [ HP.class_ (H.ClassName "choice-notation") ]
-            [ HH.slot_ notationSlot (ChoiceNotation index) NotationComponent.component
-                (Notation.intervalChoice Notation.Compact state.prompt.root choice.target)
-            ]
-        else
-          HH.text ""
-      , HH.span
-          [ HP.class_ (H.ClassName "choice-label") ]
-          [ HH.text if showName then intervalName choice.interval else "Interval hidden" ]
-      ]
+                []
+            else
+              HH.text ""
+          , if showNotation then
+              HH.div
+                [ HP.class_ (H.ClassName "choice-notation") ]
+                [ HH.slot_ notationSlot (ChoiceNotation index) NotationComponent.component
+                    (Notation.intervalChoice Notation.Compact prompt.root choice.target)
+                ]
+            else
+              HH.text ""
+          , HH.span
+              [ HP.class_ (H.ClassName "choice-label") ]
+              [ HH.text if showName then intervalName choice.interval else "Interval hidden" ]
+          ]
 
   footerButtonAction state =
     if isAnswerComplete state.captureStatus then NextPrompt else PlayPrompt
@@ -336,24 +368,27 @@ component =
   footerButtonDisabled state =
     hasFiber state.progressionFiber
       || isBusy state.captureStatus
-      || (isListening state.captureStatus && Recognition.phase state.recognition == Recognition.RecognitionComplete)
+      || (isListening state.captureStatus && singingComplete state)
 
   footerButtonLabel state
     | isPlaying state.captureStatus = "Playing…"
     | isStartingCapture state.captureStatus = "Requesting…"
-    | isAnswerComplete state.captureStatus = "Next interval"
-    | isListening state.captureStatus && Recognition.phase state.recognition == Recognition.RecognitionComplete = "Next interval"
+    | isAnswerComplete state.captureStatus = if isMelody state then "Next melody" else "Next interval"
+    | isListening state.captureStatus && singingComplete state = if isMelody state then "Next melody" else "Next interval"
     | state.config.quizMode == Audiation = "Play root"
+    | isMelody state = "Play melody"
     | otherwise = "Play interval"
 
   footerButtonIcon state
     | isBusy state.captureStatus = ""
-    | footerButtonLabel state == "Next interval" = "→"
+    | isAnswerComplete state.captureStatus = "→"
     | otherwise = "▶"
 
   practiceInstruction state = case state.captureStatus of
     ReadyToPlay ->
-      if state.config.quizMode == Audiation then
+      if isMelody state then
+        "Listen to the melody, then sing it back."
+      else if state.config.quizMode == Audiation then
         "Listen to the root, then sing the interval."
       else if quizModeUsesSinging state.config.quizMode then
         "Listen to the interval, then sing."
@@ -361,7 +396,7 @@ component =
         "Listen to the interval, then choose."
     PlayingAudio _ -> "Listen carefully."
     StartingCapture _ -> "Requesting microphone access."
-    Listening _ -> Recognition.phaseInstruction (Recognition.phase state.recognition)
+    Listening _ -> singingInstruction state
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
     IntervalError -> "Incorrect pitch."
@@ -371,6 +406,18 @@ component =
       else
         "Not quite. Try Again."
     AnswerComplete _ -> "Correct!"
+
+  singingInstruction state = case state.exercise of
+    IntervalPractice exercise -> Recognition.phaseInstruction (Recognition.phase exercise.recognition)
+    MelodyPractice exercise -> do
+      let
+        count = Array.length (NonEmptyArray.toArray (Quiz.melodyPitches exercise.prompt))
+        current = min count (Recognition.sequenceAcceptedCount exercise.recognition + 1)
+      case Recognition.sequencePhase exercise.recognition of
+        Recognition.SequenceReleasing -> "Release, then sing note " <> show current <> " of " <> show count <> "."
+        Recognition.SequenceIncorrect -> "Incorrect note " <> show current <> "."
+        Recognition.SequenceComplete -> "Melody complete."
+        Recognition.SequenceSinging -> "Sing note " <> show current <> " of " <> show count <> "."
 
   isPlaying = case _ of
     PlayingAudio _ -> true
@@ -434,17 +481,24 @@ component =
     RecognitionOnly -> "Recognition"
     SingingAndRecognition -> "Singing & Recognition"
     Audiation -> "Audiation"
+    MelodyImitation -> "Melody imitation"
 
   shouldShowIntervalName state =
-    state.config.quizMode == Audiation
-      || (state.config.quizMode == SingingOnly && isAnswerComplete state.captureStatus)
+    state.config.quizMode /= MelodyImitation
+      &&
+        ( state.config.quizMode == Audiation
+            || (state.config.quizMode == SingingOnly && isAnswerComplete state.captureStatus)
+        )
 
   promptIntervalLabel state =
-    intervalName state.prompt.interval
-      <>
-        if state.config.quizMode == Audiation || state.config.quizMode == SingingOnly then
-          " · " <> playbackModeName state.prompt.mode
-        else ""
+    case intervalPrompt state of
+      Nothing -> ""
+      Just prompt ->
+        intervalName prompt.interval
+          <>
+            if state.config.quizMode == Audiation || state.config.quizMode == SingingOnly then
+              " · " <> playbackModeName prompt.mode
+            else ""
 
   feedbackInRange feedback =
     feedback.clarity >= Recognition.defaultRecognitionSettings.clarityThreshold
@@ -476,14 +530,12 @@ component =
         , playbackFiber = Nothing
         , progressionFiber = Nothing
         , previewFiber = Nothing
-        , recognition = Recognition.initialRecognition
+        , exercise = resetPracticeExercise state.exercise
         }
       fiber <- H.fork do
         result <- H.liftAff $ attempt
           $ AudioCapability.play state.sampler
-          $
-            if state.config.quizMode == Audiation then Audio.rootPlan state.prompt.root
-            else Audio.intervalPlan state.prompt.mode state.prompt.root state.prompt.target
+          $ playbackPlan state
         case result of
           Left error -> handleAction (AudioFailed (message error))
           Right _ -> do
@@ -521,65 +573,9 @@ component =
     PitchDetected sample -> do
       state <- H.get
       when (isListening state.captureStatus) do
-        let
-          detectedMidi =
-            if sample.frequency > 0.0 then Just (Recognition.nearestMidi sample.frequency) else Nothing
-          next = Recognition.stepRecognition
-            Recognition.defaultRecognitionSettings
-            state.config.octavePolicy
-            state.prompt.root
-            state.prompt.target
-            sample
-            state.recognition
-          detectedGhost =
-            if state.config.ghostMode == GhostOff then Nothing
-            else map (Recognition.relativeMidi state.config.octavePolicy state.prompt.root next) detectedMidi
-          nextGhost = case detectedGhost of
-            Nothing -> state.ghostMidi
-            Just midi -> Just midi
-          completed =
-            Recognition.phase state.recognition /= Recognition.RecognitionComplete
-              && Recognition.phase next == Recognition.RecognitionComplete
-          incorrect =
-            Recognition.phase state.recognition /= Recognition.RecognitionIncorrect
-              && Recognition.phase next == Recognition.RecognitionIncorrect
-        when (detectedGhost /= Nothing) do
-          cancelFiber state.ghostFiber
-        H.modify_ _
-          { ghostFiber = if detectedGhost == Nothing then state.ghostFiber else Nothing
-          , ghostMidi = nextGhost
-          , recognition = next
-          }
-        when
-          ( state.config.ghostMode == GhostOn
-              && detectedGhost == Nothing
-              && state.ghostMidi /= Nothing
-          )
-          do
-            cancelFiber state.ghostFiber
-            fiber <- H.fork do
-              H.liftAff (delay (Milliseconds 700.0))
-              handleAction ClearGhost
-            H.modify_ _ { ghostFiber = Just fiber }
-        when completed do
-          cancelFiber state.ghostFiber
-          stopCapture state.captureStatus
-          H.modify_ _ { ghostFiber = Nothing }
-          handleAction FinishSinging
-        when incorrect do
-          cancelFiber state.ghostFiber
-          stopCapture state.captureStatus
-          let
-            incorrectMidi = map
-              (Recognition.relativeMidi state.config.octavePolicy state.prompt.root next <<< _.midi)
-              (Recognition.feedback next)
-          H.modify_ _
-            { captureStatus = IntervalError
-            , ghostFiber = Nothing
-            , ghostMidi = incorrectMidi
-            , recognition = next
-            }
-          scheduleAutomaticRetry state
+        case state.exercise of
+          IntervalPractice exercise -> handleIntervalPitch state exercise sample
+          MelodyPractice exercise -> handleMelodyPitch state exercise sample
     ClearGhost -> do
       state <- H.get
       H.modify_ _ { ghostFiber = Nothing }
@@ -594,7 +590,7 @@ component =
       state <- H.get
       when
         ( isListening state.captureStatus
-            && Recognition.phase state.recognition == Recognition.RecognitionComplete
+            && singingComplete state
         )
         do
           let persistGhost = state.config.ghostMode == GhostPersist
@@ -621,19 +617,20 @@ component =
         _ -> pure unit
     ChooseInterval interval -> do
       state <- H.get
-      case state.captureStatus of
-        ChoosingAnswer previous
+      case state.captureStatus, state.exercise of
+        ChoosingAnswer previous, IntervalPractice exercise
           | not (Array.elem interval previous) -> do
-              case Array.find (\choice -> choice.interval == interval) state.choices of
+              case Array.find (\choice -> choice.interval == interval) exercise.choices of
                 Just choice -> do
                   cancelFiber state.previewFiber
                   fiber <- H.fork do
                     void $ H.liftAff $ attempt $
-                      AudioCapability.play state.sampler (Audio.intervalPlan state.prompt.mode state.prompt.root choice.target)
+                      AudioCapability.play state.sampler
+                        (Audio.intervalPlan exercise.prompt.mode exercise.prompt.root choice.target)
                   H.modify_ _ { previewFiber = Just fiber }
                 Nothing -> pure unit
               let
-                correct = interval == state.prompt.interval
+                correct = interval == exercise.prompt.interval
                 revealed = Array.snoc previous interval
               H.modify_ _
                 { captureStatus =
@@ -642,7 +639,7 @@ component =
                 }
               when correct do
                 scheduleAutomaticAdvance state
-        _ -> pure unit
+        _, _ -> pure unit
     NextPrompt -> do
       state <- H.get
       cancelTasks state
@@ -650,18 +647,15 @@ component =
       seed <- H.liftEffect (randomInt 0 2147483647)
       let
         prompt = Quiz.makePrompt seed state.prompts
-        choices = Quiz.makeChoices seed state.config prompt
       H.modify_ _
         { captureStatus = ReadyToPlay
-        , choices = choices
+        , exercise = makePracticeExercise seed state.config prompt
         , ghostFiber = Nothing
         , ghostMidi = Nothing
         , playbackFiber = Nothing
-        , prompt = prompt
         , progressionFiber = Nothing
         , previewFiber = Nothing
         , observation = Recognition.initialObservation
-        , recognition = Recognition.initialRecognition
         }
       resetPracticeScroll
     AdvanceAutomatically -> do
@@ -680,6 +674,99 @@ component =
       cancelTasks state
       H.liftEffect (AudioCapability.stop state.sampler)
       H.raise BackToSetup
+
+  handleIntervalPitch state exercise sample = do
+    let
+      prompt = exercise.prompt
+      detectedMidi = if sample.frequency > 0.0 then Just (Recognition.nearestMidi sample.frequency) else Nothing
+      next = Recognition.stepRecognition
+        Recognition.defaultRecognitionSettings
+        state.config.octavePolicy
+        prompt.root
+        prompt.target
+        sample
+        exercise.recognition
+      detectedGhost =
+        if state.config.ghostMode == GhostOff then Nothing
+        else map (Recognition.relativeMidi state.config.octavePolicy prompt.root next) detectedMidi
+      completed = Recognition.phase exercise.recognition /= Recognition.RecognitionComplete
+        && Recognition.phase next == Recognition.RecognitionComplete
+      incorrect = Recognition.phase exercise.recognition /= Recognition.RecognitionIncorrect
+        && Recognition.phase next == Recognition.RecognitionIncorrect
+    updateGhost state detectedGhost
+    H.modify_ \current -> current
+      { exercise = IntervalPractice (exercise { recognition = next }) }
+    when completed do
+      finishCapture state
+    when incorrect do
+      finishIncorrect state
+        (map (Recognition.relativeMidi state.config.octavePolicy prompt.root next <<< _.midi) (Recognition.feedback next))
+
+  handleMelodyPitch state exercise sample = do
+    let
+      pitches = Quiz.melodyPitches exercise.prompt
+      detectedMidi = if sample.frequency > 0.0 then Just (Recognition.nearestMidi sample.frequency) else Nothing
+      next = Recognition.stepSequenceRecognition
+        Recognition.defaultRecognitionSettings
+        state.config.octavePolicy
+        pitches
+        sample
+        exercise.recognition
+      detectedGhost =
+        if state.config.ghostMode == GhostOff then Nothing
+        else map (Recognition.sequenceRelativeMidi state.config.octavePolicy pitches next) detectedMidi
+      completed = Recognition.sequencePhase exercise.recognition /= Recognition.SequenceComplete
+        && Recognition.sequencePhase next == Recognition.SequenceComplete
+      incorrect = Recognition.sequencePhase exercise.recognition /= Recognition.SequenceIncorrect
+        && Recognition.sequencePhase next == Recognition.SequenceIncorrect
+    updateGhost state detectedGhost
+    H.modify_ \current -> current
+      { exercise = MelodyPractice (exercise { recognition = next }) }
+    when completed do
+      finishCapture state
+    when incorrect do
+      finishIncorrect state
+        ( map
+            (Recognition.sequenceRelativeMidi state.config.octavePolicy pitches next <<< _.midi)
+            (Recognition.sequenceFeedback next)
+        )
+
+  updateGhost state detectedGhost = do
+    when (detectedGhost /= Nothing) do
+      cancelFiber state.ghostFiber
+    H.modify_ _
+      { ghostFiber = if detectedGhost == Nothing then state.ghostFiber else Nothing
+      , ghostMidi = case detectedGhost of
+          Nothing -> state.ghostMidi
+          Just midi -> Just midi
+      }
+    when
+      ( state.config.ghostMode == GhostOn
+          && detectedGhost == Nothing
+          && state.ghostMidi /= Nothing
+      )
+      do
+        cancelFiber state.ghostFiber
+        fiber <- H.fork do
+          H.liftAff (delay (Milliseconds 700.0))
+          handleAction ClearGhost
+        H.modify_ _ { ghostFiber = Just fiber }
+
+  finishCapture state = do
+    cancelFiber state.ghostFiber
+    stopCapture state.captureStatus
+    H.modify_ _ { ghostFiber = Nothing }
+    handleAction FinishSinging
+
+  finishIncorrect state incorrectMidi = do
+    cancelFiber state.ghostFiber
+    stopCapture state.captureStatus
+    H.modify_ _
+      { captureStatus = IntervalError
+      , ghostFiber = Nothing
+      , ghostMidi = incorrectMidi
+      }
+    scheduleAutomaticRetry state
 
   captureFailed state failure = do
     cancelFiber state.ghostFiber
@@ -723,7 +810,7 @@ component =
         let
           waitMilliseconds =
             if not (quizModeUsesRecognition state.config.quizMode) then 1200.0
-            else (Audio.intervalPlan state.prompt.mode state.prompt.root state.prompt.target).durationMilliseconds + 500.0
+            else (playbackPlan state).durationMilliseconds + 500.0
         H.liftAff (delay (Milliseconds waitMilliseconds))
         handleAction AdvanceAutomatically
       H.modify_ _ { progressionFiber = Just fiber }
@@ -737,29 +824,71 @@ component =
         handleAction RetryAutomatically
       H.modify_ _ { progressionFiber = Just fiber }
 
+  intervalPrompt state = case state.exercise of
+    IntervalPractice exercise -> Just exercise.prompt
+    MelodyPractice _ -> Nothing
+
+  isMelody state = case state.exercise of
+    IntervalPractice _ -> false
+    MelodyPractice _ -> true
+
+  currentFeedback state = case state.exercise of
+    IntervalPractice exercise -> Recognition.feedback exercise.recognition
+    MelodyPractice exercise -> Recognition.sequenceFeedback exercise.recognition
+
+  singingComplete state = case state.exercise of
+    IntervalPractice exercise -> Recognition.phase exercise.recognition == Recognition.RecognitionComplete
+    MelodyPractice exercise -> Recognition.sequencePhase exercise.recognition == Recognition.SequenceComplete
+
+  playbackPlan state = case state.exercise of
+    IntervalPractice exercise -> do
+      let prompt = exercise.prompt
+      if state.config.quizMode == Audiation then Audio.rootPlan prompt.root
+      else Audio.intervalPlan prompt.mode prompt.root prompt.target
+    MelodyPractice exercise -> Audio.melodyPlan (Quiz.melodyPitches exercise.prompt)
+
   promptNotation state = do
+    case state.exercise of
+      IntervalPractice exercise -> intervalNotation state exercise.prompt exercise.recognition
+      MelodyPractice exercise ->
+        melodyNotation state (Quiz.melodyPitches exercise.prompt) exercise.recognition
+
+  intervalNotation state prompt recognition = do
     let
-      layout = notationLayout state.captureStatus
+      layout = notationLayout state
       rootAccepted =
-        Recognition.phase state.recognition /= Recognition.WaitingForFirst
+        Recognition.phase recognition /= Recognition.WaitingForFirst
           || (quizModeUsesSinging state.config.quizMode && isChoosingAnswer state.captureStatus)
           || case state.captureStatus of
             PlayingAudio (ResumeAnswers _) -> quizModeUsesSinging state.config.quizMode
             _ -> false
       detected = map
-        (pitchFromMidiLike (spellingReference state.prompt))
+        (pitchFromMidiLike (spellingReference prompt))
         state.ghostMidi
     case state.captureStatus, detected of
-      AnswerComplete _, _ -> Notation.completed layout state.prompt.root state.prompt.target
-      IntervalError, Just pitch -> Notation.incorrect layout state.prompt.root state.prompt.target pitch rootAccepted
-      _, Just pitch -> Notation.ghost layout state.prompt.root state.prompt.target pitch rootAccepted
-      _, Nothing -> Notation.prompt layout state.prompt.root state.prompt.target rootAccepted
+      AnswerComplete _, _ -> Notation.completed layout prompt.root prompt.target
+      IntervalError, Just pitch -> Notation.incorrect layout prompt.root prompt.target pitch rootAccepted
+      _, Just pitch -> Notation.ghost layout prompt.root prompt.target pitch rootAccepted
+      _, Nothing -> Notation.prompt layout prompt.root prompt.target rootAccepted
 
-  notationLayout = case _ of
-    ChoosingAnswer _ -> Notation.Compact
-    AnswerComplete _ -> Notation.Compact
-    PlayingAudio (ResumeAnswers _) -> Notation.Compact
-    _ -> Notation.Full
+  melodyNotation state pitches recognition = do
+    let
+      acceptedCount = Recognition.sequenceAcceptedCount recognition
+      reference = NonEmptyArray.head pitches
+      detected = map (pitchFromMidiLike reference) state.ghostMidi
+      current = case state.captureStatus, detected of
+        IntervalError, Just pitch -> Just { appearance: Notation.Incorrect, pitch }
+        _, Just pitch -> Just { appearance: Notation.Dim, pitch }
+        _, Nothing -> Nothing
+    Notation.sequenceScore (notationLayout state) pitches acceptedCount current true
+
+  notationLayout state
+    | isMelody state = Notation.Full
+    | otherwise = case state.captureStatus of
+        ChoosingAnswer _ -> Notation.Compact
+        AnswerComplete _ -> Notation.Compact
+        PlayingAudio (ResumeAnswers _) -> Notation.Compact
+        _ -> Notation.Full
 
   spellingReference prompt = case prompt.root, prompt.target of
     Pitch (PitchClass _ (Accidental rootAccidental)) _,

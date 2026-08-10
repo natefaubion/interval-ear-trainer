@@ -26,6 +26,8 @@ import EarTrainer.Config
   , QuizProgression(..)
   , defaultConfig
   , isValid
+  , melodyLength
+  , mkMelodyLength
   )
 import EarTrainer.Music
   ( Accidental(..)
@@ -77,6 +79,7 @@ type StoredSettings =
   , ghostMode :: String
   , intervals :: Array String
   , intervalSystem :: String
+  , melodyLength :: Int
   , octavePolicy :: String
   , playbackModes :: Array String
   , showPitchTuner :: Boolean
@@ -114,7 +117,7 @@ encodeStoredAppData value =
     }
 
 currentStoredVersion :: Int
-currentStoredVersion = 1
+currentStoredVersion = 2
 
 newtype Version0AppData = Version0AppData
   { activePresetId :: Maybe PresetId
@@ -128,6 +131,7 @@ decodeStoredAppData value = do
   case version of
     0 -> map migrateVersion0ToVersion1 $ mapDecodeErrors $ runExcept $ decodeVersion0 value
     1 -> mapDecodeErrors $ runExcept $ decodeAppData decodeSettingsVersion1 value
+    2 -> mapDecodeErrors $ runExcept $ decodeAppData decodeSettingsVersion2 value
     unsupported -> Left (UnsupportedStoredVersion unsupported)
 
 decodeVersion0 :: Foreign -> F Version0AppData
@@ -184,6 +188,7 @@ encodeSettings config =
   , ghostMode: encodeGhostMode config.ghostMode
   , intervals: map encodeInterval config.intervals
   , intervalSystem: encodeIntervalSystem config.intervalSystem
+  , melodyLength: melodyLength config.melodyLength
   , octavePolicy: encodeOctavePolicy config.octavePolicy
   , playbackModes: map encodePlaybackMode config.playbackModes
   , showPitchTuner: config.showPitchTuner
@@ -213,6 +218,11 @@ decodeSettingsVersion1 value = do
     value
   decodeSettings value
 
+decodeSettingsVersion2 :: Foreign -> F ExerciseConfig
+decodeSettingsVersion2 value = do
+  requireProperties [ "melodyLength" ] value
+  decodeSettingsVersion1 value
+
 decodeSettings :: Foreign -> F ExerciseConfig
 decodeSettings value =
   do
@@ -230,6 +240,12 @@ decodeSettings value =
     customLowMidi <- optionalProperty readMidi "customLowMidi" (midiNumber defaultConfig.customRange.low) value
     ghostMode <- optionalProperty (readTag "ghost mode" decodeGhostMode) "ghostMode" defaultConfig.ghostMode value
     intervalSystem <- optionalProperty (readTag "interval system" decodeIntervalSystem) "intervalSystem" defaultConfig.intervalSystem value
+    melodyLengthValue <- optionalProperty (readBoundedInt "melody length" 3 8) "melodyLength"
+      (melodyLength defaultConfig.melodyLength)
+      value
+    melodyLength <- case mkMelodyLength melodyLengthValue of
+      Nothing -> Foreign.fail (ForeignError "Melody length must be between 3 and 8")
+      Just length -> pure length
     showPitchTuner <- optionalProperty readBoolean "showPitchTuner" defaultConfig.showPitchTuner value
     quizMode <- optionalProperty (readTag "quiz mode" decodeQuizMode) "quizMode" defaultConfig.quizMode value
     quizProgression <- optionalProperty (readTag "quiz progression" decodeQuizProgression) "quizProgression"
@@ -243,6 +259,7 @@ decodeSettings value =
       , ghostMode = ghostMode
       , intervals = intervals
       , intervalSystem = intervalSystem
+      , melodyLength = melodyLength
       , octavePolicy = octavePolicy
       , playbackModes = playbackModes
       , showPitchTuner = showPitchTuner
@@ -309,6 +326,7 @@ encodeQuizMode = case _ of
   RecognitionOnly -> "recognition"
   SingingAndRecognition -> "singing-and-recognition"
   Audiation -> "audiation"
+  MelodyImitation -> "melody-imitation"
 
 decodeQuizMode :: String -> Maybe QuizMode
 decodeQuizMode = case _ of
@@ -316,6 +334,7 @@ decodeQuizMode = case _ of
   "recognition" -> Just RecognitionOnly
   "singing-and-recognition" -> Just SingingAndRecognition
   "audiation" -> Just Audiation
+  "melody-imitation" -> Just MelodyImitation
   _ -> Nothing
 
 encodeQuizProgression :: QuizProgression -> String

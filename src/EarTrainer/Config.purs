@@ -4,12 +4,15 @@ module EarTrainer.Config
   , ExerciseConfig
   , GhostMode(..)
   , IntervalSystem(..)
+  , MelodyLength
   , QuizMode(..)
   , QuizProgression(..)
   , RangeBoundary(..)
   , defaultConfig
   , exerciseRange
   , isValid
+  , melodyLength
+  , mkMelodyLength
   , quizModeUsesRecognition
   , quizModeUsesSinging
   , selectMajorKey
@@ -62,7 +65,20 @@ data AnswerCount = AFew | AllSelected
 
 derive instance Eq AnswerCount
 
-data QuizMode = SingingOnly | RecognitionOnly | SingingAndRecognition | Audiation
+newtype MelodyLength = MelodyLength Int
+
+derive instance Eq MelodyLength
+derive instance Ord MelodyLength
+
+melodyLength :: MelodyLength -> Int
+melodyLength (MelodyLength value) = value
+
+mkMelodyLength :: Int -> Maybe MelodyLength
+mkMelodyLength value
+  | value >= 3 && value <= 8 = Just (MelodyLength value)
+  | otherwise = Nothing
+
+data QuizMode = SingingOnly | RecognitionOnly | SingingAndRecognition | Audiation | MelodyImitation
 
 derive instance Eq QuizMode
 
@@ -83,6 +99,7 @@ quizModeUsesRecognition :: QuizMode -> Boolean
 quizModeUsesRecognition = case _ of
   SingingOnly -> false
   Audiation -> false
+  MelodyImitation -> false
   _ -> true
 
 type ExerciseConfig =
@@ -93,6 +110,7 @@ type ExerciseConfig =
   , ghostMode :: GhostMode
   , intervals :: Array Interval
   , intervalSystem :: IntervalSystem
+  , melodyLength :: MelodyLength
   , octavePolicy :: OctavePolicy
   , playbackModes :: Array PlaybackMode
   , showPitchTuner :: Boolean
@@ -111,6 +129,7 @@ defaultConfig =
   , ghostMode: GhostOn
   , intervals: defaultIntervals
   , intervalSystem: FromSelectedNotes
+  , melodyLength: MelodyLength 4
   , octavePolicy: AnyOctave
   , playbackModes: [ MelodicAscending ]
   , showPitchTuner: true
@@ -142,12 +161,15 @@ isValid config =
   ( if config.intervalSystem == ExactIntervals then not (Array.null config.intervals)
     else not (Array.null config.availableIntervals)
   )
-    && not
-      ( Array.null
-          ( if config.quizMode == Audiation then
-              Array.filter (_ /= Harmonic) config.playbackModes
-            else config.playbackModes
-          )
+    &&
+      ( config.quizMode == MelodyImitation
+          || not
+            ( Array.null
+                ( if config.quizMode == Audiation then
+                    Array.filter (_ /= Harmonic) config.playbackModes
+                  else config.playbackModes
+                )
+            )
       )
     && not (Array.null config.rootPitchClasses)
     && midiNumber (exerciseRange config).low <= midiNumber (exerciseRange config).high

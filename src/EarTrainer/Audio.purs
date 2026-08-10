@@ -2,9 +2,16 @@ module EarTrainer.Audio
   ( NoteEvent
   , PlaybackPlan
   , intervalPlan
+  , melodyPlan
   , rootPlan
   ) where
 
+import Prelude
+
+import Data.Array as Array
+import Data.Array.NonEmpty as NonEmptyArray
+import Data.Int as Int
+import Data.Maybe (Maybe(..))
 import EarTrainer.Music (Pitch, PlaybackMode(..), midiNumber)
 
 type NoteEvent =
@@ -53,3 +60,22 @@ rootPlan root =
         }
       ]
   }
+
+melodyPlan :: NonEmptyArray.NonEmptyArray Pitch -> PlaybackPlan
+melodyPlan melody = do
+  let
+    pitches = NonEmptyArray.toArray melody
+    noteDuration = 650.0
+    noteSpacing = 800.0
+    events = Array.mapWithIndex
+      ( \index note ->
+          { durationMilliseconds: noteDuration
+          , notes: [ midiNumber note ]
+          , startMilliseconds: noteSpacing * Int.toNumber index
+          }
+      )
+      pitches
+    durationMilliseconds = case Array.last events of
+      Nothing -> 0.0
+      Just event -> event.startMilliseconds + event.durationMilliseconds
+  { durationMilliseconds, events }

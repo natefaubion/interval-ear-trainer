@@ -172,6 +172,10 @@ button:active:not(:disabled) {
   margin-inline: auto;
 }
 
+.notation-panel.melody .notation-canvas {
+  max-width: 36rem;
+}
+
 .notation-canvas svg {
   display: block;
   width: 100%;

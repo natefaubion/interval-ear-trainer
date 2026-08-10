@@ -1,6 +1,7 @@
 module EarTrainer.Notation
   ( Appearance(..)
   , Clef(..)
+  , CurrentNote
   , NotationLayout(..)
   , EngravedEvent
   , EngravedNote
@@ -9,6 +10,7 @@ module EarTrainer.Notation
   , ghost
   , incorrect
   , intervalChoice
+  , sequenceScore
   , notes
   , prompt
   ) where
@@ -16,6 +18,8 @@ module EarTrainer.Notation
 import Prelude
 
 import Data.Array as Array
+import Data.Array.NonEmpty as NonEmptyArray
+import Data.Maybe (Maybe(..))
 import EarTrainer.Music (Accidental(..), Letter(..), Pitch(..), PitchClass(..), midiNumber)
 
 data Appearance
@@ -48,6 +52,11 @@ type Score =
   , events :: Array EngravedEvent
   , layout :: NotationLayout
   , width :: Int
+  }
+
+type CurrentNote =
+  { appearance :: Appearance
+  , pitch :: Pitch
   }
 
 notes :: NotationLayout -> Array Pitch -> Score
@@ -110,6 +119,24 @@ intervalChoice layout root target =
   , layout
   , width: 240
   }
+
+sequenceScore :: NotationLayout -> NonEmptyArray.NonEmptyArray Pitch -> Int -> Maybe CurrentNote -> Boolean -> Score
+sequenceScore layout melody acceptedCount current revealFirst = do
+  let pitches = NonEmptyArray.toArray melody
+  { clef: selectClef pitches
+  , events: Array.mapWithIndex renderPitch pitches
+  , layout
+  , width: max 240 (120 + Array.length pitches * 52)
+  }
+  where
+  renderPitch index expected
+    | index < acceptedCount = engravedEvent Accepted [ expected ]
+    | index == acceptedCount = case current of
+        Just note -> engravedEvent note.appearance [ note.pitch ]
+        Nothing
+          | index == 0 && revealFirst -> engravedEvent Normal [ expected ]
+          | otherwise -> engravedEvent Hidden [ expected ]
+    | otherwise = engravedEvent Hidden [ expected ]
 
 engravedEvent :: Appearance -> Array Pitch -> EngravedEvent
 engravedEvent appearance pitches = { appearance, notes: map engravedNote pitches }

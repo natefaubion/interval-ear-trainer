@@ -5,7 +5,7 @@ import Prelude
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
-import EarTrainer.Config (AnswerCount(..), QuizProgression(..), defaultConfig)
+import EarTrainer.Config (AnswerCount(..), QuizProgression(..), defaultConfig, melodyLength)
 import EarTrainer.Settings
   ( DecodeError(..)
   , NameError(..)
@@ -32,6 +32,23 @@ run = do
       , vocalRange: "tenor"
       }
     legacySettings = unsafeToForeign legacySettingsRecord
+    version1Settings = unsafeToForeign
+      { answerCount: "few"
+      , answerDisplay: "notation"
+      , availableIntervals: [ "third" ]
+      , customHighMidi: 79
+      , customLowMidi: 48
+      , ghostMode: "on"
+      , intervals: [ "major-third" ]
+      , intervalSystem: "exact"
+      , octavePolicy: "any-octave"
+      , playbackModes: [ "melodic-ascending" ]
+      , quizMode: "singing"
+      , quizProgression: "automatic"
+      , rootPitchClasses: [ { accidental: 0, letter: "C" } ]
+      , showPitchTuner: true
+      , vocalRange: "tenor"
+      }
     legacySettingsWithRange low high = unsafeToForeign
       { answerCount: "few"
       , customHighMidi: high
@@ -57,13 +74,24 @@ run = do
       , presets: [ unsafeToForeign "invalid preset" ]
       , settings: legacySettings
       }
+    version1Preset = unsafeToForeign
+      { id: "version-1-preset"
+      , name: "Version 1 preset"
+      , settings: version1Settings
+      }
+    version1StoredData = unsafeToForeign
+      { activePresetId: "version-1-preset"
+      , presets: [ version1Preset ]
+      , settings: version1Settings
+      , version: 1
+      }
     storedDataWith settings = unsafeToForeign
       { activePresetId: ""
       , presets: []
       , settings
       }
-    rejectsFutureData = case decodeStoredAppData (unsafeToForeign { version: 2 }) of
-      Left (UnsupportedStoredVersion 2) -> true
+    rejectsFutureData = case decodeStoredAppData (unsafeToForeign { version: 3 }) of
+      Left (UnsupportedStoredVersion 3) -> true
       _ -> false
     rejectsMalformedData = case decodeStoredAppData (unsafeToForeign { version: 1, settings: "invalid" }) of
       Left (MalformedStoredData _) -> true
@@ -126,6 +154,17 @@ run = do
   case decodeStoredAppData (unsafeToForeign (encodeStoredAppData currentData)) of
     Left _ -> assertTrue' "current settings decode" false
     Right value -> assertEqual { actual: Array.length value.presets, expected: 1 }
+  case decodeStoredAppData version1StoredData of
+    Left _ -> assertTrue' "version 1 settings migrate" false
+    Right value -> do
+      assertEqual { actual: melodyLength value.config.melodyLength, expected: 4 }
+      assertTrue' "version 1 active preset ID migrates"
+        (value.activePresetId == Just (presetId "version-1-preset"))
+      case Array.head value.presets of
+        Nothing -> assertTrue' "version 1 preset migrates" false
+        Just preset -> do
+          assertTrue' "version 1 preset name migrates" (preset.name == "Version 1 preset")
+          assertEqual { actual: melodyLength preset.config.melodyLength, expected: 4 }
   assertTrue' "future versions are rejected" rejectsFutureData
   assertTrue' "malformed settings are rejected" rejectsMalformedData
   assertTrue' "malformed presets are rejected" rejectsMalformedPreset

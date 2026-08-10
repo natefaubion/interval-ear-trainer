@@ -3,7 +3,9 @@ module Test.Quiz (run) where
 import Prelude
 
 import Data.Array as Array
+import Data.Array.NonEmpty as NonEmptyArray
 import Data.Maybe (Maybe(..), fromMaybe, isJust)
+import Data.Ord (abs)
 import EarTrainer.Config
   ( AnswerCount(..)
   , IntervalSystem(..)
@@ -37,11 +39,13 @@ import EarTrainer.Music
   , transpose
   )
 import EarTrainer.Quiz
-  ( availableExactIntervals
+  ( PromptMode(..)
+  , availableExactIntervals
   , availableIntervalSizes
   , isPlayable
   , makeChoices
   , makePrompt
+  , melodyPitches
   , promptSet
   )
 import Effect (Effect)
@@ -56,6 +60,9 @@ run = do
   let
     promptsFor config = fromMaybe defaultPrompts (promptSet config)
     c4 = pitch C (Accidental 0) 4
+    makeIntervalPrompt seed prompts = case makePrompt seed prompts of
+      IntervalPrompt prompt -> prompt
+      MelodyPromptMode _ -> { interval: PerfectUnison, mode: MelodicAscending, root: c4, target: c4 }
     narrowConfig = defaultConfig
       { customRange = { low: c4, high: c4 }
       , intervalSystem = ExactIntervals
@@ -70,27 +77,27 @@ run = do
       { intervalSystem = ExactIntervals
       , playbackModes = [ MelodicDescending ]
       }
-    generatedPrompt = makePrompt 128 (promptsFor descendingConfig)
+    generatedPrompt = makeIntervalPrompt 128 (promptsFor descendingConfig)
     generatedChoices = makeChoices 128 descendingConfig generatedPrompt
     allAnswersConfig = descendingConfig { answerCount = AllSelected }
     allSelectedChoices = makeChoices 128 allAnswersConfig generatedPrompt
     generatedRange = presetRange descendingConfig.vocalRange
     audiationConfig = descendingConfig { quizMode = Audiation }
-    audiationPrompt = makePrompt 128 (promptsFor audiationConfig)
-    ascendingAudiationPrompt = makePrompt 128
+    audiationPrompt = makeIntervalPrompt 128 (promptsFor audiationConfig)
+    ascendingAudiationPrompt = makeIntervalPrompt 128
       (promptsFor (defaultConfig { quizMode = Audiation, playbackModes = [ MelodicAscending ] }))
     collectionConfig = defaultConfig
       { availableIntervals = [ SizeThird ]
       , intervalSystem = FromSelectedNotes
       , playbackModes = [ MelodicAscending ]
       }
-    collectionPrompts = map (flip makePrompt (promptsFor collectionConfig)) (Array.range 0 80)
-    collectionChoices = makeChoices 24 collectionConfig (makePrompt 24 (promptsFor collectionConfig))
+    collectionPrompts = map (flip makeIntervalPrompt (promptsFor collectionConfig)) (Array.range 0 80)
+    collectionChoices = makeChoices 24 collectionConfig (makeIntervalPrompt 24 (promptsFor collectionConfig))
     allCollectionChoices = makeChoices 24
       (collectionConfig { answerCount = AllSelected })
-      (makePrompt 24 (promptsFor collectionConfig))
+      (makeIntervalPrompt 24 (promptsFor collectionConfig))
     descendingCollectionConfig = collectionConfig { playbackModes = [ MelodicDescending ] }
-    descendingCollectionPrompts = map (flip makePrompt (promptsFor descendingCollectionConfig)) (Array.range 0 40)
+    descendingCollectionPrompts = map (flip makeIntervalPrompt (promptsFor descendingCollectionConfig)) (Array.range 0 40)
     pitchClassOf (Pitch pitchClass _) = pitchClass
     sparseCollectionConfig = collectionConfig
       { availableIntervals = [ SizeSecond ]
@@ -135,7 +142,25 @@ run = do
       , rootPitchClasses = [ PitchClass C (Accidental 0) ]
       , vocalRange = Custom
       }
-    narrowExactPrompt = makePrompt 0 (promptsFor narrowExactConfig)
+    narrowExactPrompt = makeIntervalPrompt 0 (promptsFor narrowExactConfig)
+    melodyConfig = defaultConfig { quizMode = MelodyImitation, playbackModes = [] }
+    melody = case promptSet melodyConfig of
+      Nothing -> []
+      Just prompts -> case makePrompt 42 prompts of
+        MelodyPromptMode prompt -> NonEmptyArray.toArray (melodyPitches prompt)
+        IntervalPrompt _ -> []
+    exactMelodyConfig = defaultConfig
+      { intervalSystem = ExactIntervals
+      , intervals = [ MajorThird ]
+      , playbackModes = []
+      , quizMode = MelodyImitation
+      , rootPitchClasses = [ PitchClass C (Accidental 0) ]
+      }
+    exactMelody = case promptSet exactMelodyConfig of
+      Nothing -> []
+      Just prompts -> case makePrompt 73 prompts of
+        MelodyPromptMode prompt -> NonEmptyArray.toArray (melodyPitches prompt)
+        IntervalPrompt _ -> []
   assertEqual { actual: Array.length generatedChoices, expected: 4 }
   assertTrue' "major seventh fits the narrow range" (Array.elem MajorSeventh (availableExactIntervals narrowExactConfig))
   assertFalse' "octave does not fit the narrow range" (Array.elem PerfectOctave (availableExactIntervals narrowExactConfig))
@@ -174,7 +199,7 @@ run = do
   assertEqual { actual: Array.length collectionChoices, expected: 2 }
   assertEqual
     { actual: Array.length $ Array.filter
-        (\choice -> choice.interval == (makePrompt 24 (promptsFor collectionConfig)).interval)
+        (\choice -> choice.interval == (makeIntervalPrompt 24 (promptsFor collectionConfig)).interval)
         collectionChoices
     , expected: 1
     }
@@ -191,6 +216,8 @@ run = do
   assertTrue' "combined mode uses recognition" (quizModeUsesRecognition SingingAndRecognition)
   assertTrue' "audiation uses singing" (quizModeUsesSinging Audiation)
   assertFalse' "audiation does not use recognition" (quizModeUsesRecognition Audiation)
+  assertTrue' "melody imitation uses singing" (quizModeUsesSinging MelodyImitation)
+  assertFalse' "melody imitation does not use interval recognition" (quizModeUsesRecognition MelodyImitation)
   assertTrue' "automatic progression is the default" (defaultConfig.quizProgression == AutomaticProgression)
   assertTrue' "collection prompts use selected thirds and pitch classes" $ Array.all
     ( \prompt ->
@@ -216,3 +243,22 @@ run = do
   assertTrue' "collection configuration has prompts" (isJust (promptSet collectionConfig))
   assertTrue' "descending collection has prompts" (isJust (promptSet descendingCollectionConfig))
   assertTrue' "narrow exact configuration has prompts" (isJust (promptSet narrowExactConfig))
+  assertTrue' "melody mode ignores interval playback orientations" (isPlayable melodyConfig)
+  assertEqual { actual: Array.length melody, expected: 4 }
+  assertTrue' "melody pitches stay in the configured range"
+    ( Array.all
+        ( \note ->
+            midiNumber note >= midiNumber (presetRange melodyConfig.vocalRange).low
+              && midiNumber note <= midiNumber (presetRange melodyConfig.vocalRange).high
+        )
+        melody
+    )
+  assertEqual { actual: Array.length exactMelody, expected: 4 }
+  assertTrue' "exact melodies use the selected interval between every adjacent pair"
+    ( Array.all identity
+        ( Array.zipWith
+            (\left right -> abs (midiNumber right - midiNumber left) == 4)
+            exactMelody
+            (Array.drop 1 exactMelody)
+        )
+    )

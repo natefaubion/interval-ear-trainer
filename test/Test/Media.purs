@@ -3,6 +3,8 @@ module Test.Media (run) where
 import Prelude
 
 import Data.Array as Array
+import Data.Array.NonEmpty as NonEmptyArray
+import Data.Maybe (Maybe(..))
 import Data.Number (abs)
 import EarTrainer.Audio as Audio
 import EarTrainer.Capability.PitchInput as PitchInput
@@ -19,9 +21,14 @@ run = do
     melodicPlan = Audio.intervalPlan MelodicAscending c4 e4
     harmonicPlan = Audio.intervalPlan Harmonic c4 e4
     rootPlan = Audio.rootPlan c4
+    melody = NonEmptyArray.cons' c4 [ e4, c4 ]
+    melodyPlan = Audio.melodyPlan melody
     promptScore = Notation.prompt Notation.Full c4 e4 false
     acceptedPromptScore = Notation.prompt Notation.Full c4 e4 true
     choiceScore = Notation.intervalChoice Notation.Compact c4 e4
+    melodyScore = Notation.sequenceScore Notation.Full melody 1
+      (Just { appearance: Notation.Dim, pitch: c4 })
+      true
   assertEqual { actual: PitchInput.decibelsFromRms 1.0, expected: 0.0 }
   assertTrue' "0.1 RMS is -20 dB" (abs (PitchInput.decibelsFromRms 0.1 + 20.0) < 1.0e-9)
   assertTrue' "silence is clamped to -160 dB" (abs (PitchInput.decibelsFromRms 0.0 + 160.0) < 1.0e-9)
@@ -31,6 +38,8 @@ run = do
   assertEqual { actual: harmonicPlan.durationMilliseconds, expected: 900.0 }
   assertEqual { actual: map _.notes harmonicPlan.events, expected: [ [ 60, 64 ] ] }
   assertEqual { actual: map _.notes rootPlan.events, expected: [ [ 60 ] ] }
+  assertEqual { actual: melodyPlan.durationMilliseconds, expected: 2250.0 }
+  assertEqual { actual: map _.notes melodyPlan.events, expected: [ [ 60 ], [ 64 ], [ 60 ] ] }
   assertTrue' "prompt uses treble clef" (promptScore.clef == Notation.Treble)
   assertTrue' "prompt target is hidden"
     (map _.appearance promptScore.events == [ Notation.Normal, Notation.Hidden ])
@@ -41,6 +50,8 @@ run = do
   assertTrue' "prompt notation uses full layout" (promptScore.layout == Notation.Full)
   assertTrue' "answer notation uses compact layout" (choiceScore.layout == Notation.Compact)
   assertEqual { actual: Array.length choiceScore.events, expected: 3 }
+  assertTrue' "melody notation shows its accepted prefix and current ghost"
+    (map _.appearance melodyScore.events == [ Notation.Accepted, Notation.Dim, Notation.Hidden ])
   assertEqual
     { actual: map _.key (Array.concatMap _.notes choiceScore.events)
     , expected: [ "c/4", "e/4", "c/4", "e/4" ]

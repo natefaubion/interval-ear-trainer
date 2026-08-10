@@ -6,23 +6,32 @@ module EarTrainer.Recognition
   , Recognition
   , RecognitionPhase(..)
   , RecognitionSettings
+  , SequencePhase(..)
+  , SequenceRecognition
   , defaultCaptureSettings
   , defaultRecognitionSettings
   , feedback
   , initialObservation
   , initialRecognition
+  , initialSequenceRecognition
   , midiFrequency
   , nearestMidi
   , observePitch
   , phase
   , phaseInstruction
   , relativeMidi
+  , sequenceAcceptedCount
+  , sequenceFeedback
+  , sequencePhase
+  , sequenceRelativeMidi
+  , stepSequenceRecognition
   , stepRecognition
   ) where
 
 import Prelude
 
 import Data.Array as Array
+import Data.Array.NonEmpty as NonEmptyArray
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Number as Math
@@ -62,7 +71,7 @@ defaultCaptureSettings =
   , minimumFrequency: 70.0
   , minimumSamples: 4
   , sampleWindowMilliseconds: 300.0
-  , silenceMilliseconds: 180.0
+  , silenceMilliseconds: 35.0
   , volumeThresholdDb: -50.0
   }
 
@@ -129,7 +138,7 @@ type RecognitionSettings =
 defaultRecognitionSettings :: RecognitionSettings
 defaultRecognitionSettings =
   { clarityThreshold: 0.9
-  , releaseFramesRequired: 5
+  , releaseFramesRequired: 2
   , stableFramesRequired: 36
   , toleranceCents: 35.0
   }
@@ -181,15 +190,17 @@ observePitch settings raw (Observation observation) = do
       else
         observation.samples
     lastValidAt = if valid then raw.time else observation.lastValidAt
+    breakDetected = not valid && raw.time - lastValidAt >= settings.silenceMilliseconds
+    nextSamples = if breakDetected then [] else samples
     sample
+      | breakDetected = Just
+          { clarity: 0.0, frequency: 0.0 }
       | Array.length samples >= settings.minimumSamples = Just
           { clarity: median (map _.clarity samples)
           , frequency: median (map _.frequency samples)
           }
-      | raw.time - lastValidAt >= settings.silenceMilliseconds = Just
-          { clarity: 0.0, frequency: 0.0 }
       | otherwise = Nothing
-  { observation: Observation { lastValidAt, samples }
+  { observation: Observation { lastValidAt, samples: nextSamples }
   , sample
   }
 
@@ -342,3 +353,144 @@ firstMidi = case _ of
   IncorrectFirst _ -> Nothing
   IncorrectSecond state -> Just state.firstMidi
   Complete state -> Just state.firstMidi
+
+data SequencePhase
+  = SequenceSinging
+  | SequenceReleasing
+  | SequenceIncorrect
+  | SequenceComplete
+
+derive instance Eq SequencePhase
+
+instance Show SequencePhase where
+  show = case _ of
+    SequenceSinging -> "SequenceSinging"
+    SequenceReleasing -> "SequenceReleasing"
+    SequenceIncorrect -> "SequenceIncorrect"
+    SequenceComplete -> "SequenceComplete"
+
+data SequenceRecognition
+  = SingingSequence
+      { acceptedMidi :: Array Int
+      , stable :: StablePitch
+      }
+  | ReleasingSequence
+      { acceptedMidi :: Array Int
+      , feedback :: Maybe Feedback
+      , lastMidi :: Int
+      , releaseFrames :: Int
+      }
+  | IncorrectSequence
+      { acceptedMidi :: Array Int
+      , feedback :: Maybe Feedback
+      }
+  | CompleteSequence
+      { acceptedMidi :: Array Int
+      , feedback :: Maybe Feedback
+      }
+
+initialSequenceRecognition :: SequenceRecognition
+initialSequenceRecognition = SingingSequence { acceptedMidi: [], stable: initialStablePitch }
+
+sequencePhase :: SequenceRecognition -> SequencePhase
+sequencePhase = case _ of
+  SingingSequence _ -> SequenceSinging
+  ReleasingSequence _ -> SequenceReleasing
+  IncorrectSequence _ -> SequenceIncorrect
+  CompleteSequence _ -> SequenceComplete
+
+sequenceAcceptedCount :: SequenceRecognition -> Int
+sequenceAcceptedCount = Array.length <<< case _ of
+  SingingSequence state -> state.acceptedMidi
+  ReleasingSequence state -> state.acceptedMidi
+  IncorrectSequence state -> state.acceptedMidi
+  CompleteSequence state -> state.acceptedMidi
+
+sequenceFeedback :: SequenceRecognition -> Maybe Feedback
+sequenceFeedback = case _ of
+  SingingSequence state -> state.stable.feedback
+  ReleasingSequence state -> state.feedback
+  IncorrectSequence state -> state.feedback
+  CompleteSequence state -> state.feedback
+
+stepSequenceRecognition
+  :: RecognitionSettings
+  -> OctavePolicy
+  -> NonEmptyArray.NonEmptyArray Pitch
+  -> PitchSample
+  -> SequenceRecognition
+  -> SequenceRecognition
+stepSequenceRecognition settings octavePolicy expected sample recognition = do
+  let
+    expectedPitches = NonEmptyArray.toArray expected
+    accepted = case recognition of
+      SingingSequence state -> state.acceptedMidi
+      ReleasingSequence state -> state.acceptedMidi
+      IncorrectSequence state -> state.acceptedMidi
+      CompleteSequence state -> state.acceptedMidi
+    writtenFirst = midiNumber (NonEmptyArray.head expected)
+    offset = case octavePolicy, Array.head accepted of
+      AnyOctave, Just first -> first - writtenFirst
+      _, _ -> 0
+    expectedMidi = map ((+) offset <<< midiNumber) (Array.index expectedPitches (Array.length accepted))
+    clear = sample.clarity >= settings.clarityThreshold
+    currentFeedback allowOctaveEquivalent midi = feedbackFor allowOctaveEquivalent midi sample
+  case recognition of
+    IncorrectSequence state -> IncorrectSequence state
+      { feedback = expectedMidi >>= currentFeedback false }
+    CompleteSequence state -> CompleteSequence state
+      { feedback = map midiNumber (Array.last expectedPitches) >>= currentFeedback false }
+    ReleasingSequence state -> do
+      let
+        current = currentFeedback false state.lastMidi
+        stillSinging = case current of
+          Just currentPitch -> clear && matchesPitchIdentity false state.lastMidi currentPitch
+          Nothing -> false
+        frames = if stillSinging then 0 else state.releaseFrames + 1
+      if frames >= settings.releaseFramesRequired then
+        SingingSequence { acceptedMidi: state.acceptedMidi, stable: resetStable current }
+      else ReleasingSequence state { feedback = current, releaseFrames = frames }
+    SingingSequence state -> case expectedMidi of
+      Nothing -> CompleteSequence { acceptedMidi: state.acceptedMidi, feedback: state.stable.feedback }
+      Just midi -> do
+        let
+          allowOctaveEquivalent = octavePolicy == AnyOctave && Array.null state.acceptedMidi
+          current = currentFeedback allowOctaveEquivalent midi
+        case current of
+          Just currentPitch | clear -> do
+            let next = stepStable settings.stableFramesRequired currentPitch state.stable
+            if next.stableFrames < settings.stableFramesRequired then
+              SingingSequence state { stable = next }
+            else if matchesExpected settings allowOctaveEquivalent midi currentPitch then do
+              let nextAccepted = Array.snoc state.acceptedMidi currentPitch.midi
+              if Array.length nextAccepted == Array.length expectedPitches then
+                CompleteSequence { acceptedMidi: nextAccepted, feedback: next.feedback }
+              else
+                ReleasingSequence
+                  { acceptedMidi: nextAccepted
+                  , feedback: next.feedback
+                  , lastMidi: currentPitch.midi
+                  , releaseFrames: 0
+                  }
+            else if matchesPitchIdentity allowOctaveEquivalent midi currentPitch then
+              SingingSequence state { stable = next }
+            else IncorrectSequence { acceptedMidi: state.acceptedMidi, feedback: next.feedback }
+          _ -> SingingSequence state { stable = resetStable current }
+
+sequenceRelativeMidi :: OctavePolicy -> NonEmptyArray.NonEmptyArray Pitch -> SequenceRecognition -> Int -> Int
+sequenceRelativeMidi octavePolicy expected recognition detectedMidi = case octavePolicy of
+  WrittenOctave -> detectedMidi
+  AnyOctave -> do
+    let first = NonEmptyArray.head expected
+    case firstAcceptedMidi recognition of
+      Just accepted -> detectedMidi - (accepted - midiNumber first)
+      Nothing ->
+        if detectedMidi `mod` 12 == midiNumber first `mod` 12 then midiNumber first
+        else detectedMidi
+
+firstAcceptedMidi :: SequenceRecognition -> Maybe Int
+firstAcceptedMidi = Array.head <<< case _ of
+  SingingSequence state -> state.acceptedMidi
+  ReleasingSequence state -> state.acceptedMidi
+  IncorrectSequence state -> state.acceptedMidi
+  CompleteSequence state -> state.acceptedMidi

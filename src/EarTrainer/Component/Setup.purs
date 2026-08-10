@@ -22,6 +22,8 @@ import EarTrainer.Config
   , QuizProgression(..)
   , RangeBoundary(..)
   , defaultConfig
+  , melodyLength
+  , mkMelodyLength
   , quizModeUsesRecognition
   , selectMajorKey
   , selectedMajorKeyId
@@ -117,6 +119,7 @@ data Action
   | RootSelectAnswerCount AnswerCount
   | RootSelectAnswerDisplay AnswerDisplay
   | RootSelectQuizMode QuizMode
+  | RootSelectMelodyLength Int
   | RootSelectQuizProgression QuizProgression
   | RootOpenSavePreset
   | RootCloseSavePreset
@@ -214,9 +217,31 @@ component =
               , rootChoiceButton (state.config.quizMode == SingingOnly) (RootSelectQuizMode SingingOnly) "Singing only"
               , rootChoiceButton (state.config.quizMode == RecognitionOnly) (RootSelectQuizMode RecognitionOnly) "Recognition only"
               , rootChoiceButton (state.config.quizMode == Audiation) (RootSelectQuizMode Audiation) "Audiation"
+              , rootChoiceButton
+                  (state.config.quizMode == MelodyImitation)
+                  (RootSelectQuizMode MelodyImitation)
+                  "Melody imitation"
               ]
+          , if state.config.quizMode == MelodyImitation then
+              SettingGroup.settingGroup
+                { description: "Choose how many notes are played in each melody."
+                , title: "Number of notes"
+                , validation: Nothing
+                }
+                ( map
+                    ( \count -> rootChoiceButton
+                        (melodyLength state.config.melodyLength == count)
+                        (RootSelectMelodyLength count)
+                        (show count)
+                    )
+                    (Array.range 3 8)
+                )
+            else HH.text ""
           , SettingGroup.settingGroup
-              { description: "Choose how the next interval begins after a correct answer."
+              { description:
+                  if state.config.quizMode == MelodyImitation then
+                    "Choose how the next melody begins after a correct performance."
+                  else "Choose how the next interval begins after a correct answer."
               , title: "Quiz progression"
               , validation: Nothing
               }
@@ -299,7 +324,11 @@ component =
                 selectedPossibleSizes = Array.filter (flip Array.elem possibleSizes) state.config.availableIntervals
               SettingGroup.settingGroup
                 { description:
-                    if state.config.intervalSystem == ExactIntervals then
+                    if state.config.quizMode == MelodyImitation && state.config.intervalSystem == ExactIntervals then
+                      "Choose the exact intervals that may connect adjacent melody notes."
+                    else if state.config.quizMode == MelodyImitation then
+                      "Choose the basic intervals that may connect adjacent melody notes. Each exact quality is determined by the selected notes."
+                    else if state.config.intervalSystem == ExactIntervals then
                       "Choose the exact intervals that may appear in an exercise."
                     else
                       "Choose the basic intervals that may appear in an exercise. Each exact quality is determined by the selected note pair."
@@ -341,12 +370,14 @@ component =
                     Array.filter (_ /= Harmonic) allPlaybackModes
                   else allPlaybackModes
                 selectedOrientations = Array.filter (flip Array.elem state.config.playbackModes) availableOrientations
-              SettingGroup.settingGroup
-                { description: "Choose the directions or forms intervals may take."
-                , title: "Interval orientation"
-                , validation: if Array.null selectedOrientations then Just "Select at least one interval orientation." else Nothing
-                }
-                (map (rootModeButton state.config) availableOrientations)
+              if state.config.quizMode == MelodyImitation then HH.text ""
+              else
+                SettingGroup.settingGroup
+                  { description: "Choose the directions or forms intervals may take."
+                  , title: "Interval orientation"
+                  , validation: if Array.null selectedOrientations then Just "Select at least one interval orientation." else Nothing
+                  }
+                  (map (rootModeButton state.config) availableOrientations)
           , SettingGroup.settingGroup
               { description: "Choose the written and playback register."
               , title: "Playback range"
@@ -361,7 +392,11 @@ component =
                   <> if state.config.vocalRange == Custom then [ rootCustomRangeControls state.config ] else []
               )
           , SettingGroup.settingGroup
-              { description: "Choose whether the first sung note must match the written register. The second note must always form the written interval from it."
+              { description:
+                  if state.config.quizMode == MelodyImitation then
+                    "Choose whether the first sung note must match the written register. Later notes must preserve the written melody from it."
+                  else
+                    "Choose whether the first sung note must match the written register. The second note must always form the written interval from it."
               , title: "Octave matching"
               , validation: Nothing
               }
@@ -646,6 +681,9 @@ component =
     RootSelectAnswerCount count -> setupUpdateConfig (_ { answerCount = count })
     RootSelectAnswerDisplay display -> setupUpdateConfig (_ { answerDisplay = display })
     RootSelectQuizMode mode -> setupUpdateConfig (_ { quizMode = mode })
+    RootSelectMelodyLength value -> case mkMelodyLength value of
+      Nothing -> pure unit
+      Just length -> setupUpdateConfig (_ { melodyLength = length })
     RootSelectQuizProgression progression -> setupUpdateConfig (_ { quizProgression = progression })
     RootOpenSavePreset -> do
       H.modify_ _ { presetName = "", presetNameError = Nothing }
