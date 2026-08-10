@@ -172,7 +172,7 @@ button:active:not(:disabled) {
   margin-inline: auto;
 }
 
-.notation-panel.melody .notation-canvas {
+.notation-panel.full .notation-canvas {
   max-width: 36rem;
 }
 

@@ -225,8 +225,7 @@ component =
                       <>
                         if notationLayout state == Notation.Compact then
                           [ H.ClassName "compact" ]
-                        else if isMelody state then [ H.ClassName "melody" ]
-                        else []
+                        else [ H.ClassName "full" ]
                   )
               ]
               [ HH.div
