@@ -62,7 +62,6 @@ run = do
     testSettings = defaultRecognitionSettings
       { incorrectMillisecondsRequired = 20.0
       , maximumObservationGapMilliseconds = 20.0
-      , releaseMillisecondsRequired = 10.0
       , stableMillisecondsRequired = 20.0
       }
     stableTimes start = [ start, start + 10.0, start + 20.0 ]
@@ -75,6 +74,10 @@ run = do
     advance = advanceAt 0.0
     beforeFirst = foldl (\current time -> step (at time c4Sample) current) initialRecognition [ 0.0, 10.0 ]
     afterFirst = advance c4Sample initialRecognition
+    secondWithoutArticulation = foldl
+      (\current time -> step (at time e4Sample) current)
+      afterFirst
+      [ 30.0, 80.0, 130.0, 180.0, 230.0, 280.0, 330.0, 380.0 ]
     afterRelease = releaseAt 30.0 afterFirst
     afterSecond = advanceAt 50.0 e4Sample afterRelease
     wrongFirst = advance e4Sample initialRecognition
@@ -114,6 +117,7 @@ run = do
     sequenceSecondRelease = sequenceRelease 80.0 sequenceSecond
     sequenceComplete = sequenceAdvance 100.0 d4Sample sequenceSecondRelease
     sequenceContinuedFirst = sequenceStep (at 30.0 c4Sample) sequenceFirst
+    sequenceSecondWithoutArticulation = sequenceAdvance 30.0 e4Sample sequenceFirst
     sequenceWrongMiddle = sequenceAdvance 50.0 b3Sample sequenceFirstRelease
     sequenceWrongFinal = sequenceAdvance 100.0 b3Sample sequenceSecondRelease
     sequencePartial = foldl (\current time -> sequenceStep (at time c4Sample) current) initialSequenceRecognition
@@ -366,6 +370,7 @@ run = do
   assertEqual { actual: nearestMidi 440.0, expected: 69 }
   assertEqual { actual: phase beforeFirst, expected: WaitingForFirst }
   assertEqual { actual: phase afterFirst, expected: WaitingForRelease }
+  assertEqual { actual: phase secondWithoutArticulation, expected: WaitingForRelease }
   assertEqual { actual: phase afterRelease, expected: WaitingForSecond }
   assertEqual { actual: phase afterSecond, expected: RecognitionComplete }
   assertEqual { actual: phase wrongFirst, expected: RecognitionIncorrect }
@@ -390,6 +395,7 @@ run = do
   assertEqual { actual: sequenceAcceptedCount sequenceSecond, expected: 2 }
   assertEqual { actual: sequencePhase sequenceComplete, expected: SequenceComplete }
   assertEqual { actual: sequencePhase sequenceContinuedFirst, expected: SequenceReleasing }
+  assertEqual { actual: sequencePhase sequenceSecondWithoutArticulation, expected: SequenceReleasing }
   assertEqual { actual: sequencePhase sequenceWrongMiddle, expected: SequenceIncorrect }
   assertEqual { actual: sequenceAcceptedCount sequenceWrongMiddle, expected: 1 }
   assertEqual { actual: sequencePhase sequenceWrongFinal, expected: SequenceIncorrect }

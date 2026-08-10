@@ -161,7 +161,6 @@ data Recognition
   | ReleasingFirst
       { feedback :: Maybe Feedback
       , firstMidi :: Int
-      , releasedAt :: Maybe Number
       }
   | MatchingSecond
       { firstMidi :: Int
@@ -181,7 +180,6 @@ type RecognitionSettings =
   { clarityThreshold :: Number
   , incorrectMillisecondsRequired :: Number
   , maximumObservationGapMilliseconds :: Number
-  , releaseMillisecondsRequired :: Number
   , stableMillisecondsRequired :: Number
   , toleranceCents :: Number
   }
@@ -191,7 +189,6 @@ defaultRecognitionSettings =
   { clarityThreshold: 0.8
   , incorrectMillisecondsRequired: 350.0
   , maximumObservationGapMilliseconds: 50.0
-  , releaseMillisecondsRequired: 25.0
   , stableMillisecondsRequired: 120.0
   , toleranceCents: 35.0
   }
@@ -438,26 +435,16 @@ stepRecognition settings octavePolicy firstPitch secondPitch observation recogni
         if
           matches allowOctaveEquivalent writtenFirst
             && next.confidenceMilliseconds >= settings.stableMillisecondsRequired then
-          ReleasingFirst { feedback: next.feedback, firstMidi: current.midi, releasedAt: Nothing }
+          ReleasingFirst { feedback: next.feedback, firstMidi: current.midi }
         else if
           not (matchesPitchIdentity allowOctaveEquivalent writtenFirst current)
             && next.confidenceMilliseconds >= settings.incorrectMillisecondsRequired then
           IncorrectFirst next.feedback
         else MatchingFirst next
-    _, ReleasingFirst state
-      | matches false state.firstMidi -> ReleasingFirst state
-          { feedback = currentFeedback false state.firstMidi
-          , releasedAt = Nothing
-          }
-      | otherwise -> do
-          let
-            current = currentFeedback false state.firstMidi
-            releasedAt = case state.releasedAt of
-              Nothing -> observedAt
-              Just time -> time
-          if observedAt - releasedAt >= settings.releaseMillisecondsRequired then
-            MatchingSecond { firstMidi: state.firstMidi, stable: resetStable current }
-          else ReleasingFirst state { feedback = current, releasedAt = Just releasedAt }
+    ArticulationBreak _, ReleasingFirst state ->
+      MatchingSecond { firstMidi: state.firstMidi, stable: initialStablePitch }
+    ObservedPitch _, ReleasingFirst state -> ReleasingFirst state
+      { feedback = currentFeedback false state.firstMidi }
     _, MatchingSecond state -> do
       let
         expectedMidi = normalizedSecond state.firstMidi
@@ -543,7 +530,6 @@ data SequenceRecognition
       { acceptedMidi :: Array Int
       , feedback :: Maybe Feedback
       , lastMidi :: Int
-      , releasedAt :: Maybe Number
       }
   | IncorrectSequence
       { acceptedMidi :: Array Int
@@ -610,22 +596,10 @@ stepSequenceRecognition settings octavePolicy expected observation recognition =
       { feedback = expectedMidi >>= currentFeedback false }
     _, CompleteSequence state -> CompleteSequence state
       { feedback = map midiNumber (Array.last expectedPitches) >>= currentFeedback false }
-    _, ReleasingSequence state -> do
-      let
-        current = currentFeedback false state.lastMidi
-        stillProducing = case current of
-          Just currentPitch -> clear && matchesPitchIdentity false state.lastMidi currentPitch
-          Nothing -> false
-        releasedAt = case state.releasedAt, stillProducing of
-          _, true -> Nothing
-          Nothing, false -> Just observedAt
-          previous, false -> previous
-        releaseComplete = case releasedAt of
-          Nothing -> false
-          Just time -> observedAt - time >= settings.releaseMillisecondsRequired
-      if releaseComplete then
-        MatchingSequence { acceptedMidi: state.acceptedMidi, stable: resetStable current }
-      else ReleasingSequence state { feedback = current, releasedAt = releasedAt }
+    ArticulationBreak _, ReleasingSequence state ->
+      MatchingSequence { acceptedMidi: state.acceptedMidi, stable: initialStablePitch }
+    ObservedPitch _, ReleasingSequence state -> ReleasingSequence state
+      { feedback = currentFeedback false state.lastMidi }
     _, MatchingSequence state -> case expectedMidi of
       Nothing -> CompleteSequence { acceptedMidi: state.acceptedMidi, feedback: state.stable.feedback }
       Just midi -> do
@@ -646,7 +620,6 @@ stepSequenceRecognition settings octavePolicy expected observation recognition =
                   { acceptedMidi: nextAccepted
                   , feedback: next.feedback
                   , lastMidi: currentPitch.midi
-                  , releasedAt: Nothing
                   }
             else if
               not (matchesPitchIdentity allowOctaveEquivalent midi currentPitch)
