@@ -22,7 +22,6 @@ module EarTrainer.Recognition
   , nearestMidi
   , observePitch
   , phase
-  , phaseInstruction
   , relativeMidi
   , sequenceAcceptedCount
   , sequenceFeedback
@@ -539,14 +538,6 @@ stepRecognition settings octavePolicy firstPitch secondPitch observation recogni
             IncorrectSecond { feedback: next.feedback, firstMidi: state.firstMidi }
           else MatchingSecond state { stable = next }
         current -> MatchingSecond state { stable = resetStable current }
-
-phaseInstruction :: RecognitionPhase -> String
-phaseInstruction = case _ of
-  WaitingForFirst -> "Sing or play the first note."
-  WaitingForRelease -> "Articulate the second note."
-  WaitingForSecond -> "Sing or play the second note."
-  RecognitionIncorrect -> "Incorrect pitch."
-  RecognitionComplete -> "Both notes accepted."
 
 relativeMidi :: OctavePolicy -> Pitch -> Recognition -> Int -> Int
 relativeMidi octavePolicy root recognition detectedMidi = case octavePolicy of

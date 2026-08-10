@@ -385,18 +385,10 @@ component =
     | otherwise = "▶"
 
   practiceInstruction state = case state.captureStatus of
-    ReadyToPlay ->
-      if isMelody state then
-        "Listen to the melody, then sing or play it back."
-      else if state.config.quizMode == Audiation then
-        "Listen to the root, then sing or play the interval."
-      else if quizModeUsesPitchInput state.config.quizMode then
-        "Listen to the interval, then sing or play it back."
-      else
-        "Listen to the interval, then choose."
-    PlayingAudio _ -> "Listen carefully."
-    StartingCapture _ -> "Requesting microphone access."
-    Listening _ -> imitationInstruction state
+    ReadyToPlay -> ""
+    PlayingAudio _ -> ""
+    StartingCapture _ -> ""
+    Listening _ -> "Listening…"
     CaptureFailed message -> "Microphone unavailable: " <> message
     PlaybackFailed message -> "Audio playback failed: " <> message
     IntervalError -> "Incorrect pitch."
@@ -405,19 +397,7 @@ component =
         "Choose the matching interval."
       else
         "Not quite. Try Again."
-    AnswerComplete _ -> "Correct!"
-
-  imitationInstruction state = case state.exercise of
-    IntervalPractice exercise -> Recognition.phaseInstruction (Recognition.phase exercise.recognition)
-    MelodyPractice exercise -> do
-      let
-        count = Array.length (NonEmptyArray.toArray (Quiz.melodyPitches exercise.prompt))
-        current = min count (Recognition.sequenceAcceptedCount exercise.recognition + 1)
-      case Recognition.sequencePhase exercise.recognition of
-        Recognition.SequenceReleasing -> "Articulate note " <> show current <> " of " <> show count <> "."
-        Recognition.SequenceIncorrect -> "Incorrect note " <> show current <> "."
-        Recognition.SequenceComplete -> "Melody complete."
-        Recognition.SequenceMatching -> "Sing or play note " <> show current <> " of " <> show count <> "."
+    AnswerComplete _ -> if isMelody state then "Melody complete." else "Correct!"
 
   isPlaying = case _ of
     PlayingAudio _ -> true
