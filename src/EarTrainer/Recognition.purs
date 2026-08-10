@@ -1,5 +1,6 @@
 module EarTrainer.Recognition
   ( CaptureSettings
+  , CapturePhase(..)
   , Feedback
   , Observation
   , PitchObservation(..)
@@ -73,6 +74,12 @@ instance Show PitchExpectation where
     ExactPitch midi -> "ExactPitch " <> show midi
     OctaveEquivalentPitch midi -> "OctaveEquivalentPitch " <> show midi
 
+data CapturePhase
+  = DetectingPitch
+  | AwaitingArticulation
+
+derive instance Eq CapturePhase
+
 type TimedPitchSample =
   { clarity :: Number
   , frequency :: Number
@@ -81,6 +88,8 @@ type TimedPitchSample =
 
 newtype Observation = Observation
   { lastValidAt :: Number
+  , lastOnsetAt :: Number
+  , previousDecibels :: Maybe Number
   , samples :: Array TimedPitchSample
   }
 
@@ -89,6 +98,8 @@ type CaptureSettings =
   , maximumFrequency :: Number
   , minimumFrequency :: Number
   , minimumSamples :: Int
+  , minimumOnsetIntervalMilliseconds :: Number
+  , onsetRiseDecibels :: Number
   , sampleWindowMilliseconds :: Number
   , silenceMilliseconds :: Number
   , volumeThresholdDb :: Number
@@ -99,14 +110,21 @@ defaultCaptureSettings =
   { clarityThreshold: 0.8
   , maximumFrequency: 4200.0
   , minimumFrequency: 40.0
-  , minimumSamples: 4
-  , sampleWindowMilliseconds: 300.0
+  , minimumSamples: 2
+  , minimumOnsetIntervalMilliseconds: 80.0
+  , onsetRiseDecibels: 9.0
+  , sampleWindowMilliseconds: 100.0
   , silenceMilliseconds: 35.0
   , volumeThresholdDb: -50.0
   }
 
 initialObservation :: Observation
-initialObservation = Observation { lastValidAt: 0.0, samples: [] }
+initialObservation = Observation
+  { lastOnsetAt: 0.0
+  , lastValidAt: 0.0
+  , previousDecibels: Nothing
+  , samples: []
+  }
 
 type Feedback =
   { cents :: Number
@@ -172,7 +190,7 @@ defaultRecognitionSettings =
   { clarityThreshold: 0.8
   , maximumObservationGapMilliseconds: 50.0
   , releaseMillisecondsRequired: 25.0
-  , stableMillisecondsRequired: 120.0
+  , stableMillisecondsRequired: 90.0
   , toleranceCents: 35.0
   }
 
@@ -207,11 +225,12 @@ feedback = case _ of
 
 observePitch
   :: CaptureSettings
+  -> CapturePhase
   -> PitchExpectation
   -> PitchInput.Sample
   -> Observation
   -> { event :: PitchObservation, observation :: Observation }
-observePitch settings expectation raw (Observation observation) = do
+observePitch settings capturePhase expectation raw (Observation observation) = do
   let
     candidate = selectPitchCandidate settings expectation raw.candidates
     clarity = fromMaybe 0.0 (map _.clarity candidate)
@@ -232,7 +251,14 @@ observePitch settings expectation raw (Observation observation) = do
       else
         observation.samples
     lastValidAt = if valid then raw.time else observation.lastValidAt
-    breakDetected = not valid && raw.time - lastValidAt >= settings.silenceMilliseconds
+    onsetDetected = case capturePhase, observation.previousDecibels of
+      AwaitingArticulation, Just previous ->
+        raw.decibels >= settings.volumeThresholdDb
+          && raw.decibels - previous >= settings.onsetRiseDecibels
+          && raw.time - observation.lastOnsetAt >= settings.minimumOnsetIntervalMilliseconds
+      _, _ -> false
+    breakDetected = onsetDetected || (not valid && raw.time - lastValidAt >= settings.silenceMilliseconds)
+    lastOnsetAt = if onsetDetected then raw.time else observation.lastOnsetAt
     nextSamples = if breakDetected then [] else samples
     event
       | breakDetected = ArticulationBreak raw.time
@@ -242,7 +268,12 @@ observePitch settings expectation raw (Observation observation) = do
           , time: raw.time
           }
       | otherwise = NoEvidence
-  { observation: Observation { lastValidAt, samples: nextSamples }
+  { observation: Observation
+      { lastOnsetAt
+      , lastValidAt
+      , previousDecibels: Just raw.decibels
+      , samples: nextSamples
+      }
   , event
   }
 

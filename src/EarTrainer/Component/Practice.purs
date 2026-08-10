@@ -569,6 +569,7 @@ component =
         let
           observed = Recognition.observePitch
             Recognition.defaultCaptureSettings
+            (capturePhase state)
             (pitchExpectation state)
             raw
             state.observation
@@ -848,6 +849,14 @@ component =
         state.config.octavePolicy
         (Quiz.melodyPitches exercise.prompt)
         exercise.recognition
+
+  capturePhase state = case state.exercise of
+    IntervalPractice exercise -> case Recognition.phase exercise.recognition of
+      Recognition.WaitingForRelease -> Recognition.AwaitingArticulation
+      _ -> Recognition.DetectingPitch
+    MelodyPractice exercise -> case Recognition.sequencePhase exercise.recognition of
+      Recognition.SequenceReleasing -> Recognition.AwaitingArticulation
+      _ -> Recognition.DetectingPitch
 
   isMelody state = case state.exercise of
     IntervalPractice _ -> false
