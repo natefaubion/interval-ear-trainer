@@ -95,6 +95,7 @@ newtype Observation = Observation
 
 type CaptureSettings =
   { clarityThreshold :: Number
+  , maximumCandidateAgeMilliseconds :: Number
   , maximumFrequency :: Number
   , minimumFrequency :: Number
   , minimumSamples :: Int
@@ -108,6 +109,7 @@ type CaptureSettings =
 defaultCaptureSettings :: CaptureSettings
 defaultCaptureSettings =
   { clarityThreshold: 0.8
+  , maximumCandidateAgeMilliseconds: 60.0
   , maximumFrequency: 4200.0
   , minimumFrequency: 40.0
   , minimumSamples: 2
@@ -235,9 +237,15 @@ observePitch
   -> { event :: PitchObservation, observation :: Observation }
 observePitch settings capturePhase expectation raw (Observation observation) = do
   let
+    candidates = Array.filter
+      ( \pitchCandidate ->
+          pitchCandidate.analyzedAt <= raw.time
+            && raw.time - pitchCandidate.analyzedAt <= settings.maximumCandidateAgeMilliseconds
+      )
+      raw.candidates
     candidate = case capturePhase of
-      DetectingPitch -> selectPitchCandidate settings expectation raw.candidates
-      AwaitingArticulation -> selectContinuousPitchCandidate settings observation.samples raw.candidates
+      DetectingPitch -> selectPitchCandidate settings expectation candidates
+      AwaitingArticulation -> selectContinuousPitchCandidate settings observation.samples candidates
     clarity = fromMaybe 0.0 (map _.clarity candidate)
     frequency = fromMaybe 0.0 (map _.frequency candidate)
     valid =
@@ -245,16 +253,24 @@ observePitch settings capturePhase expectation raw (Observation observation) = d
         && raw.decibels >= settings.volumeThresholdDb
         && frequency >= settings.minimumFrequency
         && frequency <= settings.maximumFrequency
-    samples = Array.filter
+    recentSamples = Array.filter
       (\timed -> raw.time - timed.time <= settings.sampleWindowMilliseconds)
-      if valid then
-        Array.snoc observation.samples
-          { clarity
-          , frequency
-          , time: raw.time
-          }
-      else
-        observation.samples
+      observation.samples
+    samples = case candidate, Array.last recentSamples of
+      Just selected, Just previous
+        | valid && previous.time /= selected.analyzedAt -> Array.snoc recentSamples
+            { clarity
+            , frequency
+            , time: selected.analyzedAt
+            }
+      Just selected, Nothing
+        | valid ->
+            [ { clarity
+              , frequency
+              , time: selected.analyzedAt
+              }
+            ]
+      _, _ -> recentSamples
     lastValidAt = if valid then raw.time else observation.lastValidAt
     onsetDetected = case capturePhase, observation.previousDecibels of
       AwaitingArticulation, Just previous ->
@@ -270,7 +286,7 @@ observePitch settings capturePhase expectation raw (Observation observation) = d
       | Array.length samples >= settings.minimumSamples = ObservedPitch
           { clarity: median (map _.clarity samples)
           , frequency: median (map _.frequency samples)
-          , time: raw.time
+          , time: fromMaybe raw.time (map _.time (Array.last samples))
           }
       | otherwise = NoEvidence
   { observation: Observation

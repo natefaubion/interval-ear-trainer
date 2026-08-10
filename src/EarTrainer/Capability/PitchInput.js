@@ -17,7 +17,7 @@ const stopMonitor = (monitor) => {
   }
 };
 
-export const startImpl = (onSample) => (onError, onSuccess) => {
+export const startImpl = (analysisPlans) => (onSample) => (onError, onSuccess) => {
   const monitor = {
     animationFrame: 0,
     audioContext: null,
@@ -41,32 +41,47 @@ export const startImpl = (onSample) => (onError, onSuccess) => {
       }
 
       const audioContext = new AudioContext();
-      const windowSizes = [2048, 4096, 8192];
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 8192;
       audioContext.createMediaStreamSource(stream).connect(analyser);
 
       const input = new Float32Array(analyser.fftSize);
-      const analyses = windowSizes.map((windowSize) => ({
-        detector: PitchDetector.forFloat32Array(windowSize),
-        input: new Float32Array(windowSize),
-        windowSize,
+      const analyses = analysisPlans.map((plan) => ({
+        candidate: null,
+        detector: PitchDetector.forFloat32Array(plan.windowSize),
+        input: new Float32Array(plan.windowSize),
+        lastAnalyzedAt: -Infinity,
+        ...plan,
       }));
       monitor.audioContext = audioContext;
       monitor.stream = stream;
 
       const readPitch = () => {
         if (monitor.stopped) return;
+        const now = performance.now();
+        const shortest = analyses[0];
+        if (now - shortest.lastAnalyzedAt < shortest.minimumIntervalMilliseconds) {
+          monitor.animationFrame = requestAnimationFrame(readPitch);
+          return;
+        }
         analyser.getFloatTimeDomainData(input);
         const candidates = analyses.map((analysis) => {
-          analysis.input.set(input.subarray(input.length - analysis.windowSize));
-          const [frequency, clarity] = analysis.detector.findPitch(
-            analysis.input,
-            audioContext.sampleRate,
-          );
-          return { clarity, frequency, windowSize: analysis.windowSize };
+          if (now - analysis.lastAnalyzedAt >= analysis.minimumIntervalMilliseconds) {
+            analysis.input.set(input.subarray(input.length - analysis.windowSize));
+            const [frequency, clarity] = analysis.detector.findPitch(
+              analysis.input,
+              audioContext.sampleRate,
+            );
+            analysis.candidate = {
+              analyzedAt: now,
+              clarity,
+              frequency,
+              windowSize: analysis.windowSize,
+            };
+            analysis.lastAnalyzedAt = now;
+          }
+          return analysis.candidate;
         });
-        const now = performance.now();
         onSample({
           candidates,
           rms: rootMeanSquare(analyses[0].input),

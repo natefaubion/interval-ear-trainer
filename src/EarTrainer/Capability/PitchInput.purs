@@ -23,8 +23,14 @@ type Sample =
   }
 
 type PitchCandidate =
-  { clarity :: Number
+  { analyzedAt :: Number
+  , clarity :: Number
   , frequency :: Number
+  , windowSize :: Int
+  }
+
+type AnalysisPlan =
+  { minimumIntervalMilliseconds :: Number
   , windowSize :: Int
   }
 
@@ -34,11 +40,18 @@ type RawSample =
   , time :: Number
   }
 
-foreign import startImpl :: (RawSample -> Effect Unit) -> EffectFnAff Monitor
+foreign import startImpl :: Array AnalysisPlan -> (RawSample -> Effect Unit) -> EffectFnAff Monitor
 foreign import stop :: Monitor -> Effect Unit
 
 start :: (Sample -> Effect Unit) -> Aff Monitor
-start onSample = fromEffectFnAff (startImpl (onSample <<< fromRawSample))
+start onSample = fromEffectFnAff (startImpl defaultAnalysisPlans (onSample <<< fromRawSample))
+
+defaultAnalysisPlans :: Array AnalysisPlan
+defaultAnalysisPlans =
+  [ { minimumIntervalMilliseconds: 16.0, windowSize: 2048 }
+  , { minimumIntervalMilliseconds: 33.0, windowSize: 4096 }
+  , { minimumIntervalMilliseconds: 50.0, windowSize: 8192 }
+  ]
 
 fromRawSample :: RawSample -> Sample
 fromRawSample sample =

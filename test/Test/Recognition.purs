@@ -244,7 +244,7 @@ run = do
       initialRecognition
       [ 0.0, 1000.0 ]
     rawPitch time frequency =
-      { candidates: [ { clarity: 0.96, frequency, windowSize: 2048 } ]
+      { candidates: [ { analyzedAt: time, clarity: 0.96, frequency, windowSize: 2048 } ]
       , decibels: -20.0
       , time
       }
@@ -255,19 +255,19 @@ run = do
     observed3 = observe (rawPitch 30.0 300.0) observed2.observation
     observed4 = observe (rawPitch 40.0 400.0) observed3.observation
     observedSilence = observe
-      { candidates: [ { clarity: 0.99, frequency: 440.0, windowSize: 2048 } ]
+      { candidates: [ { analyzedAt: 400.0, clarity: 0.99, frequency: 440.0, windowSize: 2048 } ]
       , decibels: -80.0
       , time: 400.0
       }
       observed4.observation
     observedConsonant = observe
-      { candidates: [ { clarity: 0.2, frequency: 180.0, windowSize: 2048 } ]
+      { candidates: [ { analyzedAt: 76.0, clarity: 0.2, frequency: 180.0, windowSize: 2048 } ]
       , decibels: -18.0
       , time: 76.0
       }
       observed4.observation
     observedBriefDrop = observe
-      { candidates: [ { clarity: 0.2, frequency: 180.0, windowSize: 2048 } ]
+      { candidates: [ { analyzedAt: 60.0, clarity: 0.2, frequency: 180.0, windowSize: 2048 } ]
       , decibels: -18.0
       , time: 60.0
       }
@@ -278,26 +278,26 @@ run = do
     observedNew4 = observe (rawPitch 110.0 500.0) observedNew3.observation
     multiWindow1 = observe
       { candidates:
-          [ { clarity: 0.91, frequency: 220.0, windowSize: 2048 }
-          , { clarity: 0.98, frequency: 110.0, windowSize: 8192 }
+          [ { analyzedAt: 10.0, clarity: 0.91, frequency: 220.0, windowSize: 2048 }
+          , { analyzedAt: 10.0, clarity: 0.98, frequency: 110.0, windowSize: 8192 }
           ]
       , decibels: -20.0
       , time: 10.0
       }
       initialObservation
     multiWindow2 = observe
-      ((rawPitch 20.0 110.0) { candidates = [ { clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
+      ((rawPitch 20.0 110.0) { candidates = [ { analyzedAt: 20.0, clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
       multiWindow1.observation
     multiWindow3 = observe
-      ((rawPitch 30.0 110.0) { candidates = [ { clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
+      ((rawPitch 30.0 110.0) { candidates = [ { analyzedAt: 30.0, clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
       multiWindow2.observation
     multiWindow4 = observe
-      ((rawPitch 40.0 110.0) { candidates = [ { clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
+      ((rawPitch 40.0 110.0) { candidates = [ { analyzedAt: 40.0, clarity: 0.98, frequency: 110.0, windowSize: 8192 } ] })
       multiWindow3.observation
     sustainedCandidates time =
       { candidates:
-          [ { clarity: 0.82, frequency: 261.625565, windowSize: 8192 }
-          , { clarity: 0.99, frequency: 329.627557, windowSize: 2048 }
+          [ { analyzedAt: time, clarity: 0.82, frequency: 261.625565, windowSize: 8192 }
+          , { analyzedAt: time, clarity: 0.99, frequency: 329.627557, windowSize: 2048 }
           ]
       , decibels: -20.0
       , time
@@ -311,8 +311,20 @@ run = do
     sustainedAfterExpectationChange = observePitch defaultCaptureSettings AwaitingArticulation (ExactPitch 64)
       (sustainedCandidates 30.0)
       sustainedFirst2.observation
-    lowFundamental = { clarity: 0.82, frequency: 130.812783, windowSize: 8192 }
-    octaveHarmonic = { clarity: 0.99, frequency: 261.625565, windowSize: 2048 }
+    expiredCandidate = observePitch defaultCaptureSettings DetectingPitch (ExactPitch 64)
+      { candidates:
+          [ { analyzedAt: 20.0
+            , clarity: 0.99
+            , frequency: 329.627557
+            , windowSize: 8192
+            }
+          ]
+      , decibels: -20.0
+      , time: 100.0
+      }
+      initialObservation
+    lowFundamental = { analyzedAt: 0.0, clarity: 0.82, frequency: 130.812783, windowSize: 8192 }
+    octaveHarmonic = { analyzedAt: 0.0, clarity: 0.99, frequency: 261.625565, windowSize: 2048 }
     expectedLowCandidate = selectPitchCandidate defaultCaptureSettings
       (ExactPitch 48)
       [ octaveHarmonic, lowFundamental ]
@@ -334,16 +346,16 @@ run = do
     ignoredRapidOnset = observePitch defaultCaptureSettings AwaitingArticulation expectedC
       ((rawPitch 60.0 261.625565) { decibels = -20.0 })
       tooSoonBeforeOnset.observation
-    unrelatedCandidate = { clarity: 0.95, frequency: 196.0, windowSize: 2048 }
+    unrelatedCandidate = { analyzedAt: 0.0, clarity: 0.95, frequency: 196.0, windowSize: 2048 }
     selectedWrongNote = selectPitchCandidate defaultCaptureSettings
       (ExactPitch 60)
       [ unrelatedCandidate ]
     selectedHighNote = selectPitchCandidate defaultCaptureSettings
       (ExactPitch 103)
-      [ { clarity: 0.9, frequency: 3135.963488, windowSize: 2048 } ]
+      [ { analyzedAt: 0.0, clarity: 0.9, frequency: 3135.963488, windowSize: 2048 } ]
     rejectedOutOfRange = selectPitchCandidate defaultCaptureSettings
       (ExactPitch 108)
-      [ { clarity: 0.99, frequency: 5000.0, windowSize: 2048 } ]
+      [ { analyzedAt: 0.0, clarity: 0.99, frequency: 5000.0, windowSize: 2048 } ]
     shortTransient = foldl
       ( \current time -> stepRecognition
           defaultRecognitionSettings
@@ -433,7 +445,7 @@ run = do
   assertEqual { actual: observed4.event, expected: ObservedPitch { clarity: 0.96, frequency: 250.0, time: 40.0 } }
   assertEqual { actual: observedSilence.event, expected: ArticulationBreak 400.0 }
   assertEqual { actual: observedConsonant.event, expected: ArticulationBreak 76.0 }
-  assertEqual { actual: observedBriefDrop.event, expected: ObservedPitch { clarity: 0.96, frequency: 250.0, time: 60.0 } }
+  assertEqual { actual: observedBriefDrop.event, expected: ObservedPitch { clarity: 0.96, frequency: 250.0, time: 40.0 } }
   assertEqual { actual: observedNew1.event, expected: NoEvidence }
   assertEqual { actual: observedNew2.event, expected: ObservedPitch { clarity: 0.96, frequency: 500.0, time: 90.0 } }
   assertEqual { actual: observedNew4.event, expected: ObservedPitch { clarity: 0.96, frequency: 500.0, time: 110.0 } }
@@ -467,6 +479,7 @@ run = do
     { actual: sustainedAfterExpectationChange.event
     , expected: ObservedPitch { clarity: 0.82, frequency: 261.625565, time: 30.0 }
     }
+  assertEqual { actual: expiredCandidate.event, expected: ArticulationBreak 100.0 }
   assertEqual { actual: expectedLowCandidate, expected: Just lowFundamental }
   assertEqual { actual: octaveEquivalentCandidate, expected: Just octaveHarmonic }
   assertEqual { actual: detectedOnset.event, expected: ArticulationBreak 200.0 }
