@@ -60,7 +60,8 @@ run = do
       if sample.frequency <= 0.0 then ArticulationBreak sample.time
       else ObservedPitch sample
     testSettings = defaultRecognitionSettings
-      { maximumObservationGapMilliseconds = 20.0
+      { incorrectMillisecondsRequired = 20.0
+      , maximumObservationGapMilliseconds = 20.0
       , releaseMillisecondsRequired = 10.0
       , stableMillisecondsRequired = 20.0
       }
@@ -308,7 +309,7 @@ run = do
           current
       )
       initialRecognition
-      [ 0.0, 30.0, 60.0, 90.0 ]
+      [ 0.0, 30.0, 60.0, 90.0, 120.0 ]
     interruptedEvidence = stepRecognition
       defaultRecognitionSettings
       AnyOctave
@@ -327,6 +328,41 @@ run = do
           initialRecognition
           [ 0.0, 30.0, 60.0 ]
       )
+    voiceScoop = do
+      let
+        unsettled = foldl
+          ( \current time -> stepRecognition
+              defaultRecognitionSettings
+              AnyOctave
+              c4
+              e4
+              (ObservedPitch (at time b3Sample))
+              current
+          )
+          initialRecognition
+          [ 0.0, 50.0, 100.0, 150.0 ]
+      foldl
+        ( \current time -> stepRecognition
+            defaultRecognitionSettings
+            AnyOctave
+            c4
+            e4
+            (ObservedPitch (at time c4Sample))
+            current
+        )
+        unsettled
+        [ 180.0, 220.0, 260.0, 300.0 ]
+    sustainedWrongPitch = foldl
+      ( \current time -> stepRecognition
+          defaultRecognitionSettings
+          AnyOctave
+          c4
+          e4
+          (ObservedPitch (at time b3Sample))
+          current
+      )
+      initialRecognition
+      [ 0.0, 50.0, 100.0, 150.0, 200.0, 250.0, 300.0, 350.0 ]
   assertEqual { actual: nearestMidi 440.0, expected: 69 }
   assertEqual { actual: phase beforeFirst, expected: WaitingForFirst }
   assertEqual { actual: phase afterFirst, expected: WaitingForRelease }
@@ -393,6 +429,8 @@ run = do
   assertEqual { actual: rejectedOutOfRange, expected: Nothing }
   assertEqual { actual: phase shortTransient, expected: WaitingForRelease }
   assertEqual { actual: phase interruptedEvidence, expected: WaitingForFirst }
+  assertEqual { actual: phase voiceScoop, expected: WaitingForRelease }
+  assertEqual { actual: phase sustainedWrongPitch, expected: RecognitionIncorrect }
   assertEqual
     { actual: intervalPitchExpectation AnyOctave c4 e4 initialRecognition
     , expected: OctaveEquivalentPitch 60

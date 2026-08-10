@@ -179,6 +179,7 @@ data Recognition
 
 type RecognitionSettings =
   { clarityThreshold :: Number
+  , incorrectMillisecondsRequired :: Number
   , maximumObservationGapMilliseconds :: Number
   , releaseMillisecondsRequired :: Number
   , stableMillisecondsRequired :: Number
@@ -188,9 +189,10 @@ type RecognitionSettings =
 defaultRecognitionSettings :: RecognitionSettings
 defaultRecognitionSettings =
   { clarityThreshold: 0.8
+  , incorrectMillisecondsRequired: 350.0
   , maximumObservationGapMilliseconds: 50.0
   , releaseMillisecondsRequired: 25.0
-  , stableMillisecondsRequired: 90.0
+  , stableMillisecondsRequired: 120.0
   , toleranceCents: 35.0
   }
 
@@ -382,7 +384,9 @@ stepStable settings observedAt current stable = do
     confidence = if sameCandidate then stable.confidenceMilliseconds + elapsed else 0.0
   stable
     { candidate = Just current.midi
-    , confidenceMilliseconds = min settings.stableMillisecondsRequired confidence
+    , confidenceMilliseconds = min
+        (max settings.stableMillisecondsRequired settings.incorrectMillisecondsRequired)
+        confidence
     , feedback = Just current
     , lastObservedAt = Just observedAt
     }
@@ -420,8 +424,7 @@ stepRecognition settings octavePolicy firstPitch secondPitch observation recogni
         Just current | clear -> do
           let
             next = stepStable settings observedAt current stable
-          if next.confidenceMilliseconds < settings.stableMillisecondsRequired then MatchingFirst next
-          else continue current next
+          continue current next
         current -> MatchingFirst (resetStable current)
   case observation, recognition of
     NoEvidence, _ -> recognition
@@ -432,10 +435,15 @@ stepRecognition settings octavePolicy firstPitch secondPitch observation recogni
       let
         allowOctaveEquivalent = octavePolicy == AnyOctave
       updateStable writtenFirst allowOctaveEquivalent stable \current next ->
-        if matches allowOctaveEquivalent writtenFirst then
+        if
+          matches allowOctaveEquivalent writtenFirst
+            && next.confidenceMilliseconds >= settings.stableMillisecondsRequired then
           ReleasingFirst { feedback: next.feedback, firstMidi: current.midi, releasedAt: Nothing }
-        else if matchesPitchIdentity allowOctaveEquivalent writtenFirst current then MatchingFirst next
-        else IncorrectFirst next.feedback
+        else if
+          not (matchesPitchIdentity allowOctaveEquivalent writtenFirst current)
+            && next.confidenceMilliseconds >= settings.incorrectMillisecondsRequired then
+          IncorrectFirst next.feedback
+        else MatchingFirst next
     _, ReleasingFirst state
       | matches false state.firstMidi -> ReleasingFirst state
           { feedback = currentFeedback false state.firstMidi
@@ -457,10 +465,13 @@ stepRecognition settings octavePolicy firstPitch secondPitch observation recogni
         Just current | clear -> do
           let
             next = stepStable settings observedAt current state.stable
-          if next.confidenceMilliseconds < settings.stableMillisecondsRequired then MatchingSecond state { stable = next }
-          else if matches false expectedMidi then Complete { feedback: next.feedback, firstMidi: state.firstMidi }
-          else if matchesPitchIdentity false expectedMidi current then MatchingSecond state { stable = next }
-          else IncorrectSecond { feedback: next.feedback, firstMidi: state.firstMidi }
+          if matches false expectedMidi && next.confidenceMilliseconds >= settings.stableMillisecondsRequired then
+            Complete { feedback: next.feedback, firstMidi: state.firstMidi }
+          else if
+            not (matchesPitchIdentity false expectedMidi current)
+              && next.confidenceMilliseconds >= settings.incorrectMillisecondsRequired then
+            IncorrectSecond { feedback: next.feedback, firstMidi: state.firstMidi }
+          else MatchingSecond state { stable = next }
         current -> MatchingSecond state { stable = resetStable current }
 
 phaseInstruction :: RecognitionPhase -> String
@@ -624,9 +635,9 @@ stepSequenceRecognition settings octavePolicy expected observation recognition =
         case current of
           Just currentPitch | clear -> do
             let next = stepStable settings observedAt currentPitch state.stable
-            if next.confidenceMilliseconds < settings.stableMillisecondsRequired then
-              MatchingSequence state { stable = next }
-            else if matchesExpected settings allowOctaveEquivalent midi currentPitch then do
+            if
+              matchesExpected settings allowOctaveEquivalent midi currentPitch
+                && next.confidenceMilliseconds >= settings.stableMillisecondsRequired then do
               let nextAccepted = Array.snoc state.acceptedMidi currentPitch.midi
               if Array.length nextAccepted == Array.length expectedPitches then
                 CompleteSequence { acceptedMidi: nextAccepted, feedback: next.feedback }
@@ -637,9 +648,11 @@ stepSequenceRecognition settings octavePolicy expected observation recognition =
                   , lastMidi: currentPitch.midi
                   , releasedAt: Nothing
                   }
-            else if matchesPitchIdentity allowOctaveEquivalent midi currentPitch then
-              MatchingSequence state { stable = next }
-            else IncorrectSequence { acceptedMidi: state.acceptedMidi, feedback: next.feedback }
+            else if
+              not (matchesPitchIdentity allowOctaveEquivalent midi currentPitch)
+                && next.confidenceMilliseconds >= settings.incorrectMillisecondsRequired then
+              IncorrectSequence { acceptedMidi: state.acceptedMidi, feedback: next.feedback }
+            else MatchingSequence state { stable = next }
           _ -> MatchingSequence state { stable = resetStable current }
 
 sequenceRelativeMidi :: OctavePolicy -> NonEmptyArray.NonEmptyArray Pitch -> SequenceRecognition -> Int -> Int
