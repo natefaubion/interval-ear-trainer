@@ -167,7 +167,7 @@ component =
       [ HP.class_ (H.ClassName "setup-card") ]
       [ HH.div
           [ HP.class_ (H.ClassName "setup-heading") ]
-          [ HH.h2_ [ HH.text "Exercise setup" ]
+          [ HH.h2_ [ HH.text "Setup" ]
           , Button.button
               { action: RootOpenSavePreset
               , classes: [ H.ClassName "save-preset-button" ]
