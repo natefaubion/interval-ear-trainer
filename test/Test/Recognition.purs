@@ -356,6 +356,10 @@ run = do
     rejectedOutOfRange = selectPitchCandidate defaultCaptureSettings
       (ExactPitch 108)
       [ { analyzedAt: 0.0, clarity: 0.99, frequency: 5000.0, windowSize: 2048 } ]
+    lowestC = { analyzedAt: 0.0, clarity: 0.96, frequency: 32.703196, windowSize: 8192 }
+    selectedLowestC = selectPitchCandidate defaultCaptureSettings
+      (ExactPitch 24)
+      [ lowestC ]
     shortTransient = foldl
       ( \current time -> stepRecognition
           defaultRecognitionSettings
@@ -497,6 +501,7 @@ run = do
     , expected: Just 3135.963488
     }
   assertEqual { actual: rejectedOutOfRange, expected: Nothing }
+  assertEqual { actual: selectedLowestC, expected: Just lowestC }
   assertEqual { actual: phase shortTransient, expected: WaitingForRelease }
   assertEqual { actual: phase interruptedEvidence, expected: WaitingForFirst }
   assertEqual { actual: phase voiceScoop, expected: WaitingForRelease }

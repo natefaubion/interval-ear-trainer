@@ -110,7 +110,7 @@ defaultCaptureSettings =
   { clarityThreshold: 0.8
   , maximumCandidateAgeMilliseconds: 60.0
   , maximumFrequency: 4200.0
-  , minimumFrequency: 40.0
+  , minimumFrequency: 30.0
   , minimumSamples: 2
   , minimumOnsetIntervalMilliseconds: 80.0
   , onsetRiseDecibels: 9.0
