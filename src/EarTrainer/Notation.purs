@@ -144,8 +144,11 @@ sequenceScore layout melody acceptedCount current revealFirst = do
   { clef
   , events: Array.mapWithIndex (renderSequencePitch layout clef acceptedCount current revealFirst) pitches
   , layout
-  , width: max 240 (120 + Array.length pitches * 52)
+  , width: max 240 (120 + Array.length pitches * melodyNoteSpacing)
   }
+
+melodyNoteSpacing :: Int
+melodyNoteSpacing = 40
 
 renderSequencePitch
   :: NotationLayout
