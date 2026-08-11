@@ -231,15 +231,21 @@ component =
               [ HH.div
                   [ HP.class_ (H.ClassName "prompt-panel") ]
                   [ HH.div
-                      [ HP.class_ (H.ClassName "notation-canvas") ]
-                      [ HH.slot_ notationSlot PromptNotation NotationComponent.component (promptNotation state) ]
-                  , if shouldShowIntervalName state then
-                      HH.p
-                        [ HP.class_ (H.ClassName "completed-interval-name") ]
-                        [ HH.text (promptIntervalLabel state) ]
-                    else
-                      HH.text ""
-                  , renderPitchMeter state
+                      [ HP.class_ (H.ClassName "notation-stage") ]
+                      [ HH.div
+                          [ HP.class_ (H.ClassName "notation-canvas") ]
+                          [ HH.slot_ notationSlot PromptNotation NotationComponent.component (promptNotation state) ]
+                      ]
+                  , HH.div
+                      [ HP.class_ (H.ClassName "prompt-feedback") ]
+                      [ if shouldShowIntervalName state then
+                          HH.p
+                            [ HP.class_ (H.ClassName "completed-interval-name") ]
+                            [ HH.text (promptIntervalLabel state) ]
+                        else
+                          HH.text ""
+                      , renderPitchMeter state
+                      ]
                   ]
               , renderIntervalChoices state
               ]
@@ -269,7 +275,8 @@ component =
     | isResumingAnswers state.captureStatus = HH.text ""
     | isChoosingAnswer state.captureStatus || isAnswerComplete state.captureStatus = HH.text ""
     | otherwise =
-        HH.div_
+        HH.div
+          [ HP.class_ (H.ClassName "pitch-meter") ]
           [ HH.div
               [ HP.class_ (H.ClassName "pitch-feedback") ]
               [ HH.span

@@ -173,7 +173,41 @@ button:active:not(:disabled) {
 }
 
 .notation-panel.full .notation-canvas {
+  height: 100%;
   max-width: 36rem;
+}
+
+.notation-panel.full .notation-canvas > div {
+  height: 100%;
+}
+
+.notation-panel.full {
+  height: 100%;
+}
+
+.notation-panel.full .prompt-panel {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+.notation-panel.full .notation-stage {
+  position: relative;
+  min-height: 0;
+}
+
+.notation-panel.full .notation-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.notation-panel.full .prompt-feedback {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .notation-canvas svg {
@@ -181,6 +215,10 @@ button:active:not(:disabled) {
   width: 100%;
   height: auto;
   margin-inline: auto;
+}
+
+.notation-panel.full .notation-canvas svg {
+  height: 100%;
 }
 
 @keyframes shrink-prompt-notation {
@@ -226,6 +264,10 @@ button:active:not(:disabled) {
   color: #64716b;
   font-size: 0.9rem;
   line-height: 1.25rem;
+}
+
+.pitch-meter {
+  width: 100%;
 }
 
 .tuner-readout {
@@ -946,7 +988,7 @@ button:active:not(:disabled) {
   }
 }
 
-@media (orientation: landscape) and (max-height: 32rem) {
+@media (orientation: landscape) and (max-height: 40rem) {
   .app-shell {
     width: 100%;
     padding-block: 0;

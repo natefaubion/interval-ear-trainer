@@ -4,7 +4,7 @@ module EarTrainer.Capability.Notation
 
 import Prelude
 
-import EarTrainer.Notation (Appearance(..), Clef(..), EngravedEvent, EngravedNote, NotationLayout(..), Score)
+import EarTrainer.Notation (Appearance(..), Clef(..), EngravedEvent, EngravedNote, NotationLayout(..), OctaveDisplacement(..), Score)
 import Effect (Effect)
 import Web.DOM.Element (Element)
 
@@ -12,7 +12,14 @@ type ForeignEvent =
   { color :: String
   , hidden :: Boolean
   , highlighted :: Boolean
-  , notes :: Array EngravedNote
+  , notes :: Array ForeignNote
+  }
+
+type ForeignNote =
+  { accidental :: String
+  , key :: String
+  , octaveMark :: String
+  , octavePosition :: String
   }
 
 foreign import renderScoreImpl :: Element -> String -> String -> Int -> Array ForeignEvent -> Effect Unit
@@ -41,4 +48,13 @@ encodeEvent event = case event.appearance of
   Hidden -> foreignEvent "transparent" true false
   where
   foreignEvent color hidden highlighted =
-    { color, hidden, highlighted, notes: event.notes }
+    { color, hidden, highlighted, notes: map encodeNote event.notes }
+
+encodeNote :: EngravedNote -> ForeignNote
+encodeNote note = case note.octaveDisplacement of
+  AtPitch -> foreignNote "" "top"
+  OctaveAbove -> foreignNote "8va" "top"
+  OctaveBelow -> foreignNote "8vb" "bottom"
+  where
+  foreignNote mark octavePosition =
+    { accidental: note.accidental, key: note.key, octaveMark: mark, octavePosition }

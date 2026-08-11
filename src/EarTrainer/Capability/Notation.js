@@ -1,5 +1,7 @@
 import {
   Accidental,
+  Annotation,
+  AnnotationVerticalJustify,
   Formatter,
   Renderer,
   Stave,
@@ -13,8 +15,10 @@ const svgNamespace = "http://www.w3.org/2000/svg";
 let renderSequence = 0;
 
 const scoreVerticalBounds = (svg, layout) => {
-  let top = layout === "full" ? 0 : 20;
-  let bottom = layout === "full" ? 190 : 124;
+  if (layout === "full") return { top: 0, height: 190 };
+
+  let top = 20;
+  let bottom = 124;
 
   // VexFlow's transparent hit rectangle tracks the rendered note geometry
   // without the oversized font metrics reported by its notehead text.
@@ -90,9 +94,18 @@ export const renderScoreImpl = (element) => (layout) => (clef) => (width) => (ev
       keys: event.notes.map(({ key }) => key),
       duration: "q",
     });
-    event.notes.forEach(({ accidental }, index) => {
+    event.notes.forEach(({ accidental, octaveMark, octavePosition }, index) => {
       if (!event.hidden && accidental !== "") {
         note.addModifier(new Accidental(accidental), index);
+      }
+      if (octaveMark !== "") {
+        const annotation = new Annotation(octaveMark).setVerticalJustification(
+          octavePosition === "top"
+            ? AnnotationVerticalJustify.TOP
+            : AnnotationVerticalJustify.BOTTOM,
+        );
+        if (event.color !== "") annotation.setStyle({ fillStyle: event.color });
+        note.addModifier(annotation, index);
       }
     });
     if (event.color !== "") {
