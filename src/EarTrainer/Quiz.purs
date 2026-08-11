@@ -151,13 +151,70 @@ canComplete config remaining current
 buildMelody :: ExerciseConfig -> Int -> Int -> Pitch -> Maybe (Array Pitch)
 buildMelody config remaining seed current
   | remaining <= 0 = Just [ current ]
-  | otherwise = tryCandidates (rotate seed (nextPitches config current))
+  | otherwise = tryCandidates (weightedMelodyCandidates seed current (nextPitches config current))
       where
       tryCandidates candidates = case Array.uncons candidates of
         Nothing -> Nothing
         Just { head, tail } -> case buildMelody config (remaining - 1) (nextSeed seed) head of
           Nothing -> tryCandidates tail
           Just suffix -> Just (Array.cons current suffix)
+
+weightedMelodyCandidates :: Int -> Pitch -> Array Pitch -> Array Pitch
+weightedMelodyCandidates seed current candidates = do
+  let soundingCandidates = Array.nubBy (comparing midiNumber) candidates
+  orderGroups seed (melodyCandidateGroups current soundingCandidates)
+
+melodyCandidateGroups
+  :: Pitch
+  -> Array Pitch
+  -> Array { candidates :: Array Pitch, size :: IntervalSize }
+melodyCandidateGroups current candidates = Array.mapMaybe groupFor melodyIntervalSizes
+  where
+  groupFor size = do
+    let matching = Array.filter (transitionSize current >>> (_ == Just size)) candidates
+    if Array.null matching then Nothing else Just { candidates: matching, size }
+
+orderGroups
+  :: Int
+  -> Array { candidates :: Array Pitch, size :: IntervalSize }
+  -> Array Pitch
+orderGroups seed groups = case Array.uncons groups of
+  Nothing -> []
+  Just { head, tail } -> do
+    let
+      weighted = Array.concatMap (\group -> Array.replicate (melodyIntervalWeight group.size) group) groups
+      selected = pick head seed weighted
+      remaining = Array.filter (_.size >>> (_ /= selected.size)) (Array.cons head tail)
+      groupCandidates = rotate (nextSeed seed) selected.candidates
+    groupCandidates <> orderGroups (nextSeed (nextSeed seed)) remaining
+
+transitionSize :: Pitch -> Pitch -> Maybe IntervalSize
+transitionSize current candidate = do
+  let direction = if midiNumber candidate < midiNumber current then Descending else Ascending
+  map intervalSize (intervalBetween direction current candidate)
+
+melodyIntervalSizes :: Array IntervalSize
+melodyIntervalSizes =
+  [ SizeUnison
+  , SizeSecond
+  , SizeThird
+  , SizeFourth
+  , SizeFifth
+  , SizeSixth
+  , SizeSeventh
+  , SizeOctave
+  ]
+
+melodyIntervalWeight :: IntervalSize -> Int
+melodyIntervalWeight = case _ of
+  SizeUnison -> 2
+  SizeSecond -> 8
+  SizeThird -> 6
+  SizeFourth -> 2
+  SizeFifth -> 2
+  SizeSixth -> 1
+  SizeSeventh -> 1
+  SizeOctave -> 1
 
 rotate :: forall a. Int -> Array a -> Array a
 rotate seed values = do

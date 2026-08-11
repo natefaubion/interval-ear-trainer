@@ -32,6 +32,7 @@ import EarTrainer.Music
   , PitchClass(..)
   , PlaybackMode(..)
   , VocalRangePreset(..)
+  , intervalBetween
   , intervalNumber
   , midiNumber
   , pitch
@@ -161,6 +162,51 @@ run = do
       Just prompts -> case makePrompt 73 prompts of
         MelodyPromptMode prompt -> NonEmptyArray.toArray (melodyPitches prompt)
         IntervalPrompt _ -> []
+    weightedMelodyConfig = defaultConfig
+      { customRange = { low: pitch C (Accidental 0) 3, high: pitch C (Accidental 0) 5 }
+      , intervalSystem = ExactIntervals
+      , intervals =
+          [ PerfectUnison
+          , MajorSecond
+          , MajorThird
+          , PerfectFourth
+          , PerfectFifth
+          , MajorSixth
+          , MajorSeventh
+          , PerfectOctave
+          ]
+      , playbackModes = []
+      , quizMode = MelodyImitation
+      , rootPitchClasses = [ PitchClass C (Accidental 0) ]
+      , vocalRange = Custom
+      }
+    weightedMelodies = case promptSet weightedMelodyConfig of
+      Nothing -> []
+      Just prompts -> Array.range 0 999 >>= \seed -> case makePrompt seed prompts of
+        MelodyPromptMode prompt -> [ NonEmptyArray.toArray (melodyPitches prompt) ]
+        IntervalPrompt _ -> []
+    weightedDistances = weightedMelodies >>= \notes ->
+      Array.zipWith
+        (\left right -> abs (midiNumber right - midiNumber left))
+        notes
+        (Array.drop 1 notes)
+    smallTransitionCount = Array.length (Array.filter (\distance -> distance >= 1 && distance <= 4) weightedDistances)
+    wideTransitionCount = Array.length (Array.filter (_ >= 7) weightedDistances)
+    enharmonicMelodyConfig = weightedMelodyConfig
+      { intervals = [ AugmentedFourth, DiminishedFifth ] }
+    enharmonicMelodies = case promptSet enharmonicMelodyConfig of
+      Nothing -> []
+      Just prompts -> Array.range 0 99 >>= \seed -> case makePrompt seed prompts of
+        MelodyPromptMode prompt -> [ NonEmptyArray.toArray (melodyPitches prompt) ]
+        IntervalPrompt _ -> []
+    enharmonicTransitions = enharmonicMelodies >>= \notes ->
+      Array.zipWith
+        ( \left right -> do
+            let direction = if midiNumber right < midiNumber left then Descending else Ascending
+            intervalBetween direction left right
+        )
+        notes
+        (Array.drop 1 notes)
   assertEqual { actual: Array.length generatedChoices, expected: 4 }
   assertTrue' "major seventh fits the narrow range" (Array.elem MajorSeventh (availableExactIntervals narrowExactConfig))
   assertFalse' "octave does not fit the narrow range" (Array.elem PerfectOctave (availableExactIntervals narrowExactConfig))
@@ -262,3 +308,9 @@ run = do
             (Array.drop 1 exactMelody)
         )
     )
+  assertTrue' "weighted melodies strongly favor seconds and thirds over fifths and larger intervals"
+    (smallTransitionCount > 2 * wideTransitionCount)
+  assertTrue' "weighted four-note melodies still include wide intervals regularly"
+    (wideTransitionCount > Array.length weightedDistances / 10)
+  assertTrue' "enharmonic melody candidates use one representative per sounding pitch"
+    (Array.all (_ == Just AugmentedFourth) enharmonicTransitions)
