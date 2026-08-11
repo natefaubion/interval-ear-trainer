@@ -602,7 +602,7 @@ component =
         StartingCapture _ -> H.modify_ _ { captureStatus = Listening monitor }
         _ -> do
           H.liftEffect (PitchInput.stop monitor)
-          H.liftEffect (AudioSession.setType AudioSession.Playback)
+          H.liftEffect (AudioSession.setType AudioSession.Auto)
     MicrophoneFailed failure -> do
       state <- H.get
       case state.captureStatus of
@@ -770,7 +770,7 @@ component =
     cancelFiber state.ghostFiber
     case state.captureStatus of
       Listening monitor -> stopCapture (Listening monitor)
-      _ -> H.liftEffect (AudioSession.setType AudioSession.Playback)
+      _ -> H.liftEffect (AudioSession.setType AudioSession.Auto)
     H.modify_ _
       { captureStatus = CaptureFailed failure
       , ghostFiber = Nothing
@@ -781,7 +781,7 @@ component =
       StartingCapture fiber -> H.kill fiber
       Listening monitor -> H.liftEffect (PitchInput.stop monitor)
       _ -> pure unit
-    H.liftEffect (AudioSession.setType AudioSession.Playback)
+    H.liftEffect (AudioSession.setType AudioSession.Auto)
 
   cancelFiber = case _ of
     Nothing -> pure unit

@@ -7,6 +7,7 @@ module EarTrainer.Capability.Audio
   ) where
 
 import EarTrainer.Audio (NoteEvent, PlaybackPlan)
+import EarTrainer.Capability.AudioSession as AudioSession
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
@@ -20,7 +21,8 @@ foreign import startImpl :: EffectFnAff Unit
 foreign import stop :: Sampler -> Effect Unit
 
 play :: Sampler -> PlaybackPlan -> Aff Unit
-play sampler plan = fromEffectFnAff (playImpl sampler plan.events plan.durationMilliseconds)
+play sampler plan = AudioSession.withPlayback do
+  fromEffectFnAff (playImpl sampler plan.events plan.durationMilliseconds)
 
 start :: Aff Unit
 start = fromEffectFnAff startImpl
