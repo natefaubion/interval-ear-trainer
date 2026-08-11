@@ -371,7 +371,7 @@ component =
 
   footerButtonLabel state
     | isPlaying state.captureStatus = "Playing…"
-    | isStartingCapture state.captureStatus = "Requesting…"
+    | isStartingCapture state.captureStatus = "Playing…"
     | isAnswerComplete state.captureStatus = if isMelody state then "Next melody" else "Next interval"
     | isListening state.captureStatus && imitationComplete state = if isMelody state then "Next melody" else "Next interval"
     | state.config.quizMode == Audiation = "Play root"
