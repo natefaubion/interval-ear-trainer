@@ -36,19 +36,17 @@ const sampleUrls = {
 };
 
 const sampleBaseUrl = new URL("./audio/salamander/", document.baseURI).href;
-const samplerReady = new WeakMap();
-const playbackState = new WeakMap();
 let contextConfigured = false;
 
-const cancelPlayback = (sampler) => {
-  const state = playbackState.get(sampler);
+const cancelPlayback = (handle) => {
+  const state = handle.playbackState;
   if (state) state.cancelled = true;
   state?.timers.forEach(clearTimeout);
-  playbackState.delete(sampler);
-  sampler.releaseAll();
+  handle.playbackState = null;
+  handle.sampler.releaseAll();
 };
 
-export const createSampler = () => {
+export const createSampler = (config) => () => {
   if (!contextConfigured) {
     Tone.setContext(new Tone.Context({ latencyHint: "balanced" }), true);
     contextConfigured = true;
@@ -64,7 +62,7 @@ export const createSampler = () => {
   const sampler = new Tone.Sampler({
     urls: sampleUrls,
     baseUrl: sampleBaseUrl,
-    release: 0.7,
+    release: config.releaseMilliseconds / 1000,
     onload: markReady,
     onerror: (error) =>
       markFailed(
@@ -73,8 +71,12 @@ export const createSampler = () => {
           : new Error("Piano samples could not be loaded."),
       ),
   }).toDestination();
-  samplerReady.set(sampler, ready);
-  return sampler;
+  return {
+    playbackState: null,
+    ready,
+    releaseMilliseconds: config.releaseMilliseconds,
+    sampler,
+  };
 };
 
 export const startImpl = (onError, onSuccess) => {
@@ -85,33 +87,33 @@ export const startImpl = (onError, onSuccess) => {
   return (_error, _onError, onCancel) => onCancel();
 };
 
-export const playImpl = (sampler) => (events) => (durationMilliseconds) => (onError, onSuccess) => {
-  cancelPlayback(sampler);
+export const playImpl = (handle) => (events) => (durationMilliseconds) => (onError, onSuccess) => {
+  cancelPlayback(handle);
   const state = { cancelled: false, timers: [] };
-  playbackState.set(sampler, state);
+  handle.playbackState = state;
 
   void (async () => {
     try {
       await Tone.start();
-      await samplerReady.get(sampler);
+      await handle.ready;
       if (state.cancelled) return;
 
       for (const event of events) {
         const timer = setTimeout(() => {
           if (state.cancelled) return;
           const notes = event.notes.map((midi) => Tone.Frequency(midi, "midi").toNote());
-          sampler.triggerAttackRelease(notes, event.durationMilliseconds / 1000);
+          handle.sampler.triggerAttackRelease(notes, event.durationMilliseconds / 1000);
         }, event.startMilliseconds);
         state.timers.push(timer);
       }
       state.timers.push(setTimeout(() => {
         if (state.cancelled) return;
-        playbackState.delete(sampler);
+        handle.playbackState = null;
         onSuccess();
-      }, durationMilliseconds));
+      }, durationMilliseconds + handle.releaseMilliseconds));
     } catch (error) {
       if (!state.cancelled) {
-        cancelPlayback(sampler);
+        cancelPlayback(handle);
         onError(error instanceof Error ? error : new Error(String(error)));
       }
     }
@@ -119,9 +121,9 @@ export const playImpl = (sampler) => (events) => (durationMilliseconds) => (onEr
 
   return (_error, _onError, onCancel) => {
     state.cancelled = true;
-    if (playbackState.get(sampler) === state) cancelPlayback(sampler);
+    if (handle.playbackState === state) cancelPlayback(handle);
     onCancel();
   };
 };
 
-export const stop = (sampler) => () => cancelPlayback(sampler);
+export const stop = (handle) => () => cancelPlayback(handle);

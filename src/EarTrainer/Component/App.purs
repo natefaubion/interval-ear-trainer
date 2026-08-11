@@ -96,7 +96,7 @@ component =
           Left _ -> Just "Saved settings could not be loaded on this device."
           Right (Left _) -> Just "Saved settings use an unsupported or malformed format."
           Right (Right _) -> Nothing
-      sampler <- H.liftEffect Audio.createSampler
+      sampler <- H.liftEffect (Audio.createSampler Audio.defaultSamplerConfig)
       H.modify_ _
         { activePresetId = appData.activePresetId
         , config = appData.config
