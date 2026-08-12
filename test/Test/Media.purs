@@ -23,6 +23,10 @@ run = do
     c8 = pitch C (Accidental 0) 8
     cSharp6 = pitch C (Accidental 1) 6
     e4 = pitch E (Accidental 0) 4
+    e3 = pitch E (Accidental 0) 3
+    g3 = pitch G (Accidental 0) 3
+    gSharp3 = pitch G (Accidental 1) 3
+    g4 = pitch G (Accidental 0) 4
     melodicPlan = Audio.intervalPlan MelodicAscending c4 e4
     harmonicPlan = Audio.intervalPlan Harmonic c4 e4
     rootPlan = Audio.rootPlan c4
@@ -39,6 +43,9 @@ run = do
     accidentalHighGhostScore = Notation.ghost Notation.Full c4 e4 cSharp6 false
     lowGhostScore = Notation.ghost Notation.Full c4 e4 c2 false
     oneOctaveLowGhostScore = Notation.ghost Notation.Full c4 e4 c3 false
+    trebleLedgerGhostScore = Notation.ghost Notation.Full c4 e4 g3 false
+    trebleAccidentalLedgerGhostScore = Notation.ghost Notation.Full c4 e4 gSharp3 false
+    bassLedgerGhostScore = Notation.ghost Notation.Full c3 e3 g4 false
     compactGhostScore = Notation.ghost Notation.Compact c4 e4 c8 false
   assertEqual { actual: PitchInput.decibelsFromRms 1.0, expected: 0.0 }
   assertTrue' "0.1 RMS is -20 dB" (abs (PitchInput.decibelsFromRms 0.1 + 20.0) < 1.0e-9)
@@ -88,6 +95,26 @@ run = do
   assertTrue' "nearer low ghost uses one-octave notation"
     ( map _.octaveDisplacement (Array.concatMap _.notes oneOctaveLowGhostScore.events)
         == [ Notation.AtPitch, Notation.OctaveBelow ]
+    )
+  assertEqual
+    { actual: map _.key (Array.concatMap _.notes trebleLedgerGhostScore.events)
+    , expected: [ "c/4", "g/3" ]
+    }
+  assertTrue' "treble ghosts stay at pitch when displacement would put them on the staff"
+    ( map _.octaveDisplacement (Array.concatMap _.notes trebleLedgerGhostScore.events)
+        == [ Notation.AtPitch, Notation.AtPitch ]
+    )
+  assertEqual
+    { actual: map _.accidental (Array.concatMap _.notes trebleAccidentalLedgerGhostScore.events)
+    , expected: [ "", "#" ]
+    }
+  assertEqual
+    { actual: map _.key (Array.concatMap _.notes bassLedgerGhostScore.events)
+    , expected: [ "c/3", "g/4" ]
+    }
+  assertTrue' "bass ghosts stay at pitch when displacement would put them on the staff"
+    ( map _.octaveDisplacement (Array.concatMap _.notes bassLedgerGhostScore.events)
+        == [ Notation.AtPitch, Notation.AtPitch ]
     )
   assertEqual
     { actual: map _.key (Array.concatMap _.notes compactGhostScore.events)

@@ -220,13 +220,39 @@ displayPitch layout clef pitch = case layout of
   Full
     | midiNumber pitch < visibleMinimum clef -> do
         let shifted = shiftOctave 1 pitch
-        if midiNumber shifted < visibleMinimum clef then Nothing
+        if isOnStaff clef shifted then
+          Just { octaveDisplacement: AtPitch, pitch }
+        else if midiNumber shifted < visibleMinimum clef then Nothing
         else Just { octaveDisplacement: OctaveBelow, pitch: shifted }
     | midiNumber pitch > visibleMaximum clef -> do
         let shifted = shiftOctave (-1) pitch
-        if midiNumber shifted > visibleMaximum clef then Nothing
+        if isOnStaff clef shifted then
+          Just { octaveDisplacement: AtPitch, pitch }
+        else if midiNumber shifted > visibleMaximum clef then Nothing
         else Just { octaveDisplacement: OctaveAbove, pitch: shifted }
     | otherwise -> Just { octaveDisplacement: AtPitch, pitch }
+
+isOnStaff :: Clef -> Pitch -> Boolean
+isOnStaff clef pitch = do
+  let position = staffPosition pitch
+  case clef of
+    Treble -> position >= staffPosition (Pitch (PitchClass E (Accidental 0)) 4)
+      && position <= staffPosition (Pitch (PitchClass F (Accidental 0)) 5)
+    Bass -> position >= staffPosition (Pitch (PitchClass G (Accidental 0)) 2)
+      && position <= staffPosition (Pitch (PitchClass A (Accidental 0)) 3)
+
+staffPosition :: Pitch -> Int
+staffPosition (Pitch (PitchClass letter _) octave) = octave * 7 + letterPosition letter
+
+letterPosition :: Letter -> Int
+letterPosition = case _ of
+  C -> 0
+  D -> 1
+  E -> 2
+  F -> 3
+  G -> 4
+  A -> 5
+  B -> 6
 
 visibleMinimum :: Clef -> Int
 visibleMinimum = case _ of
